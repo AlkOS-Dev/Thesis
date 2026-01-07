@@ -1,43 +1,53 @@
 #!/bin/bash
 
-# Ensure output directory exists
-mkdir -p output
+# Function to run the actual compilation logic (runs inside container)
+do_compile() {
+    mkdir -p output
 
-# Move to src directory for thesis compilation, but we need to handle title page differently
-# to ensure relative paths work correctly.
+    echo "Compiling Title Page..."
+    
+    cd src/title_page || exit
+    
+    # Compile the Title Page
+    xelatex -output-directory=../../output -interaction=nonstopmode titlepage-bsc-en.tex
 
-# 1. Compile the Title Page
-echo "Compiling Title Page..."
+    if [ -f ../../output/titlepage-bsc-en.pdf ]; then
+        echo "Title Page compiled successfully."
+        cp ../../output/titlepage-bsc-en.pdf ../../output/titlepage-en.pdf
+    else
+        echo "Error: Title Page compilation failed."
+        exit 1
+    fi
 
-# We cd into title_page so that `arial.ttf` and `img/` are found relatively as expected by the tex file.
-cd src/title_page || exit
-# Compile to a temporary location or directly to output
-# We use -output-directory to put the pdf in the project output folder
-# But we need to use absolute path or relative from where we are.
-# From src/title_page, ../../output is the output dir.
-xelatex -output-directory=../../output -interaction=nonstopmode titlepage-bsc-en.tex
+    cd ../..
 
-# Check if successful
-if [ -f ../../output/titlepage-bsc-en.pdf ]; then
-    echo "Title Page compiled successfully."
-    # Rename/copy it to what the main thesis expects
-    cp ../../output/titlepage-bsc-en.pdf ../../output/titlepage-en.pdf
+    # Compile the Main Thesis
+    echo "Compiling Thesis..."
+    cd src || exit
+
+    # Clean previous fdb_latexmk to force re-evaluation if needed
+    # We add ../output to TEXINPUTS so it finds titlepage-en.pdf
+    export TEXINPUTS=.:../output/:$TEXINPUTS
+
+    # Run latexmk
+    # -g: Force processing
+    latexmk -pdf -g -outdir=../output -interaction=nonstopmode thesis-en.tex
+}
+
+# Check if we are inside a docker container
+# The /.dockerenv file is a standard way to check this
+if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then
+    # We are inside the container, run the compilation
+    echo "Running inside container..."
+    do_compile
 else
-    echo "Error: Title Page compilation failed."
-    exit 1
+    # We are on the host, run the container wrapper
+    echo "Running on host, launching Docker..."
+    
+    # Build the image if needed
+    docker build -t latex-thesis .devcontainer
+
+    # Run the container with the script itself as the command
+    # We mount the current directory and run this same script inside
+    docker run --rm -v "$(pwd):/workspace" latex-thesis ./compile.sh
 fi
-
-# Go back to project root
-cd ../..
-
-# 2. Compile the Main Thesis
-echo "Compiling Thesis..."
-cd src || exit
-
-# Clean previous fdb_latexmk to force re-evaluation if needed, though latexmk is good at this.
-# We add ../output to TEXINPUTS so it finds titlepage-en.pdf
-export TEXINPUTS=.:../output/:$TEXINPUTS
-
-# Run latexmk
-# -g: Force processing
-latexmk -pdf -g -outdir=../output -interaction=nonstopmode thesis-en.tex
