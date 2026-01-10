@@ -1,0 +1,30 @@
+name: PDF Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make compile script executable
+        run: chmod +x compile.sh
+
+      - name: Run compilation script
+        run: ./compile.sh
+
+      - name: Upload PDF Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thesis-pdf
+          path: output/thesis-en.pdf
+          retention-days: 30
