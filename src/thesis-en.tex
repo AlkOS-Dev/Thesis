@@ -1,37 +1,36 @@
 \documentclass[a4paper,11pt,twoside]{report}
-% THIS FILE SHOULD BE COMPILED BY pdfLaTeX
 
 % ----------------------   PREAMBLE PART ------------------------------
 
 % ------------------------ ENCODING & LANGUAGES ----------------------
 
 \usepackage[utf8]{inputenc}
-%\usepackage[MeX]{polski} % Not needed unless You have a name with polish symbols or sth
+\usepackage[MeX]{polski}
 \usepackage[T1]{fontenc}
 \usepackage[english, polish]{babel}
 
 
-\usepackage{amsmath, amsfonts, amsthm, latexsym} % MOSTLY MATHEMATICAL SYMBOLS
+\usepackage{amsmath, amsfonts, amsthm, latexsym}
 
-\usepackage[final]{pdfpages} % INPUTING TITLE PDF PAGE - GENERATE IT FIRST!
-%\usepackage[backend=bibtex, style=verbose-trad2]{biblatex}
+\usepackage[final]{pdfpages}
+\usepackage[backend=bibtex, style=verbose-trad2]{biblatex}
 
 
-\usepackage{commath} % various commands which can make writing math expressions easier --- documentation available at: https://ctan.gust.org.pl/tex-archive/macros/latex/contrib/commath/commath.pdf
+\usepackage{commath}
 
-\usepackage[hidelinks]{hyperref} % for hyperlinks, for example, urls, references to equations, entries in a bibliography --- hidelinks option removes rectangles around hiperlinks
+\usepackage[hidelinks]{hyperref}
 
 
 % ---------------- MARGINS, INDENTATION, LINESPREAD ------------------
 
-\usepackage[inner=20mm, outer=20mm, bindingoffset=10mm, top=25mm, bottom=25mm]{geometry} % MARGINS
+\usepackage[inner=20mm, outer=20mm, bindingoffset=10mm, top=25mm, bottom=25mm]{geometry}
 
 
 \linespread{1.5}
-\allowdisplaybreaks         % ALLOWS BREAKING PAGE IN MATH MODE
+\allowdisplaybreaks
 
-\usepackage{indentfirst}    % IT MAKES THE FIRST PARAGRAPH INDENTED; NOT NEEDED
-\setlength{\parindent}{5mm} % WIDTH OF AN INDENTATION
+\usepackage{indentfirst}
+\setlength{\parindent}{5mm}
 
 
 %---------------- RUNNING HEAD - CHAPTER NAMES, PAGE NUMBERS ETC. -------------------
@@ -39,17 +38,13 @@
 \usepackage{fancyhdr}
 \pagestyle{fancy}
 \fancyhf{}
-% PAGINATION: LEFT ALIGNMENT ON EVEN PAGES, RIGHT ALIGNMENT ON ODD PAGES 
 \fancyfoot[LE,RO]{\thepage} 
-% RIGHT HEADER: zawartość \rightmark do lewego, wewnętrznego (marginesu) 
 \fancyhead[LO]{\sc \nouppercase{\rightmark}}
-% lewa pagina: zawartość \leftmark do prawego, wewnętrznego (marginesu) 
 \fancyhead[RE]{\sc \leftmark}
 
 \renewcommand{\chaptermark}[1]{\markboth{\thechapter.\ #1}{}}
 
-% HEAD RULE - IT'S A LINE WHICH SEPARATES HEADER AND FOOTER FROM CONTENT
-\renewcommand{\headrulewidth}{0 pt} % 0 MEANS NO RULE, 0.5 MEANS FINE RULE, THE BIGGER VALUE THE THICKER RULE
+\renewcommand{\headrulewidth}{0 pt}
 
 
 \fancypagestyle{plain}{
@@ -87,7 +82,6 @@
 \if@twocolumn\hbox{}\newpage\fi\fi\fi}
 
 
-% THIS MAKES DOTS IN TOC FOR CHAPTERS
 \usepackage{etoolbox}
 \makeatletter
 \patchcmd{\l@chapter}
@@ -98,12 +92,12 @@
 
 \usepackage{titletoc}
 \makeatletter
-\titlecontents{chapter}% <section-type>
-  [0pt]% <left>
-  {}% <above-code>
-  {\bfseries \thecontentslabel.\quad}% <numbered-entry-format>
-  {\bfseries}% <numberless-entry-format>
-  {\bfseries\leaders\hbox{\normalfont$\m@th\mkern \@dotsep mu\hbox{.}\mkern \@dotsep mu$}\hfill\contentspage}% <filler-page-format>
+\titlecontents{chapter}
+  [0pt]
+  {}
+  {\bfseries \thecontentslabel.\quad}
+  {\bfseries}
+  {\bfseries\leaders\hbox{\normalfont$\m@th\mkern \@dotsep mu\hbox{.}\mkern \@dotsep mu$}\hfill\contentspage}
 
 \titlecontents{section}
   [1em]
@@ -132,13 +126,13 @@
 
 \makeatletter
 \newtheoremstyle{definition}
-{3ex}%                           % Space above
-{3ex}%                           % Space below
-{\upshape}%                      % Body font
-{}%                              % Indent amount
-{\bfseries}%                     % Theorem head font
-{.}%                             % Punctuation after theorem head
-{.5em}%                          % Space after theorem head, ' ', or \newline
+{3ex}
+{3ex}
+{\upshape}
+{}
+{\bfseries}
+{.}
+{.5em}
 {\thmname{#1}\thmnumber{ #2}\thmnote{ (#3)}}
 \makeatother
 
@@ -159,10 +153,10 @@
 
 % -------------------------- USER SETTINGS ---------------------------
 
-\newcommand{\tytul}{POLISH TITLE}
-\renewcommand{\title}{ENGLISH TITLE}
-\newcommand{\type}{Master} % Master OR Engineer
-\newcommand{\supervisor}{dr inż. Promotor X} % TITLE AND NAME OF THE SUPERVISOR
+\newcommand{\tytul}{Funkcjonalne jądro systemu operacyjnego: AlkOS}
+\renewcommand{\title}{From Bare Metal to a Functional Kernel: The AlkOS Operating System}
+\newcommand{\type}{Engineer}
+\newcommand{\supervisor}{mgr inż. Paweł Sobótka}
 
 
 
@@ -170,7 +164,7 @@
 \sloppy
 \selectlanguage{english}
 
-\includepdf[pages=-]{titlepage-en} % THIS INPUTS THE TITLE PAGE
+\includepdf[pages=-]{titlepage-en}
 
 \null\thispagestyle{empty}\newpage
 
@@ -190,7 +184,7 @@
 %
 
 
-% ---------------------------- ABSTRACTS -----------------------------
+% ---------------------------- ABSTRACT -----------------------------
 
 {  \fontsize{12}{14} \selectfont
 \begin{abstract}
@@ -198,32 +192,13 @@
 \begin{center}
 \title
 \end{center}
-Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.
 
-Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\\
+TODO
 
-\noindent \textbf{Keywords:} keyword1, keyword2, ...
 \end{abstract}
 }
 
 \null\thispagestyle{empty}\newpage
-
-
-{\selectlanguage{polish} \fontsize{12}{14}\selectfont
-\begin{abstract}
-
-\begin{center}
-\tytul
-\end{center}
-
-Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.
-
-Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\\
-
-\noindent \textbf{Słowa kluczowe:} słowo klucz 1, słowo klucz 2, zażółć gęślą jaźń...
-\end{abstract}
-}
-
 
 %% --------------------------- DECLARATIONS ------------------------------------
 %
@@ -245,7 +220,7 @@ Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod t
 %
 \null\thispagestyle{empty}\newpage
 % ------------------- TABLE OF CONTENTS ---------------------
-% \selectlanguage{english} - for English
+\selectlanguage{english}
 \pagenumbering{gobble}
 \tableofcontents
 \thispagestyle{empty}
@@ -264,249 +239,207 @@ Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod t
 \markboth{}{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
 
-What is the thesis about? What is the content of it? What is the Author's contribution to it?
-\par
-WARNING!  In a diploma thesis which is a team project: Description of the work division in the team, including the scope of each co-author’s contribution to the practical part (Team Programming Project) and the descriptive part of the diploma thesis. 
-\par
+\section{Theoretical Background} % krotkie opisy wszystkie co to scheduler proces etc...
+TODO
+\section{Scope of the thesis} % co chcemy osiagnac 
+TODO
+\section{Archieved functionalities} % co osiagnelismy
+TODO
+\section{Work division - code} 
+TODO
+\section{Work division - thesis}
+TODO
 
-Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.
+% ==================================================================
 
-\chapter{Example chapter}
+\chapter{Creating an Operating System from scratch}
 
-This \TeX~file is to be compiled with pdfLaTeX (it's just quick build in TeXMaker).
+% Tutorial jak zrobic os krok po kroku tak zeby kazdy zrozumial pozdro
 
+\section{Host Environment}
+TODO
+\subsection{Cross-Compilation toolchain}
+TODO
+\subsection{Building machinery}
+TODO
+\subsection{Emulation}
+TODO
+\subsection{Rootfs}
+TODO
+\subsection{Compiling userspace programs}
+TODO
+\subsection{Testing}
+TODO
 
-\section{Example section}
+\section{Target Environment}
+TODO
+\subsection{Implementation of libc and libc++}
+TODO
+\subsection{Bootloader}
+TODO
+\subsection{Memory preloading and discovery}
+TODO
+\subsection{Discovering and enabling cpu features}
+TODO
+\subsection{Enabling Interrupts and Exceptions}
+TODO
+\subsection{Memory managment}
+TODO
 
-\begin{definition}[Definition]
-	%
-	A \emph{definition} is a statement of the meaning of a term (a word, phrase, or other set of symbols).
-	%
-\end{definition}
+\subsubsection{Physical memory management}
+TODO
+\subsubsection{Virtual memory management}
+TODO
+\subsubsection{Virtual address space}
+TODO
 
-\subsection{Example subsection}
+\subsection{Discovering external devices and system capabilities}
+TODO
 
-It's the deepest deph of sectioning allowed by rector.
+\subsubsection{Clocks}
+TODO
+\subsubsection{Event clocks}
+TODO
 
-\begin{definition}[Equation]
-	%
-	In mathematics, an \emph{equation} is a statement of an equality containing one or more variables.
-	%
-\end{definition}
-%
-\begin{example}
-This is an example of an equation:
-\begin{equation}
-	%
-	2+2=4.
-	%
-\end{equation}
-%
-Equation without a number:
-\begin{equation*}
-	%
-	2+2=4,
-	%
-\end{equation*}
-or:
-\[
-2+2=4.
-\]
+\subsection{File systems}
+TODO
+\subsection{Screen drawing}
+TODO
+\subsection{Scheduling}
+TODO
 
-It is worthwhile to peruse other mathematical environments like  \emph{multline}, \emph{align} and their versions with a star (, i.e. without numeration). The description of their use can be found at  \url{https://texdoc.org/serve/amsldoc.pdf/0} starting from the end of the third page.
+\subsubsection{Process}
+TODO
+\subsubsection{Thread}
+TODO
+\subsubsection{Meta-scheduler}
+TODO
+\subsubsection{Policies}
+TODO
+\subsubsection{Context switch}
+TODO
+\subsubsection{Context conversion}
+TODO
 
-Equation \eqref{equation} is false. References (and some other things) work properly after compliling \TeX ~ file twice.
+\subsection{User space}
+TODO
 
-\begin{equation}\label{equation}
-	%
-	\int \limits_{0}^{1} x \; dx = \frac{3}{2}.
-	%
-\end{equation}
-
-\end{example}
-
-Theorem \ref{Pitagoras} is a very interensting result.
-
-\begin{theorem}[Pythagoras' Theorem]\label{Pitagoras}
-	%
-	Let $c$ represent the length of the hypotenuse and $a$ and $b$ the lengths of the triangle's other two sides. Then:
-	%
-\begin{equation*}
-	%
-	a^2 + b^2 = c^2.
-	%
-\end{equation*}
-%
-\end{theorem}
-
-\begin{proof}
-	%
-	The proof has been presented in \cite{Ktos} and \cite{Innyktos}. We can write then \cite{Ktos, Innyktos}.
-	%
-\end{proof}
-
-\begin{corollary}
-	%
-	The use of the term \emph{corollary}, rather than \emph{proposition} or \emph{theorem}, is intrinsically subjective.
-	%
-\end{corollary}
-
-
-
-
-\begin{remark}
-	%
-	You can find a rather comprehensive list of available symbols at \url{https://www3.nd.edu/~nmark/UsefulFacts/LaTeX_symbols.pdf}.
-	
-	If you want to find a symbol by its shape, you can use the following site: \url{https://detexify.kirelabs.org/classify.html}. 
-	%
-\end{remark}
-
-\begin{lemma}[Someone's Lemma]
-	%
-	Ten lemat jest nie na temat.
-	%
-\end{lemma}
-\begin{proof} Dowód przez indukcję.
-\end{proof}
+\subsubsection{Syscalls}
+TODO
+\subsubsection{Libc system headers}
+TODO
+\subsubsection{Conversion to user space}
+TODO
+\subsubsection{Loading elf64}
+TODO
+\subsubsection{Shell}
+TODO
 
 
-Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.
+% ==================================================================
+
+% jak to robia inni, same najwazniejsze elementy
+
+\chapter{Analysis of Existing Solutions}
+
+\section{Linux}
+TODO
+
+\subsection{Scheduler}
+TODO
+\subsection{Timing}
+TODO
+\subsection{Memory management}
+TODO
+\subsection{System interface}
+TODO
+
+\section{Minix}
+TODO
+
+\subsection{Scheduler}
+TODO
+\subsection{Timing}
+TODO
+\subsection{Memory management}
+TODO
+\subsection{System interface}
+TODO
+
+% ==================================================================
+
+\chapter{Supporting multiple hardwares} % opis problemu i jego rozmiaru
+TODO
+
+\section{HAL - Hardware Abstraction Level} % jak dziala hal, jak u nas jest zrobiony po co etc
+TODO
+
+\section{x86-64 support} % ciekawostki dotyczace x86_64 etc np real-mode -> protected-mode -> long-mode, segmenty etc
+TODO
+\subsection{Technical debt}
+TODO
+\subsection{Common pitfalls}
+TODO
 
 
+% ==================================================================
 
-\section{Floats -- tables and figures}
+\chapter{Our Implementation} % bardzo technicznie bardfzo szczegolowo
+TODO
 
-\begin{table}% label has to be after caption, otherwise numeration is wrong
-\caption[Short caption]{Additional options}
-\label{opcje}
-\centering
-\begin{tabular}{|c|p{0.8\textwidth}|}
-\hline
-symbol & effect \\ \hline
-\texttt{h} & Place the float here, i.e., approximately at the same point it occurs in the source text (however, not exactly at the spot) \\
-\texttt{t} & Position at the top of the page \\
-\texttt{b} & Position at the bottom of the page \\
-\texttt{p} & Put on a special page for floats only \\
-\texttt{!} & Override internal parameters LaTeX uses for determining "good" float positions \\ 
-\texttt{H} & Places the float at precisely the location in the \LaTeX ~ code. Requires the float package,[1] i.e., \texttt{\textbackslash usepackage\{float\}}. This is somewhat equivalent to !ht.\\ \hline
-\end{tabular}
-\end{table}
+\section{Bootloader}
+TODO
+\section{Interrupts}
+TODO
+\section{Memory management}
+TODO
+\section{Timing}
+TODO
+\section{File System}
+TODO
+\section{Scheduling}
+TODO
 
-Place labels after captions or you get the wrong labelling.
+% ==================================================================
 
-In Table \ref{opcje} there are additional options for \texttt{table} and \texttt{figure} environments.
+\chapter{Results}
+TODO
 
-\begin{figure}[h!]
+\section{User's manual}
+TODO
 
-\begin{center}
-    \setlength{\unitlength}{1mm}
+\subsection{Building and running the OS}
+TODO
 
-    \begin{picture}(40, 30)
-        \put(20,1){\line(0,1){20}} % line
+\subsection{Writing own programs}
+TODO
 
-        % bottom
-        \put(20,1){\circle*{2}}
-        \put(25,1){0}
+\subsection{Libc alkos.h}
+TODO
 
-        % top
-        \put(20,21){\circle*{2}}
-        \put(25,21){1}
-    \end{picture}
+\subsection{Syscalls}
+TODO
 
-\end{center}
-\caption{Example figure -- it has been drawn by \LaTeX ~default tools}
-\end{figure}
+\section{Example programs}
+TODO
 
+\section{Performance Analysis}
+TODO
 
-Lorem ipsum dolor sit amet, consetetur sadipscing elit, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.
+\subsection{KMalloc performance}
+TODO
 
+\subsection{KFfree performance}
+TODO
 
+\subsection{Context Switch performance}
+TODO
 
+\subsection{Syscall performance}
+TODO
 
-\chapter{The next chapter}
-
-Lorem ipsum dolor sit amet, consetetur sadipscing elit, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumyeirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diamvoluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.
-
-
-\section{Matrices}
-
-Simple matrix:
-\begin{equation*}
-	\begin{matrix}
-	a & b & c & d \\
-	d & e & f & g \\
-	1 & 1 & 1 & 1
-	\end{matrix}
-\end{equation*}
-%
-Matrix with parentheses:
-%
-\begin{equation*}
-	A = 
-	\begin{pmatrix}
-	a & b & c & d \\
-	d & e & f & g \\
-	1 & 1 & 1 & 1
-	\end{pmatrix}
-\end{equation*}
-%
-Matrix with brackets:
-%
-\begin{equation*}
-	\begin{bmatrix}
-	a & b & c & d \\
-	d & e & f & g \\
-	1 & 1 & 1 & 1
-	\end{bmatrix}
-\end{equation*}
-%
-You can also use more general environment:
-%
-\begin{equation*}
-	\renewcommand{\arraystretch}{0.8}
-	\begin{array}{ccc}
-	1 & 0 & 0 \\
-	0 & 1 & 0 \\
-	0 & 0 & 1 \\
-	\end{array}
-\end{equation*}
-%
-Matrix with braces:
-%
-\begin{equation*}
-	\left\{
-	\renewcommand{\arraystretch}{0.8}
-	\begin{array}{ccc}
-	1 & 0 & 0 \\
-	0 & 1 & 0 \\
-	0 & 0 & 1 \\
-	\end{array}\right\}
-\end{equation*}
-
-\begin{definition}
-	%
-	Let $A\neq \emptyset$, $n \in \mathbb{N}$. Every function $f\colon A^n \to A$ is called an \emph{$n$-ary operation} or \emph{działaniem} określonym na $A$.
-	$0$-ary operations are constant functions.
-	%
-\end{definition}
-
-
-\begin{definition}[Algebra]
-	%
-	The ordered pair $(A,F)$, where $A\neq \emptyset$ is a set and $F$ is a family of operations defined on $A$, shall be called an \emph{algebra} (or \emph{$F$-algebra}). The set $A$ is called \emph{the set of elements}, \emph{support} or \emph{universe} of an algebra $(A,F)$ and $F$ is called \emph{the set of elementary operations}.
-	%
-\end{definition}
-
-\begin{proposition}
-	%
-	I state that, having passed to the limit, the only thing left me me is to camp at said limit or return, or, maybe, search for a pass or an exit to other areas.
-	%
-\end{proposition}
-
-
-
-
+\subsection{Scheduler tests}
+TODO
 
 % ------------------------------- BIBLIOGRAPHY ---------------------------
 % LEXICOGRAPHICAL ORDER BY AUTHORS' LAST NAMES
@@ -541,23 +474,10 @@ If you don't need it, delete it.
 % ----------------------------  LIST OF FIGURES --------------------------------
 \listoffigures
 \thispagestyle{empty}
-If you don't need it, delete it.
-
 
 % -----------------------------  LIST OF TABLES --------------------------------
-\renewcommand{\listtablename}{Spis tabel}
+\renewcommand{\listtablename}{List of Tables}
 \listoftables
 \thispagestyle{empty}
-If you don't need it, delete it.
-
-% -----------------------------  LIST OF APPENDICES ---------------------------
-\chapter*{List of appendices}
-\begin{enumerate}
-\item Appendix 1
-\item Appendix 2
-\item In case of no appendices, delete this part.
-\end{enumerate}
-\thispagestyle{empty}
-
 
 \end{document}
