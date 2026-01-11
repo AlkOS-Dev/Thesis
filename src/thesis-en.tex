@@ -550,7 +550,7 @@ As it might be obvious but function handling interrupts slightly differs from us
   \label{fig:stackframe}
 \end{figure}
 
-The layout above (\ref{fig:stackframe}) is called \textbf{Interrupt Frame} and is one of the most imporatnt architecture concepts in the kernel as based on this we will be building context switches, context conversion or jumping to userspace (ring3). The final difference is that \textbf{ISR} must return using special instruction \textbf{IRETQ} \cite{IntelManual-Interrupts}, which rewinds all actions we described before in proper order (including ring change and jumping to proper code segment). Major problem with compiler generated function is that it modifies the stack before and after the function code, so to have full control and omit compiler bugs we introduced clean solution to split definition of handlers to assembly wrappers, performing necessary actions defined by the architecture and independant interrupt handling code defined in arch-agnostic kernel.
+The layout above (\ref{fig:stackframe}) is called \textbf{Interrupt Frame} and is one of the most imporatnt architecture concepts in the kernel as based on this we will be building context switches, context conversion or jumping to userspace (ring3). The final difference is that \textbf{ISR} must return using special instruction \textbf{IRETQ} \cite{IntelManual-Interrupts}, which rewinds all actions we described before in proper order (including ring change and jumping to proper code segment). Major problem with compiler generated function is that it modifies the stack before and after the function code, so to have full control and omit compiler bugs we introduced clean solution to split definition of handlers to assembly wrappers, performing necessary actions defined by the architecture and then invokes independant interrupt handling code defined in arch-agnostic kernel.
 
 \begin{lstlisting}[style=nasmstyle, caption={Assembly ISR code}, label={lst:isr_asm}]
 %macro context_switch_if_needed 0
@@ -754,6 +754,19 @@ JumpToUserSpace:
 
 \subsection{Interrupts Hardware Abstraction}
 
+As we want abstract as much as possible Interrupt table was also abstracted to arch-independant code. On each interrupt control is passed to Logical Interupt Table (LIT), which is responsible to perform necessary actions, which are similar for reach interrupt. Architecture code is responsible to establish mapping between hardware and logical interrupt table and from this point interrupt handling is enteirly managed by the LIT. That includes:
+
+\begin{itemize}
+  \item Managing handlers for the interrupts, kernel may want to change the reaction on the interrupt at any point
+  \item Counting interrupt nesting
+  \item Collecting necessary statistics like number of interrupts per thread, kernel time, user space time etc
+  \item Handling Hardware Interrupts drivers like \textbf{PIC} or \textbf{APIC}
+  \item Blocking the individual interrupt
+  \item Easy to extend in future
+\end{itemize}
+
+LIT handling procedures may return a pointer to the next thread which should be exeucted after leaving the interrupt, and hardware wrapper must perform the context switch when that occurs. By that mechanism we are able to react quickly on changes or preempt the current thread using timer interrupt.
+
 \section{Timing}
 TODO
 \section{File System}
@@ -821,6 +834,7 @@ LAPIC & Local Advanced Programmable Interrupt Controller \\
 PIT & Programmable Interrupt Timer \\
 IDT & Interrupt Descriptor Table \\
 TSS & Task State Segment \\
+LIT & Logical Interrupt Table \\
 ISR & Interrupt Service Routine
 \end{tabular}
 \\
