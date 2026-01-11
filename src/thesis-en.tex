@@ -7,7 +7,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage[MeX]{polski}
 \usepackage[T1]{fontenc}
-\usepackage[english, polish]{babel}
+\usepackage[polish, english]{babel}
 
 
 \usepackage{amsmath, amsfonts, amsthm, latexsym}
@@ -82,7 +82,7 @@
     showspaces=false,                
     showstringspaces=false,
     showtabs=false,                  
-    tabsize=2
+    tabsize=2,
     frame=single,
     language=C++,
     morekeywords={constexpr, nullptr, size_t, uint64_t}
@@ -503,7 +503,7 @@ On the x86-64 architecture, every interrupt is assigned a unique number (vector)
   };
 \end{lstlisting}
 
-The most critical component of the IDT entry is the address of the function to be invoked (split into \textbf{isr\_low}, \textbf{isr\_mid}, and \textbf{isr\high}). Another important field is \textbf{kernel\_cs}, which specifies the code segment \cite{IntelManual-Segments} loaded before executing the handler. In x86-64, there are four privilege levels (Rings). We assume the kernel always operates in Ring 0 (the most privileged level). Therefore, the Ring 0 kernel code segment is always written to this field. Conversely, the \textbf{IdtPrivilegeLevel dpl} field specifies the minimal privilege level required to trigger the interrupt via software, which is essential for implementing system calls (syscalls) invoked from userspace.
+The most critical component of the IDT entry is the address of the function to be invoked (split into \textbf{isr\_low}, \textbf{isr\_mid}, and \textbf{isr\_high}). Another important field is \textbf{kernel\_cs}, which specifies the code segment \cite{IntelManual-Segments} loaded before executing the handler. In x86-64, there are four privilege levels (Rings). We assume the kernel always operates in Ring 0 (the most privileged level). Therefore, the Ring 0 kernel code segment is always written to this field. Conversely, the \textbf{IdtPrivilegeLevel dpl} field specifies the minimal privilege level required to trigger the interrupt via software, which is essential for implementing system calls (syscalls) invoked from userspace.
 
 \subsubsection{Interrupt Service Routines}
 
