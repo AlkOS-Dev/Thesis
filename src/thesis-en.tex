@@ -56,7 +56,7 @@
   \renewcommand{\footrulewidth}{0.0pt}
 }
 
-%---------------- C++ listing -------------------
+%---------------- code listings -------------------
 
 \usepackage{listings}
 \usepackage{xcolor}
@@ -89,6 +89,35 @@
 }
 \lstset{style=cppstyle}
 \renewcommand{\lstlistingname}{C++ Code Snippet}
+
+\lstdefinestyle{nasmstyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{blue},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true, 
+    captionpos=b,
+    keepspaces=true,                 
+    numbers=left,
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    frame=single,
+    language=[x86masm]Assembler,
+    morekeywords={rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp, r8, r9, r10, r11, r12, r13, r14, r15,
+                  eax, ebx, ecx, edx, esi, edi, ebp, esp,
+                  cr0, cr2, cr3,
+                  mov, push, pop, call, ret, int, iretq, jmp, je, jne, jg, jl, cmp, test,
+                  add, sub, mul, div, inc, dec, xor, or, and,
+                  lidt, lgdt, sti, cli, hlt,
+                  section, global, extern, db, dw, dd, dq, resb, resw, resd, resq,
+                  macro, endmacro, \%define}
+}
 
 % --------------------------- DRAWING ---------------------
 
@@ -429,9 +458,10 @@ TODO
 
 \section{Bootloader}
 TODO
-
 \section{Assumptions}
-\subsubsection{}
+TODO
+\section{Memory Management}
+TODO
 
 \section{Interrupts}
 
@@ -464,13 +494,7 @@ This table contains information what the CPU should do as a reaction on the inte
       u8 zero : 1;
       IdtPrivilegeLevel dpl : 2;
       u8 present : 1;
-  };
-  static_assert(sizeof(IdtEntryFlags) == 1);
-  
-  /**
-   * @brief Data layout of x86_64 interrupt service routines, refer to intel manual for details
-   */
-  struct PACK IdtEntry {
+  };subsec:unifiedFrameACK IdtEntry {
       u16 isr_low;    // The lower 16 bits of the ISR's address
       u16 kernel_cs;  // The GDT segment selector that the CPU
                       //  will load into CS before calling the ISR
@@ -482,16 +506,11 @@ This table contains information what the CPU should do as a reaction on the inte
   };
 \end{lstlisting}
 
-The most important part here is the address of the function which will be invoked as a reaction on the interrupt (\textbf{isr}), which is splitted here into parts.
-Very imporatnt field is \textbf{kernel\_cs}, which points to the code segment \cite{IntelManual-Segments}, which will be loaded before executing the function. In x86-64 we have 4 levels of permissions 
-(as shown in \ref{lst:idtEntry}). We assume that kernel always operates in ring0 (the most priviliged one) and thus we only have single ring0 kernel segment, which we always write to this field. 
-On the other hand we can specify miniaml required permissions level to handle the exception - \textbf{IdtPrivilegeLevel dpl}, which will be usefull for creating syscalls - userspace invoked
-software interrupt.
+The most important part here is the address of the function which will be invoked as a reaction on the interrupt (\textbf{isr}), which is splitted here into parts. Very imporatnt field is \textbf{kernel\_cs}, which points to the code segment \cite{IntelManual-Segments}, which will be loaded before executing the function. In x86-64 we have 4 levels of permissions (as shown in \ref{lst:idtEntry}). We assume that kernel always operates in ring0 (the most priviliged one) and thus we only have single ring0 kernel segment, which we always write to this field. On the other hand we can specify miniaml required permissions level to handle the exception - \textbf{IdtPrivilegeLevel dpl}, which will be usefull for creating syscalls - userspace invoked software interrupt.
 
 \subsubsection{Interrupt Service Routines}
 
-As it might be obvious but function handling interrupts slightly differs from usual function we write and compiler generates.
-When the CPU calls the handling function it first pushes these values on the stack in given order (each of them is 8-byte):
+As it might be obvious but function handling interrupts slightly differs from usual function we write and compiler generates. When the CPU calls the handling function it first swaps stack pointers to kernel stack if we change ring (ring3 -> ring0, in other words if interrupt happens from userspace), it is done by mechanism called TSS (For simplicity we will not go into details, please refer to \cite{osdev-tss}). Then the CPU changes code segment as instrumented in \textbf{IDT entry} (\ref{lst:idtEntry}). Afterwards it pushes these values on the stack in given order (each of them is 8-byte):
 
 \begin{figure}[htbp]
   \centering
@@ -531,18 +550,210 @@ When the CPU calls the handling function it first pushes these values on the sta
   \label{fig:stackframe}
 \end{figure}
 
-The layout above (\ref{fig:stackframe}) is called \textbf{Interrupt Frame} and is one of the most imporatnt architecture concepts in the kernel as based on this we will be building context switches, context conversion or jumping to userspace (ring3).
-After preparing the stack CPU changes code segment as instrumented in \textbf{IDT entry} (\ref{lst:idtEntry}) and swaps stack pointers to kernel stack if we change ring (ring3 -> ring0, in other words if interrupt happens from userspace),
-it is done by mechanism called TSS (For simplicity we will not go into details, please refer to \cite{osdev-tss}). The final difference is that \textbf{ISR} must return using special instruction \textbf{IRETQ} \cite{IntelManual-Interrupts},
-which rewinds all actions we described before in proper order (including ring change and jumping to proper code segment). Major problem with compiler generated function is that it modifies the stack before and after the function code, so to have full control and omit compiler bugs we introduced clean solution to split definition of handlers to assembly wrappers,
-performing necessary actions defined by the architecture and independant interrupt handling code defined in arch-agnostic kernel.
+The layout above (\ref{fig:stackframe}) is called \textbf{Interrupt Frame} and is one of the most imporatnt architecture concepts in the kernel as based on this we will be building context switches, context conversion or jumping to userspace (ring3). The final difference is that \textbf{ISR} must return using special instruction \textbf{IRETQ} \cite{IntelManual-Interrupts}, which rewinds all actions we described before in proper order (including ring change and jumping to proper code segment). Major problem with compiler generated function is that it modifies the stack before and after the function code, so to have full control and omit compiler bugs we introduced clean solution to split definition of handlers to assembly wrappers, performing necessary actions defined by the architecture and independant interrupt handling code defined in arch-agnostic kernel.
+
+\begin{lstlisting}[style=nasmstyle, caption={Assembly ISR code}, label={lst:isr_asm}]
+%macro context_switch_if_needed 0
+  cmp rax, 0
+  je .done                         ; Omit context switch if there is no need to change it
+
+  mov r13, rax                     ; save next TCB
+
+  mov rdi, r13
+  mov rsi, rsp
+  call cdecl_ContextSwitchOnInterrupt
+
+  mov rsp, [r13+Thread.kernel_stack]   ; Change the stack
+.done:
+
+  load_user_gs_if_needed
+
+  pop_all_regs                    ; Restore registers.
+  add rsp, _all_reg_size          ; Deallocate register save space.
+  add rsp, 8                  ; Pop error code.
+  iretq
+%endmacro
+
+; Macro for hardware or software interrupts.
+; Calls a handler with the signature 'void handler(u16 lirq, void* frame)'.
+%macro interrupt_wrapper 3 ; %1: Logical IRQ, %2: idt idx %3: C handler function
+isr_wrapper_%+%2:
+    push 0                          ; Push a dummy error code for unification.
+    sub rsp, _all_reg_size          ; Allocate space for saving registers.
+    push_all_regs                   ; Save registers.
+
+    load_kernel_gs_if_needed
+
+    cld                         ; Clear direction flag for string operations.
+    mov rdi, %1                 ; Arg1: mapped lirq number.
+    mov rsi, rsp                ; Arg2: pointer to stack frame.
+    call %3                     ; Call the specific ISR handler.
+
+    context_switch_if_needed
+%endmacro
+
+\end{lstlisting}
+
+\subsubsection{Synchronisation}
+
+As you can see any interrupt may want to change the context of running program. That includes kernel space threads or userspace programs currently executing syscall code. It would be cathastrophic if Timer intterrupt changed the context
+during updating schedulers structures or some memory tables. Because of that even on single core, there must be some Synchronisation done between the tasks. It is done by blocking hardware interrupts (\textbf{CLI} and \textbf{STI} instructions on x86-64).
+For example if we are updating sleeping tasks structures inside of the kernel, we must use that or if we want to change the context (for sure we don't want to break context switching code).
 
 \subsection{Unified Interrupt Frame}
-\subsection{Logical Interrupt Table}
+\label{subsec:unifiedFrame}
 
+To simplify all use cases of interrupts we introduced unified frame, which will be reused everywhere and is based on Interrupt Frame \ref{fig:stackframe}. As we need to save threads state before the context switches we also need 
+to save all general puprose registers. To make it fast we write them on the stack, inside the \textbf{Unified Interrupt Frame}. There are only 15 registers above the architecture frame, because RSP is already contained in it.
+Assuming the thread is not using floating points or vector opertations (configurable by flag ; much more space needed for the state), such frame fully allows us to restore the execution of any program at any moment. That also include ring informations.
 
-\section{Memory Management}
-TODO
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+      node distance=0cm,
+      start chain=going below,
+      stacknode/.style={
+          draw, 
+          minimum width=5cm, 
+          minimum height=1cm, 
+          outer sep=0pt, 
+          font=\ttfamily
+      },
+      labelnode/.style={
+          minimum height=1cm,
+          font=\footnotesize\sffamily,
+          anchor=east
+      }
+  ]
+  
+  \node (highmem) at (0, 1) {Higher address (High Memory)};
+  \draw[->] (highmem) -- (0, 0.2);
+
+  \node [stacknode, on chain, fill=gray!10] (ss) {Stack Segment};
+  \node [stacknode, on chain, fill=gray!10] (old_rsp) {Old Stack Pointer - RSP };
+  \node [stacknode, on chain, fill=gray!10] (rflags) {Rflags};
+  \node [stacknode, on chain, fill=gray!10] (cs) {Code Segment};
+  \node [stacknode, on chain, fill=gray!10] (rip) {Instruction Address};
+  \node [stacknode, on chain, fill=gray!10] (error) {Error Code (always)};
+  \node [stacknode, on chain, fill=gray!10] (genregs) {14 General Registers ($\dots$)};
+  \node [stacknode, on chain, fill=gray!10] (rax) {rax};
+  
+  \draw[<-, thick, red] (rax.east) -- ++(1.5,0) node[right, text=red] {RSP (Stack Pointer)};
+
+  \node [below=0.5cm of rax] (lowmem) {Lower address (Low Memory)};
+  \draw[->] (lowmem.north) -- (rax.south);
+
+  \end{tikzpicture}
+  \caption{Unified Interrupt Frame}
+  \label{fig:unifiedstackframe}
+\end{figure}
+
+\subsection{Context Switch}
+
+As previously mentioned we will be using interrupts mechanism to perform task changes. More precisly interrupts performs mostly everything we need to change the context:
+\begin{itemize}
+  \item Manages ring permisions (Automatically swaps code and stack segments)
+  \item Automatically swaps kernel stack <-> user stack
+  \item Restores rflags (contains \textbf{interrupt flag}, which blocks hardware interrupts)
+  \item Jumps back to code pointed by \textbf{RIP}
+\end{itemize}
+
+Knowing that to perform context switch between tasks we need to first prepare \textbf{Unified Interrupt Frame} \ref{subsec:unifiedFrame} for curr thread according to the scheme or use interrupts mechanism (which does that for us), to safely restore the exeuction later. We need to also have such frame of thread we want to execute. It should be obvious that if we have some running thread that already performed context switch it would create such frame for himself by some way - automatically by interrupt mechanism or artificialy before yielding during syscall or just by good manners. But if the thread has never been running before we must craft such frame by hands. We assume that all threads starts execution from kernel space and then eventually jumps to the users space. It is also worth mentioning that all interrupt handling is performed inside of the kernel so the interrupt frame always will be residing on the kernel stack and kernel code segment. Knowing that we can simply adjust kernel stack data of thread we want to bootup before the context switch and then use the frame. Such procedure simply looks like that:
+
+\begin{lstlisting}[caption={Thread stack initialization}, label={lst:threadStack}]
+void InitializeThreadStack(void **stack, const Sched::Task &task)
+{
+    /* NOTE: Thread entry always starts in Kernel Code */
+    auto stack_top = static_cast<byte *>(*stack) - sizeof(IsrErrorStackFrame);
+    auto frame     = reinterpret_cast<IsrErrorStackFrame *>(stack_top);
+
+    memset(stack_top, 0, sizeof(IsrErrorStackFrame));
+
+    /* Initialize IsrErrorStackFrame */
+    frame->isr_stack_frame.rip    = reinterpret_cast<u64>(task.func);
+    frame->error_code             = 0;
+    frame->isr_stack_frame.cs     = static_cast<u64>(cpu::GDT::kKernelCodeSelector);
+    frame->isr_stack_frame.rflags = kInitialRFlags;
+    frame->isr_stack_frame.rsp    = reinterpret_cast<u64>(*stack);
+    frame->isr_stack_frame.ss     = static_cast<u64>(cpu::GDT::kKernelDataSelector);
+
+    /* Initialize function arguments */
+    if (task.args_count > 0) {
+        frame->registers.rdi = task.args[0];
+    }
+
+    // ... other args
+
+    if (task.args_count > 5) {
+        frame->registers.r9 = task.args[5];
+    }
+
+    /* Save adjusted stack address */
+    *stack = reinterpret_cast<void *>(stack_top);
+}
+\end{lstlisting}
+
+Having both the stack frames and assumptions that interrupt frame always resides on kernel stack, we can simply perform context switch entry/exit tasks and swap \textbf{RSP} (current stack) to kernel stack of thread we want to execute and \textbf{IRETQ} instruction will do everything we need for us, which we can observe for example inside interrupt handling code \ref{lst:isr_asm} inside \textbf{context\_switch\_if\_needed} macro.
+
+\subsection{Jumping to Userspace}
+
+Jumping to userspace is done similarly as changing the context of running thread. We will be again making artificialy created interrupt frames but this time we will be changing code segment and stack segment inside the frame to the user space ones and old stack pointer will be a user space stack, which looks like that: 
+
+\begin{lstlisting}[caption={Userspace Jump C++ code}, label={lst:userSpaceJump}]
+extern "C" void cdecl_JumpToUserSpaceEntry(void *addr, IsrStackFrame *frame)
+{
+    ASSERT_NOT_NULL(addr);
+    ASSERT_NOT_NULL(frame);
+    ASSERT_NOT_NULL(hardware::GetCoreLocalTcb());
+
+    auto thread          = hardware::GetCoreLocalTcb();
+    thread->kernel_stack = thread->kernel_stack_bottom; // reset kernel stack
+
+    frame->rip    = reinterpret_cast<u64>(addr);
+    frame->cs     = static_cast<u64>(cpu::GDT::kUserCodeSelector);
+    frame->rflags = static_cast<u64>(kInitialRFlags);
+    frame->rsp    = reinterpret_cast<u64>(thread->user_stack_bottom);
+    frame->ss     = static_cast<u64>(cpu::GDT::kUserDataSelector);
+
+    const u64 t            = TimingModule::Get().GetSystemTime().ReadLifeTimeNs();
+    thread->kernel_time_ns = t - thread->timestamp;
+    thread->timestamp      = t;
+
+    SetThreadGs(thread);
+    __asm__ volatile("swapgs" ::: "memory");
+}
+\end{lstlisting}
+
+\begin{lstlisting}[style=nasmstyle, caption={Userspace Jump NASM code}, label={lst:userSpaceJumpNasm}]
+; c_decl
+; void JumpToUserSpace(void (*func)(), void* arg)
+;   RDI = func
+;   RSI = arg
+; Note: Caller is responsible for ensuring proper environment before calling (disabling IRQs)
+; Note: FS already should be changed during contex switch
+JumpToUserSpace:
+    sub rsp, _jump_userspace_stack_space
+    push rsi
+    ; aligned properly
+
+    mov rsi, rsp
+    add rsi, 8
+    call cdecl_JumpToUserSpaceEntry
+
+    xor rax, rax
+    mov rax, _user_data_selector
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    pop rsi
+    mov rdi, rsi ; prepare void* arg for func if needed
+    iretq
+\end{lstlisting}
+
+\subsection{Interrupts Hardware Abstraction}
+
 \section{Timing}
 TODO
 \section{File System}
