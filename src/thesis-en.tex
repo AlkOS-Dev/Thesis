@@ -773,15 +773,15 @@ The LIT handling procedures may return a pointer to the next thread scheduled fo
 
 \section{Timing}
 
-Before building the Scheduler, except proper working memory management and interrupts we had to prepare infrastructures and drivers for timing machines. That includes usual Timers, which are capable of measuring time on the machine, that is how much time have passed from begining of the system (lifetime), we call such devices \textbf{Clocks}. Except that we need devices which are capable of generating interrupts at requested time to preempt currently running thread if it is not willing to cooperate with others and leave some cpu time for them, we call such devices \textbf{Event Clocks}. To unify the whole timing we abstract the unit of all devices and mechanism to nanoseconds.
+Prior to the implementation of the Scheduler, and alongside functional memory management and interrupt handling, it was necessary to establish the infrastructure and drivers for timing mechanisms. This includes devices capable of measuring the system's uptime, referred to as \textbf{Clocks}. Additionally, the system requires devices capable of generating interrupts at specific intervals. These are essential for preempting the currently executing thread if it fails to yield the CPU voluntarily, thereby ensuring fair scheduling. Such devices are referred to as \textbf{Event Clocks}. To unify the timing subsystem, all devices and mechanisms rely on nanoseconds as the fundamental unit of time abstraction.
 
 \subsection{Infrastructure}
 
-Architecture code is responsible for detecting the devices and registering them to timing infrastructure that is \textbf{ClockRegistry} and \textbf{EventClockRegistry}. Afterwards some part of arch-agnostic code like \textbf{ACPI} may also register some clocks by reading device tables. Finally Architecture defined functions: \textbf{hal::PickSystemClockSource()} and \textbf{hal::PickSystemEventClockSource()} are called during creation of timing module and are responsible for picking best sources for each purpose.
+The architecture-specific code is responsible for detecting available hardware and registering it within the central timing infrastructure, specifically the \textbf{ClockRegistry} and \textbf{EventClockRegistry}. Subsequently, architecture-agnostic components, such as the \textbf{ACPI} subsystem, may register additional clocks by parsing system description tables. Finally, the architecture-defined functions \textbf{hal::PickSystemClockSource()} and \textbf{hal::PickSystemEventClockSource()} are invoked during the initialization of the timing module to select the optimal sources for each purpose.
 
 \subsection{Clocks}
 
-Clock Drivers are defined by this structure:
+Clock Drivers are defined by the following structure:
 
 \begin{lstlisting}[caption={Clock Driver Structure}, label={lst:clockDriver}]
 struct alignas(arch::kCacheLineSizeBytes) ClockRegistryEntry : data_structures::RegistryEntry {
@@ -804,21 +804,19 @@ struct alignas(arch::kCacheLineSizeBytes) ClockRegistryEntry : data_structures::
 };
 \end{lstlisting}
 
-For x86-64 we are picking clocks based on availability and this order TSC > HPET > RTC > PIT. And currently we support only TSC and HPET, no other drivers are implemented.
+For the x86-64 architecture, clock selection is prioritized based on availability and precision in the following order: TSC > HPET > RTC > PIT. Currently, support is implemented only for the TSC and HPET drivers.
 
 \subsubsection{TSC \cite{IntelManual-TSC}\cite{osdev-tsc}}
 
-This is the best clock possible as it has best precision, is local for the core. That means reading this clock is as fast as possible it takes single cycles rather than hundreds of cycles like other clocks. But obviously it has couple drawbacks. Historically it was based on core frequency and in older devices the speed in which this counter is bumped may change according to frequency scaling of the CPU, which makes it totally unusable. From some point forwards  
-Intel has introduced TSC Invariant so that the clock is stable. The other drawback is that in some cpus the frequency of this timer must be measured using other clock. For that we are utilizing HPET clock, which for simplicity is our minimal requirement.
+The Time Stamp Counter (TSC) is the optimal clock source due to its high precision and core-locality. Accessing the TSC involves reading a CPU register, which requires only a few cycles, unlike external clocks that may require hundreds. However, the TSC has historical limitations. On older processors, the counter's frequency was tied to the core frequency. Consequently, frequency scaling (throttling) caused the time measurement to drift, rendering it unreliable. Modern Intel processors introduced the Invariant TSC, which ensures a constant frequency regardless of the core's power state. Another limitation is that on certain CPUs, the TSC frequency is not explicitly known and must be measured against a known reference. For this purpose, the system utilizes the HPET, which serves as the minimal hardware requirement for reliable calibration.
 
 \subsubsection{HPET \cite{Intel-HPET}\cite{osdev-hpet}}
 
-Also has a great precision and is much easier to get than stable TSC, but the device is IO mapped to the CPU and is an external device, which makes it much less performant than the TSC. Reading this clock values may take even 1000 cycles.
-Because of that me made this clock our second choice. It is great for calibration of other clocks but not for frequent time reads.
+The High Precision Event Timer (HPET) also offers high precision and is generally more stable than the TSC on older hardware. However, it is an external device mapped via Memory-Mapped I/O (MMIO). As a result, accessing the HPET is significantly slower than reading the TSC, potentially taking up to 1000 cycles per read. Due to this performance overhead, the HPET is designated as the secondary choice. It is primarily utilized for calibrating other clocks rather than for frequent timekeeping operations.
 
 \subsection{Event Clocks}
 
-Event Clock Drivers are defined by this structure:
+Event Clock Drivers are defined by the following structure:
 
 \begin{lstlisting}[caption={Event Clock Driver Structure}, label={lst:eventClockDriver}]
 struct PACK EventClockFlags {
@@ -864,11 +862,11 @@ struct alignas(arch::kCacheLineSizeBytes) EventClockRegistryEntry : data_structu
 };
 \end{lstlisting}
 
-For x86-64 we are picking event clocks based on availability and this order LAPIC Timer > HPET > PIT. And currently we support only LAPIC Timer, no other drivers are implemented.
+For x86-64, the selection of event clocks is based on the following priority order: LAPIC Timer > HPET > PIT. Currently, only the LAPIC Timer is supported.
 
 \subsubsection{LAPIC Timer \cite{osdev-lapic-timer}\cite{IntelManual-LAPIC-Timer}\cite{IntelManual-APIC}}
 
-Lapic similarly to TSC is local to the core, that means access to its register is very quick. Additional perk is thah each core has its own timer, that means there is no need for any resource management at all. The only drawback again that it has no standard frequency and it is just oscilating at one of the CPU's frequencies. It again needs a calibration and we utilize HPET clock for that.
+Similar to the TSC, the LAPIC Timer is local to the processor core, ensuring extremely low-latency access to its registers. A significant advantage of this architecture is that each core possesses an independent timer, which eliminates the need for shared resource management or synchronization between cores. However, like the TSC, the LAPIC Timer operates at a frequency derived from the CPU bus or core frequency, which is not standard across various CPUs. Consequently, it requires calibration against a reference clock, for which the HPET is utilized.
 
 \section{File System}
 TODO
@@ -983,6 +981,7 @@ IDT & Interrupt Descriptor Table \\
 TSS & Task State Segment \\
 LIT & Logical Interrupt Table \\
 TSC & TimeStamp Counter \\
+MMIO & Memory-Mapped I/O  \\
 ISR & Interrupt Service Routine
 \end{tabular}
 \\
