@@ -1,4 +1,4 @@
-\documentclass[a4paper,11pt,twoside]{report}
+\documentclass[a4paper,9pt,twoside]{report}
 
 % ----------------------   PREAMBLE PART ------------------------------
 
@@ -316,6 +316,7 @@ TODO
 TODO
 \section{Limitations and Assumptions}
 
+\subsection{Minimal requirements}
 \begin{itemize}
   \item avx
   \item osxsave
@@ -325,6 +326,21 @@ TODO
   \item APIC
   \item acpi
   \item 64bit LAPIC
+  \item mmu
+\end{itemize}
+
+\subsection{Known Limitations}
+\label{subsec:limitations}
+
+\begin{itemize}
+  \item max process name = 128
+  \item max processes = 4096
+  \item max threads = 8192
+\end{itemize}
+
+Functionalities:
+\begin{itemize}
+  \item aaa
 \end{itemize}
 
 \section{Achieved Functionalities} 
@@ -472,6 +488,7 @@ TODO
 \section{Assumptions}
 TODO
 \section{Memory Management}
+\label{sec:memory}
 TODO
 
 \section{Interrupts}
@@ -827,7 +844,26 @@ static_assert(sizeof(EventClockFlags) == sizeof(u32));
 
 enum class EventClockState : u8 {
     kDisabled = 0,  // Clock is disabled
-    kPeriodic,      // Clock is in periodic mode
+    kPeriodic,      // Clock \begin{lstlisting}[caption={Clock Driver Structure}, label={lst:clockDriver}]
+      struct alignas(arch::kCacheLineSizeBytes) ClockRegistryEntry : data_structures::RegistryEntry {
+        /* Clock numbers */
+        u64 frequency_kHz; // Frequency in kHz
+        u64 ns_uncertainty_margin_per_sec;  
+          // Uncertainty margin in femto seconds per second
+        u64 clock_numerator; // For conversion to nanoseconds, this is the numerator
+        u64 clock_denominator; // For conversion to nanoseconds, this is the denominator
+      
+        /* Callbacks */
+        u64 (*read)(ClockRegistryEntry *);
+        bool (*enable_device)(ClockRegistryEntry *);
+        bool (*disable_device)(ClockRegistryEntry *);
+        void (*stop_counter)(ClockRegistryEntry *);
+        void (*resume_counter)(ClockRegistryEntry *);
+      
+        /* Own data */
+        void *own_data;
+      };
+      \end{lstlisting}is in periodic mode
     kOneshot,       // Clock is in oneshot mode
     kOneshotIdle,   // Clock is in oneshot mode but no event is scheduled
     klast,
@@ -869,42 +905,240 @@ For x86-64, the selection of event clocks is based on the following priority ord
 Similar to the TSC, the LAPIC Timer is local to the processor core, ensuring extremely low-latency access to its registers. A significant advantage of this architecture is that each core possesses an independent timer, which eliminates the need for shared resource management or synchronization between cores. However, like the TSC, the LAPIC Timer operates at a frequency derived from the CPU bus or core frequency, which is not standard across various CPUs. Consequently, it requires calibration against a reference clock, for which the HPET is utilized.
 
 \section{File System}
+\label{section:fs}
 TODO
 
 \section{Scheduling}
-TODO
+
+Final part of the OS, which strongly depends and utilizes all other modules. Our implementation targets only single core for simplicity, but the design might be easly extended to multiple cores, which will be described at the end of this document.
 
 \subsection{Process Structure}
-TODO
 
-\subsubsection{Kernel Address Space}
-TODO
+Our definition of process looks like that:
+
+\begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
+struct PACK Pid {
+    u16 id;
+    u64 count : 48;
+
+    bool operator==(const Pid &other) const = default;
+};
+
+struct PACK ProcessFlags {
+    bool KernelSpaceOnly : 1;
+    bool PreserveFloats : 1;
+};
+static_assert(sizeof(ProcessFlags) == 1);
+
+enum class ProcessState : u64 {
+    kReady = 0,
+    kWaitingForJoin,
+    kTerminated,
+    kLast,
+};
+static_assert(sizeof(ProcessState) == sizeof(u64));
+
+struct Process : hal::Process {
+    static constexpr size_t kMaxNameLength = vfs::kMaxComponentSize;
+
+    /* Management */
+    char name[kMaxNameLength];
+    Pid pid;
+    ProcessFlags flags;
+    Thread *threads;
+    u64 live_threads;
+    u64 threads_to_clean;
+    ProcessState state;
+    WaitQueue<Thread, 3> *wait_queue;
+    int status;
+
+    /* Process resources */
+    Mem::VPtr<Mem::AddressSpace> address_space;
+
+    /* File descriptor table */
+    Mem::VPtr<Fs::FdTable> fd_table;
+
+    /* Standard I/O pipes (owned by process) */
+    IO::Pipe<Fs::kStdioBufferSize> stdin_pipe;
+    IO::Pipe<Fs::kStdioBufferSize> stdout_pipe;
+    IO::Pipe<Fs::kStdioBufferSize> stderr_pipe;
+};
+\end{lstlisting}
+
+\subsubsection{PID}
+\label{subsubsec:pid}
+
+As said in limitations\ref{subsec:limitations}, maximal amounts of processes exists and we use that property to speedup process lookup by building identity 1:1 hash map for processes and embedding reservable identifier inside of the PID. The other part of PID is simply atomic counter, which makes the PID unique for the entire lifetime of the system.
+
+\subsubsection{Process Flags}
+
+\textbf{KernelSpaceOnly} flag enables creation of kernel space only threads and processes that means there is no creation of address space or user space stack, leadining to smaller resource consumption and little spedups for example when we will be switching context from kernel thread to kernel thread there is no need to change the address space at all.
+
+\textbf{PreserveFloats} enabling this flags makes all threads save and load float registers during the context switch. Additionaly user may want to disable this flag for particular thread.
+
+\subsubsection{Process State}
+
+It has a less significant meaning than Thread State (which will be described later), it is mostly used for proper resource management during waiting for the process. Ensures that the process is not cleaned up twice.
+
+\subsubsection{Address Space}
+
+The most important part of the process structure. It defines all informations about virtual memory, more precisly establishes translation between virtual and physical layer. Each process operates in own memory address space, that allows for much simpler memory management including fragmentation, perofrmance and security. Refer to Memory Managment\ref{sec:memory} for more information.
+
+\subsubsection{File Descriptor Table}
+
+This table contains all file descriptor opened by the threads running within this process. Please refer to File System \ref{section:fs}
+
+\subsubsection{Pipes}
+
+Buffored I/O of the process. Mostly for reading and writing with the user.
+
+\subsubsection{Name}
+
+Name of the process, most frequently name of the executable. May not be unique. Pid is unique.
+
+\subsubsection{Threads}
+
+Intrusive doubly linked list of threads running in this environment, used mostly for kill, exit or wait operations.
+
+\subsubsection{Live Threads and Threads to Clean}
+
+Counters for synchronization with \textbf{ProcessRipper}. Refer to Kernel Workers \ref{subsubsec:kworkers} for more details.
+ 
+\subsubsection{Status}
+
+Exit status of the process to be passed to waiting thread.
+
+\subsubsection{Wait Queue}
+
+\textbf{Wait Queue} used to store threads waiting for this process to finish. Each of them will be woken up when the process finished its execution.
+
+\subsection{Kernel Address Space}
+
+There is only one Kernel Address Space in the entire OS. Each kernel process is working inside this address space. Additionally each userspace process's address space had kernel addres space mapped for performance and ease of life reasons. User threads will be calling system calls quite frequently, changing address space on each syscall would infer huge performance cost and would additionally complicate syscall logic.
 
 \subsection{Thread Structure}
+
+Our definition of thread looks like that:
+
+\begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
+enum class UserPriority : u8 { kLow = 0, kMediumLow, kMedium, kMediumHigh, kHigh, kLast };
+
+struct PACK Tid {
+    u16 id;
+    u64 count : 48;
+
+    bool operator==(const Tid &other) const = default;
+};
+
+struct PACK ThreadFlags {
+    SchedulingPolicy policy : 8;
+    u8 priority : 8;
+    UserPriority user_priority : 3;
+    bool preserve_floats : 1;
+    bool detached : 1;
+    u64 padding : 43;
+};
+static_assert(sizeof(ThreadFlags) == 8);
+
+enum class ThreadState : u64 {
+    kReady = 0,
+    kRunning,
+    kSleeping,
+    kBlockedOnWaitQueue,
+    kWaitingForJoin,
+    kTerminated,
+    kLast,
+};
+static_assert(sizeof(ThreadState) == sizeof(u64));
+
+static constexpr int kSchedulingIntrusiveLevel  = 0;
+static constexpr int kSleepingIntrusiveLevel    = 1;
+static constexpr int kProcessListIntrusiveLevel = 2;
+static constexpr int kWaitQueueIntrusiveLevel   = 3;
+
+struct Thread : data_structures::IntrusiveRbNode<Thread, u64, kSchedulingIntrusiveLevel>,
+                data_structures::IntrusiveRbNode<Thread, u64, kSleepingIntrusiveLevel>,
+                data_structures::IntrusiveListNode<Thread, kSchedulingIntrusiveLevel>,
+                data_structures::IntrusiveListNode<Thread, kSleepingIntrusiveLevel>,
+                data_structures::IntrusiveDoubleListNode<Thread, kSchedulingIntrusiveLevel>,
+                data_structures::IntrusiveDoubleListNode<Thread, kWaitQueueIntrusiveLevel>,
+                data_structures::IntrusiveDoubleListNode<Thread, kProcessListIntrusiveLevel> {
+    /* Management */
+    Tid tid;
+    Pid owner;
+    ThreadFlags flags;
+    ThreadState state;
+    void *retval;
+    WaitQueue<Thread, kWaitQueueIntrusiveLevel> *wait_queue;
+
+    /* Thread resources */
+    void *kernel_stack;
+    void *kernel_stack_bottom;
+    void *user_stack;
+    void *user_stack_bottom;
+
+    /* Statistics */
+    u64 kernel_time_ns;
+    u64 user_time_ns;
+    u64 timestamp;
+    u64 timestamp_execution_start_ns;
+    u64 num_interrupts;
+    u64 num_syscalls;
+    u64 num_context_switches;
+
+    /* Arch */
+    hal::Thread arch_data;
+
+    NODISCARD u64 CalculateCpuTime();
+};
+\end{lstlisting}
+
+\subsubsection{TID}
+
+Similarly to PID\ref{subsubsec:pid}, we limits the amout of available threads and we use that property to create unique TID allowing for fast lookups.
+
+\subsubsection{Owner's PID}
+
+PID of the process we are operating in.
+
+\subsubsection{Thread Flags}
+
+Collection of bitfields altering how the scheduler treats the thread.
+
+\textbf{SchedulingPolicy policy} defines in which policy the thread is currently operating in. Refer to Policies\ref{subsec:policies} for more details.
+
+\textbf{u8 priority} defines how important is our thread inside the policy we operate in. Internal for the kernel.
+
+\textbf{UserPriority user_priority} may be specified by the User Space to inform the scheduler that some threads are more important than others.
+
+\textbf{bool preserve_floats} specifies whether on context switches floting point state is preserved.
+
+\textbf{bool detached} specifies whether scheduler should automatically cleanup the thread without waiting for joins.
+
+\subsection{Kernel Workers}
+\label{subsubsec:kworkers}
 TODO
 
-\subsubsection{Kernel Workers}
+\subsection{Intrusive Data Structures}
 TODO
 
-\subsubsection{Intrusive Data Structures}
+\subsection{Thread States}
 TODO
 
-\subsubsection{Thread States}
+\subsection{Wait Queues}
 TODO
 
-\subsubsection{Wait Queues}
+\subsection{Preserve Floats}
 TODO
 
-\subsubsection{Preserve Floats}
-TODO
-
-\subsubsection{GS and FS Segments}
+\subsection{GS and FS Segments}
 TODO
 
 \subsection{Meta-Scheduler}
 TODO
 
 \subsection{Policies}
+\label{subsec:policies}
 TODO
 
 \subsubsection{Policies Abstraction}
@@ -982,6 +1216,9 @@ TSS & Task State Segment \\
 LIT & Logical Interrupt Table \\
 TSC & TimeStamp Counter \\
 MMIO & Memory-Mapped I/O  \\
+PID & Process IDentifier  \\
+MMU & Memory Managment Unit  \\
+TID & Thread IDentifier \\
 ISR & Interrupt Service Routine
 \end{tabular}
 \\
