@@ -90,6 +90,11 @@
 \lstset{style=cppstyle}
 \renewcommand{\lstlistingname}{C++ Code Snippet}
 
+% --------------------------- DRAWING ---------------------
+
+\usepackage{tikz}
+\usetikzlibrary{shapes, arrows.meta, positioning, calc, chains}
+
 % --------------------------- CHAPTER HEADERS ---------------------
 
 \usepackage{titlesec}
@@ -485,10 +490,52 @@ software interrupt.
 
 \subsubsection{Interrupt Service Routines}
 
-When the CPU calls the handling function it 
+As it might be obvious but function handling interrupts slightly differs from usual function we write and compiler generates.
+When the CPU calls the handling function it first pushes these values on the stack in given order (each of them is 8-byte):
 
-As it might be obvious but function handling interrupts slightly differs from usual function we write and compiler generates, and thus those functions must be define in assembly instead.
-Major problem with compiler generated function is that it modifies the stack before and after the function code 
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+      node distance=0cm,
+      start chain=going below,
+      stacknode/.style={
+          draw, 
+          minimum width=5cm, 
+          minimum height=1cm, 
+          outer sep=0pt, 
+          font=\ttfamily
+      },
+      labelnode/.style={
+          minimum height=1cm,
+          font=\footnotesize\sffamily,
+          anchor=east
+      }
+  ]
+  
+  \node (highmem) at (0, 1) {Higher address (High Memory)};
+  \draw[->] (highmem) -- (0, 0.2);
+
+  \node [stacknode, on chain, fill=gray!10] (ss) {Stack Segment};
+  \node [stacknode, on chain, fill=gray!10] (rsp) {Original Stack Pointer};
+  \node [stacknode, on chain, fill=gray!10] (rflags) {Rflags};
+  \node [stacknode, on chain, fill=gray!10] (cs) {Code Segment};
+  \node [stacknode, on chain, fill=gray!10] (rsp) {Instruction Address};
+  \node [stacknode, on chain, fill=gray!10] (error) {Error Code (optional)};
+  \draw[<-, thick, red] (error.east) -- ++(1.5,0) node[right, text=red] {ESP (Stack Pointer)};
+
+  \node [below=0.5cm of error] (lowmem) {Lower address (Low Memory)};
+  \draw[->] (lowmem.north) -- (error.south);
+
+  \end{tikzpicture}
+  \caption{Interrupt Service Routine stack layout on entry}
+  \label{fig:stackframe}
+\end{figure}
+
+The layout above (\ref{fig:stackframe}) is called \textbf{Interrupt Frame} and is one of the most imporatnt architecture concepts in the kernel as based on this we will be building context switches, context conversion or jumping to userspace (ring3).
+After preparing the stack CPU changes code segment as instrumented in \textbf{IDT entry} (\ref{lst:idtEntry}) and swaps stack pointers to kernel stack if we change ring (ring3 -> ring0, in other words if interrupt happens from userspace),
+it is done by mechanism called TSS (For simplicity we will not go into details, please refer to \cite{osdev-tss}). The final difference is that \textbf{ISR} must return using special instruction \textbf{IRETQ} \cite{IntelManual-Interrupts},
+which rewinds all actions we described before in proper order (including ring change and jumping to proper code segment). Major problem with compiler generated function is that it modifies the stack before and after the function code, so to have full control and omit compiler bugs we introduced clean solution to split definition of handlers to assembly wrappers,
+performing necessary actions defined by the architecture and independant interrupt handling code defined in arch-agnostic kernel.
 
 \subsection{Unified Interrupt Frame}
 \subsection{Logical Interrupt Table}
@@ -562,6 +609,7 @@ APIC & Advanced Programmable Interrupt Controller \\
 LAPIC & Local Advanced Programmable Interrupt Controller \\
 PIT & Programmable Interrupt Timer \\
 IDT & Interrupt Descriptor Table \\
+TSS & Task State Segment \\
 ISR & Interrupt Service Routine
 \end{tabular}
 \\
