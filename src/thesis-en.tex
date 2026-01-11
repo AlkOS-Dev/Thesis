@@ -13,7 +13,8 @@
 \usepackage{amsmath, amsfonts, amsthm, latexsym}
 
 \usepackage[final]{pdfpages}
-\usepackage[backend=bibtex, style=verbose-trad2]{biblatex}
+\usepackage[backend=biber, style=numeric, sorting=none]{biblatex}
+\addbibresource{references.bib}
 
 
 \usepackage{commath}
@@ -240,7 +241,7 @@ TODO
 \addcontentsline{toc}{chapter}{Introduction}
 
 \section{Theoretical Background} 
-TODO 
+TODO
 
 \subsubsection{Interrupts}
 \subsubsection{Exceptions}
@@ -410,7 +411,8 @@ On most platforms we generally have three classes of interrupts:
 \end{itemize}
 
 \subsection{x86-64 Interrupts}
-On x86-64 if some type of interrupt takes place it has some unique number, which maps directly to the entry in table called \textbf{Interrupt Descriptor Table}
+On x86-64 if some type of interrupt takes place it has some unique number, which maps directly to the entry in table called \textbf{Interrupt Descriptor Table} \cite{IntelManual-Interrupts}.
+This table contains information what the CPU should do as a reaction on the interrupt. 
 \subsection{Unified Interrupt Frame}
 \subsection{Logical Interrupt Table}
 
@@ -466,17 +468,9 @@ TODO
 TODO
 
 % ------------------------------- BIBLIOGRAPHY ---------------------------
-% LEXICOGRAPHICAL ORDER BY AUTHORS' LAST NAMES
-% FOR AMBITIOUS ONES - USE BIBTEX
 
+\printbibliography[heading=bibintoc]
 
-\begin{thebibliography}{20} % IF YOU HAVE MORE REFERENCES, WRITE THE BIGGER NUMBER
-
-\bibitem[1]{Ktos} A. Author, \emph{Title of a book}, Publisher, year, page--page.
-\bibitem[2]{Innyktos} J. Bobkowski, S. Dobkowski, Title of an article, \emph{Magazine X, No. 7}, year, PAGE--PAGE.
-\bibitem[3]{B} C. Brink, Power structures, \emph{Algebra Universalis 30(2)}, 1993, 177--216.
-\bibitem[4]{H} F. Burris, H. P. Sankappanavar, \emph{A Course of Universal Algebra}, Springer-Verlag, New York, 1981.
-\end{thebibliography}
 \pagenumbering{gobble}
 \thispagestyle{empty}
 
@@ -489,9 +483,7 @@ TODO
 PIC & Programmable Interrupt Controller \\
 APIC & Advanced Programmable Interrupt Controller \\
 LAPIC & Local Advanced Programmable Interrupt Controller \\
-PIT & Programmable Interrupt Timer \\
-HPET & High Precision Event Timer \\
-$\widetilde{}$ & tilde 
+PIT & Programmable Interrupt Timer 
 \end{tabular}
 \\
 If you don't need it, delete it.
