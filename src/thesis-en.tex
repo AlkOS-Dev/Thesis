@@ -761,10 +761,58 @@ To maintain architectural independence, the Interrupt Table is abstracted. Upon 
 The LIT handling procedures may return a pointer to the next thread scheduled for execution. If such a pointer is returned, the hardware wrapper performs the context switch upon exit. This mechanism enables the system to react rapidly to state changes or preempt the current thread via a timer interrupt.
 
 \section{Timing}
-TODO
+
+Before building
+
 \section{File System}
 TODO
+
 \section{Scheduling}
+TODO
+
+\subsection{Process Structure}
+TODO
+
+\subsubsection{Kernel Address Space}
+TODO
+
+\subsection{Thread Structure}
+TODO
+
+\subsubsection{Kernel Workers}
+TODO
+
+\subsubsection{Intrusive Data Structures}
+TODO
+
+\subsubsection{Thread States}
+TODO
+
+\subsubsection{Wait Queues}
+TODO
+
+\subsubsection{Preserve Floats}
+TODO
+
+\subsubsection{GS and FS Segments}
+TODO
+
+\subsection{Meta-Scheduler}
+TODO
+
+\subsection{Policies}
+TODO
+
+\subsubsection{Policies Abstraction}
+TODO
+
+\subsection{Sleeping}
+TODO
+
+\subsubsection{Sleeping Queue}
+TODO
+
+\subsection{Waiting On Event}
 TODO
 
 % ==================================================================
