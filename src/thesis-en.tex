@@ -315,7 +315,18 @@ TODO
 \section{Scope of the Thesis} 
 TODO
 \section{Limitations and Assumptions}
-TODO
+
+\begin{itemize}
+  \item avx
+  \item osxsave
+  \item swapgs
+  \item invariant tsc
+  \item HPET
+  \item APIC
+  \item acpi
+  \item 64bit LAPIC
+\end{itemize}
+
 \section{Achieved Functionalities} 
 TODO
 \section{Work Division -- Code} 
@@ -762,7 +773,102 @@ The LIT handling procedures may return a pointer to the next thread scheduled fo
 
 \section{Timing}
 
-Before building
+Before building the Scheduler, except proper working memory management and interrupts we had to prepare infrastructures and drivers for timing machines. That includes usual Timers, which are capable of measuring time on the machine, that is how much time have passed from begining of the system (lifetime), we call such devices \textbf{Clocks}. Except that we need devices which are capable of generating interrupts at requested time to preempt currently running thread if it is not willing to cooperate with others and leave some cpu time for them, we call such devices \textbf{Event Clocks}. To unify the whole timing we abstract the unit of all devices and mechanism to nanoseconds.
+
+\subsection{Infrastructure}
+
+Architecture code is responsible for detecting the devices and registering them to timing infrastructure that is \textbf{ClockRegistry} and \textbf{EventClockRegistry}. Afterwards some part of arch-agnostic code like \textbf{ACPI} may also register some clocks by reading device tables. Finally Architecture defined functions: \textbf{hal::PickSystemClockSource()} and \textbf{hal::PickSystemEventClockSource()} are called during creation of timing module and are responsible for picking best sources for each purpose.
+
+\subsection{Clocks}
+
+Clock Drivers are defined by this structure:
+
+\begin{lstlisting}[caption={Clock Driver Structure}, label={lst:clockDriver}]
+struct alignas(arch::kCacheLineSizeBytes) ClockRegistryEntry : data_structures::RegistryEntry {
+  /* Clock numbers */
+  u64 frequency_kHz; // Frequency in kHz
+  u64 ns_uncertainty_margin_per_sec;  
+    // Uncertainty margin in femto seconds per second
+  u64 clock_numerator; // For conversion to nanoseconds, this is the numerator
+  u64 clock_denominator; // For conversion to nanoseconds, this is the denominator
+
+  /* Callbacks */
+  u64 (*read)(ClockRegistryEntry *);
+  bool (*enable_device)(ClockRegistryEntry *);
+  bool (*disable_device)(ClockRegistryEntry *);
+  void (*stop_counter)(ClockRegistryEntry *);
+  void (*resume_counter)(ClockRegistryEntry *);
+
+  /* Own data */
+  void *own_data;
+};
+\end{lstlisting}
+
+For x86-64 we are picking clocks based on availability and this order TSC > HPET > RTC > PIT. And currently we support only TSC and HPET, no other drivers are implemented.
+
+\subsubsection{TSC \cite{IntelManual-TSC}\cite{osdev-tsc}}
+
+This is the best clock possible as it has best precision, is local for the core. That means reading this clock is as fast as possible it takes single cycles rather than hundreds of cycles like other clocks. But obviously it has couple drawbacks. Historically it was based on core frequency and in older devices the speed in which this counter is bumped may change according to frequency scaling of the CPU, which makes it totally unusable. From some point forwards  
+Intel has introduced TSC Invariant so that the clock is stable. The other drawback is that in some cpus the frequency of this timer must be measured using other clock. For that we are utilizing HPET clock, which for simplicity is our minimal requirement.
+
+\subsubsection{HPET \cite{Intel-HPET}\cite{osdev-hpet}}
+
+Also has a great precision and is much easier to get than stable TSC, but the device is IO mapped to the CPU and is an external device, which makes it much less performant than the TSC. Reading this clock values may take even 1000 cycles.
+Because of that me made this clock our second choice. It is great for calibration of other clocks but not for frequent time reads.
+
+\subsection{Event Clocks}
+
+Event Clock Drivers are defined by this structure:
+
+\begin{lstlisting}[caption={Event Clock Driver Structure}, label={lst:eventClockDriver}]
+struct PACK EventClockFlags {
+    bool IsCoreLocal : 1;
+    u32 padding : 31;
+};
+static_assert(sizeof(EventClockFlags) == sizeof(u32));
+
+enum class EventClockState : u8 {
+    kDisabled = 0,  // Clock is disabled
+    kPeriodic,      // Clock is in periodic mode
+    kOneshot,       // Clock is in oneshot mode
+    kOneshotIdle,   // Clock is in oneshot mode but no event is scheduled
+    klast,
+};
+
+struct alignas(arch::kCacheLineSizeBytes) EventClockRegistryEntry : data_structures::RegistryEntry {
+    /* Clock numbers */
+    u64 min_next_event_time_ns;  // Minimum time for the next event in nanoseconds
+
+    /* Clock specific data */
+    EventClockFlags flags;     // Features of the event clock, e.g., core-local
+    CoreMask supported_cores;  // Cores that support this event clock
+
+    /* infra data */
+    u64 next_event_time_ns;  // Time for the next event in nanoseconds
+    EventClockState state;   // Current state of the clock
+
+    /* Driver data */
+    void *own_data;  // Pointer to the clock's own data, used for callback
+
+    /* callbacks */
+    struct callbacks {
+        // Callback to set next event time
+        u32 (*next_event)(EventClockRegistryEntry *, u64);  
+        // Callback to set clock state
+        u32 (*set_oneshot)(EventClockRegistryEntry *);
+        // Callback to set clock state
+        u32 (*set_periodic)(EventClockRegistryEntry *);     
+        void (*on_entry)(EventClockRegistryEntry *);        // optional
+        void (*on_exit)(EventClockRegistryEntry *);         // optional
+    } cbs;
+};
+\end{lstlisting}
+
+For x86-64 we are picking event clocks based on availability and this order LAPIC Timer > HPET > PIT. And currently we support only LAPIC Timer, no other drivers are implemented.
+
+\subsubsection{LAPIC Timer \cite{osdev-lapic-timer}\cite{IntelManual-LAPIC-Timer}\cite{IntelManual-APIC}}
+
+Lapic similarly to TSC is local to the core, that means access to its register is very quick. Additional perk is thah each core has its own timer, that means there is no need for any resource management at all. The only drawback again that it has no standard frequency and it is just oscilating at one of the CPU's frequencies. It again needs a calibration and we utilize HPET clock for that.
 
 \section{File System}
 TODO
@@ -876,6 +982,7 @@ PIT & Programmable Interrupt Timer \\
 IDT & Interrupt Descriptor Table \\
 TSS & Task State Segment \\
 LIT & Logical Interrupt Table \\
+TSC & TimeStamp Counter \\
 ISR & Interrupt Service Routine
 \end{tabular}
 \\
