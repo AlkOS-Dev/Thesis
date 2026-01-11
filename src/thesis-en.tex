@@ -315,7 +315,18 @@ TODO
 \section{Scope of the Thesis} 
 TODO
 \section{Limitations and Assumptions}
-TODO
+
+\begin{itemize}
+  \item avx
+  \item osxsave
+  \item swapgs
+  \item invariant tsc
+  \item HPET
+  \item APIC
+  \item acpi
+  \item 64bit LAPIC
+\end{itemize}
+
 \section{Achieved Functionalities} 
 TODO
 \section{Work Division -- Code} 
@@ -761,10 +772,151 @@ To maintain architectural independence, the Interrupt Table is abstracted. Upon 
 The LIT handling procedures may return a pointer to the next thread scheduled for execution. If such a pointer is returned, the hardware wrapper performs the context switch upon exit. This mechanism enables the system to react rapidly to state changes or preempt the current thread via a timer interrupt.
 
 \section{Timing}
-TODO
+
+Prior to the implementation of the Scheduler, and alongside functional memory management and interrupt handling, it was necessary to establish the infrastructure and drivers for timing mechanisms. This includes devices capable of measuring the system's uptime, referred to as \textbf{Clocks}. Additionally, the system requires devices capable of generating interrupts at specific intervals. These are essential for preempting the currently executing thread if it fails to yield the CPU voluntarily, thereby ensuring fair scheduling. Such devices are referred to as \textbf{Event Clocks}. To unify the timing subsystem, all devices and mechanisms rely on nanoseconds as the fundamental unit of time abstraction.
+
+\subsection{Infrastructure}
+
+The architecture-specific code is responsible for detecting available hardware and registering it within the central timing infrastructure, specifically the \textbf{ClockRegistry} and \textbf{EventClockRegistry}. Subsequently, architecture-agnostic components, such as the \textbf{ACPI} subsystem, may register additional clocks by parsing system description tables. Finally, the architecture-defined functions \textbf{hal::PickSystemClockSource()} and \textbf{hal::PickSystemEventClockSource()} are invoked during the initialization of the timing module to select the optimal sources for each purpose.
+
+\subsection{Clocks}
+
+Clock Drivers are defined by the following structure:
+
+\begin{lstlisting}[caption={Clock Driver Structure}, label={lst:clockDriver}]
+struct alignas(arch::kCacheLineSizeBytes) ClockRegistryEntry : data_structures::RegistryEntry {
+  /* Clock numbers */
+  u64 frequency_kHz; // Frequency in kHz
+  u64 ns_uncertainty_margin_per_sec;  
+    // Uncertainty margin in femto seconds per second
+  u64 clock_numerator; // For conversion to nanoseconds, this is the numerator
+  u64 clock_denominator; // For conversion to nanoseconds, this is the denominator
+
+  /* Callbacks */
+  u64 (*read)(ClockRegistryEntry *);
+  bool (*enable_device)(ClockRegistryEntry *);
+  bool (*disable_device)(ClockRegistryEntry *);
+  void (*stop_counter)(ClockRegistryEntry *);
+  void (*resume_counter)(ClockRegistryEntry *);
+
+  /* Own data */
+  void *own_data;
+};
+\end{lstlisting}
+
+For the x86-64 architecture, clock selection is prioritized based on availability and precision in the following order: TSC > HPET > RTC > PIT. Currently, support is implemented only for the TSC and HPET drivers.
+
+\subsubsection{TSC \cite{IntelManual-TSC}\cite{osdev-tsc}}
+
+The Time Stamp Counter (TSC) is the optimal clock source due to its high precision and core-locality. Accessing the TSC involves reading a CPU register, which requires only a few cycles, unlike external clocks that may require hundreds. However, the TSC has historical limitations. On older processors, the counter's frequency was tied to the core frequency. Consequently, frequency scaling (throttling) caused the time measurement to drift, rendering it unreliable. Modern Intel processors introduced the Invariant TSC, which ensures a constant frequency regardless of the core's power state. Another limitation is that on certain CPUs, the TSC frequency is not explicitly known and must be measured against a known reference. For this purpose, the system utilizes the HPET, which serves as the minimal hardware requirement for reliable calibration.
+
+\subsubsection{HPET \cite{Intel-HPET}\cite{osdev-hpet}}
+
+The High Precision Event Timer (HPET) also offers high precision and is generally more stable than the TSC on older hardware. However, it is an external device mapped via Memory-Mapped I/O (MMIO). As a result, accessing the HPET is significantly slower than reading the TSC, potentially taking up to 1000 cycles per read. Due to this performance overhead, the HPET is designated as the secondary choice. It is primarily utilized for calibrating other clocks rather than for frequent timekeeping operations.
+
+\subsection{Event Clocks}
+
+Event Clock Drivers are defined by the following structure:
+
+\begin{lstlisting}[caption={Event Clock Driver Structure}, label={lst:eventClockDriver}]
+struct PACK EventClockFlags {
+    bool IsCoreLocal : 1;
+    u32 padding : 31;
+};
+static_assert(sizeof(EventClockFlags) == sizeof(u32));
+
+enum class EventClockState : u8 {
+    kDisabled = 0,  // Clock is disabled
+    kPeriodic,      // Clock is in periodic mode
+    kOneshot,       // Clock is in oneshot mode
+    kOneshotIdle,   // Clock is in oneshot mode but no event is scheduled
+    klast,
+};
+
+struct alignas(arch::kCacheLineSizeBytes) EventClockRegistryEntry : data_structures::RegistryEntry {
+    /* Clock numbers */
+    u64 min_next_event_time_ns;  // Minimum time for the next event in nanoseconds
+
+    /* Clock specific data */
+    EventClockFlags flags;     // Features of the event clock, e.g., core-local
+    CoreMask supported_cores;  // Cores that support this event clock
+
+    /* infra data */
+    u64 next_event_time_ns;  // Time for the next event in nanoseconds
+    EventClockState state;   // Current state of the clock
+
+    /* Driver data */
+    void *own_data;  // Pointer to the clock's own data, used for callback
+
+    /* callbacks */
+    struct callbacks {
+        // Callback to set next event time
+        u32 (*next_event)(EventClockRegistryEntry *, u64);  
+        // Callback to set clock state
+        u32 (*set_oneshot)(EventClockRegistryEntry *);
+        // Callback to set clock state
+        u32 (*set_periodic)(EventClockRegistryEntry *);     
+        void (*on_entry)(EventClockRegistryEntry *);        // optional
+        void (*on_exit)(EventClockRegistryEntry *);         // optional
+    } cbs;
+};
+\end{lstlisting}
+
+For x86-64, the selection of event clocks is based on the following priority order: LAPIC Timer > HPET > PIT. Currently, only the LAPIC Timer is supported.
+
+\subsubsection{LAPIC Timer \cite{osdev-lapic-timer}\cite{IntelManual-LAPIC-Timer}\cite{IntelManual-APIC}}
+
+Similar to the TSC, the LAPIC Timer is local to the processor core, ensuring extremely low-latency access to its registers. A significant advantage of this architecture is that each core possesses an independent timer, which eliminates the need for shared resource management or synchronization between cores. However, like the TSC, the LAPIC Timer operates at a frequency derived from the CPU bus or core frequency, which is not standard across various CPUs. Consequently, it requires calibration against a reference clock, for which the HPET is utilized.
+
 \section{File System}
 TODO
+
 \section{Scheduling}
+TODO
+
+\subsection{Process Structure}
+TODO
+
+\subsubsection{Kernel Address Space}
+TODO
+
+\subsection{Thread Structure}
+TODO
+
+\subsubsection{Kernel Workers}
+TODO
+
+\subsubsection{Intrusive Data Structures}
+TODO
+
+\subsubsection{Thread States}
+TODO
+
+\subsubsection{Wait Queues}
+TODO
+
+\subsubsection{Preserve Floats}
+TODO
+
+\subsubsection{GS and FS Segments}
+TODO
+
+\subsection{Meta-Scheduler}
+TODO
+
+\subsection{Policies}
+TODO
+
+\subsubsection{Policies Abstraction}
+TODO
+
+\subsection{Sleeping}
+TODO
+
+\subsubsection{Sleeping Queue}
+TODO
+
+\subsection{Waiting On Event}
 TODO
 
 % ==================================================================
@@ -828,6 +980,8 @@ PIT & Programmable Interrupt Timer \\
 IDT & Interrupt Descriptor Table \\
 TSS & Task State Segment \\
 LIT & Logical Interrupt Table \\
+TSC & TimeStamp Counter \\
+MMIO & Memory-Mapped I/O  \\
 ISR & Interrupt Service Routine
 \end{tabular}
 \\
