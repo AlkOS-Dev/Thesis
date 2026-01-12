@@ -47,5 +47,9 @@ else
     echo "Running on host..."
     
     docker build -t latex-thesis .devcontainer
-    docker run --rm -it -v "$(pwd):/workspace" latex-thesis ./compile.sh "$@"
+    if [ -t 0 ]; then
+        docker run --rm -it -v "$(pwd):/workspace" latex-thesis ./compile.sh "$@"
+    else
+        docker run --rm -i  -v "$(pwd):/workspace" latex-thesis ./compile.sh "$@"
+    fi
 fi
