@@ -125,6 +125,7 @@
 
 \usepackage{tikz}
 \usetikzlibrary{shapes, arrows.meta, positioning, calc, chains}
+\usepackage[colorinlistoftodos]{todonotes}
 
 % --------------------------- CHAPTER HEADERS ---------------------
 
@@ -486,7 +487,53 @@ TODO
 TODO
 
 \section{Bootloader}
+
+Before the kernel can commence execution, the underlying hardware must be brought to a known, deterministic state. Unifying this process is non-trivial, as initialization protocols differ significantly depending on the specific hardware architecture and the firmware interface (Legacy BIOS vs. UEFI). To mitigate this complexity, the operating system expects the bootloading mechanism to load the final kernel image into memory and establish a well-defined machine state, abstracting the underlying firmware details.
+
+\subsection{x86-64 Bootloading Sequence}
+
+Upon power-up or a hardware reset, every processor on the system bus executes a hardware reset sequence. In modern multi-core architectures, the processors engage in the Multi-Processor (MP) Initialization Protocol. This negotiation designates one core as the Bootstrap Processor (BSP), which immediately begins executing firmware code. All remaining cores, known as Application Processors (APs), enter a halt state and await a specific Startup Inter-Processor Interrupt (SIPI) to begin execution.
+
+Once the BSP is active, its registers are hardwired to specific architecture-defined values. The CPU may optionally perform a Built-In Self-Test (BIST). Subsequently, it fetches and executes the instruction located at the physical address \texttt{0xFFFFFFF0} (the Reset Vector). This address is memory-mapped to the non-volatile system firmware.
+
+For further details, see \cite{IntelManual-Reset}.
+
+\subsubsection{Firmware Interfaces}
+
+The initialization path diverges depending on the firmware implementation:
+
+\textbf{Legacy BIOS (Basic Input/Output System)} \
+Under BIOS, the CPU initializes in 16-bit Real Mode, limiting addressable memory to the first 1 MB (
+$2^20$
+ bytes) via segmented addressing. The BIOS executes the Power-On Self-Test (POST) and iterates through the configured boot priority list (e.g., CD-ROM, HDD, USB). It reads the first 512-byte sector of the boot device. If the last two bytes of this sector contain the boot signature \texttt{0x55AA}, the BIOS copies the sector to physical RAM address \texttt{0x7C00} and transfers execution to it.
+
+\textbf{UEFI (Unified Extensible Firmware Interface)} \
+UEFI provides a significantly more sophisticated environment. Unlike BIOS, which operates on raw disk sectors, UEFI possesses file system awareness (specifically FAT32). It searches for a specific EFI application file on the EFI System Partition (ESP), loads the executable into RAM, and executes it. Notably, UEFI transitions the processor out of 16-bit Real Mode, typically handing over control in 32-bit or 64-bit Protected Mode.
+
+For the complete specification, refer to \cite{UEFI-Spec, UEFI-BootManager}.
+
+\subsubsection{Multiboot2 Specification}
+
+Regardless of whether the system utilizes BIOS or UEFI, the boot process ultimately invokes a dedicated bootloader. AlkOS utilizes a Multiboot2-compliant bootloader (such as GRUB) to normalize the execution environment. This abstraction layer ensures that the kernel remains agnostic to the underlying firmware type.
+
+The bootloader leverages firmware services to query essential hardware configuration data, including the physical memory map and framebuffer parameters. This information is standardized into the Multiboot2 Information Structure. The bootloader loads the kernel binary and any associated modules (such as the initial ramdisk) into memory and transfers control to the kernel entry point.
+
+At this stage, the machine state is defined as follows:
+\begin{itemize}
+\item \textbf{CPU Mode:} 32-bit Protected Mode.
+\item \textbf{Paging:} Disabled.
+\item \textbf{Interrupts:} Disabled.
+\item \textbf{Registers:} \texttt{EAX} contains the Multiboot2 magic number (\texttt{0x36d76289}), and \texttt{EBX} contains the physical address of the Multiboot2 information structure.
+\end{itemize}
+
+See \cite{Multiboot2-Spec} for the full specification.
+
+While standardized, this state is insufficient for the immediate execution of the AlkOS kernel. The kernel requires a 64-bit Long Mode environment, access to the higher-half of the virtual memory space via paging, and a valid stack for C++ execution. Furthermore, advanced CPU features (such as floating-point units or AVX) remain disabled. Consequently, the boot process requires intermediate initialization stages - \textbf{Loader32} and \textbf{Loader64} - to bridge the gap between the Multiboot2 state and the kernel's requirements. \todo[inline]{Split this between Our Solution and How to implement os (generic)}
+\subsubsection{Loader32}
 TODO
+\subsubsection{Loader64}
+TODO
+
 \section{Assumptions}
 TODO
 \section{Memory Management}
