@@ -891,11 +891,11 @@ TODO
 
 \section{Scheduling}
 
-Final part of the OS, which strongly depends and utilizes all other modules. Our implementation targets only single core for simplicity, but the design might be easly extended to multiple cores, which will be described at the end of this document.
+The scheduling module is the final core component of the operating system, relying heavily on and utilizing all previously described modules. Although the current implementation targets a single-core architecture for simplicity, the design is extensible to multi-core systems, as discussed later in this document.
 
 \subsection{Process Structure}
 
-Our definition of process looks like that:
+The process structure is defined as follows:
 
 \begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
 struct PACK Pid {
@@ -949,57 +949,57 @@ struct Process : hal::Process {
 \subsubsection{PID}
 \label{subsubsec:pid}
 
-As said in limitations\ref{subsec:limitations}, maximal amounts of processes exists and we use that property to speedup process lookup by building identity 1:1 hash map for processes and embedding reservable identifier inside of the PID. The other part of PID is simply atomic counter, which makes the PID unique for the entire lifetime of the system.
+As mentioned in the limitations section \ref{subsec:limitations}, the system imposes a hard limit on the maximum number of existing processes. This constraint allows for optimized process lookup by establishing a 1:1 identity hash map. The \textbf{PID} (Process Identifier) is composed of a reservable identifier and an atomic counter, ensuring that each PID remains unique throughout the entire lifetime of the system.
 
 \subsubsection{Process Flags}
 
-\textbf{KernelSpaceOnly} flag enables creation of kernel space only threads and processes that means there is no creation of address space or user space stack, leadining to smaller resource consumption and little spedups for example when we will be switching context from kernel thread to kernel thread there is no need to change the address space at all.
+\textbf{KernelSpaceOnly} -- enables the creation of kernel-only threads and processes. These processes do not require a separate user space address space or user space stack. This minimization of resource consumption improves performance, additionally context switching between kernel-only threads does not necessitate switching the address space.
 
-\textbf{PreserveFloats} enabling this flags makes all threads save and load float registers during the context switch. Additionaly user may want to disable this flag for particular thread.
+\textbf{PreserveFloats} -- informs that all threads within the process save and restore floating-point registers during context switches by default. Disabling this flag allows the system to omit these potentially expensive operations for threads that do not utilize floating-point arithmetic.
 
 \subsubsection{Process State}
 
-It has a less significant meaning than Thread State (which will be described later), it is mostly used for proper resource management during waiting for the process. Ensures that the process is not cleaned up twice.
+The process state has less significance than the Thread State (described later) and is primarily utilized for resource management when waiting for a process to terminate. It ensures that process resources are not deallocated more than once.
 
 \subsubsection{Address Space}
 
-The most important part of the process structure. It defines all informations about virtual memory, more precisly establishes translation between virtual and physical layer. Each process operates in own memory address space, that allows for much simpler memory management including fragmentation, perofrmance and security. Refer to Memory Managment\ref{sec:memory} for more information.
+The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to Memory Management \ref{sec:memory} for further details.
 
 \subsubsection{File Descriptor Table}
 
-This table contains all file descriptor opened by the threads running within this process. Please refer to File System \ref{section:fs}
+This table contains all file descriptors opened by threads executing within the process. Refer to the File System section \ref{section:fs} for more information.
 
 \subsubsection{Pipes}
 
-Buffored I/O of the process. Mostly for reading and writing with the user.
+Pipes handle the buffered I/O of the process, primarily used for standard input and output communication with the user.
 
 \subsubsection{Name}
 
-Name of the process, most frequently name of the executable. May not be unique. Pid is unique.
+The name of the process typically corresponds to the name of the executable. Unlike the unique PID, the process name is not required to be unique.
 
 \subsubsection{Threads}
 
-Intrusive doubly linked list of threads running in this environment, used mostly for kill, exit or wait operations.
+This field points to an first element of doubly linked list of threads running in this environment. It is used primarily for operations such as termination (kill/exit).
 
 \subsubsection{Live Threads and Threads to Clean}
 
-Counters for synchronization with \textbf{ProcessRipper}. Refer to Kernel Workers \ref{subsubsec:kworkers} for more details.
+These counters are used for synchronization with the \textbf{ProcessRipper}. Refer to Kernel Workers \ref{subsubsec:kworkers} for more details.
  
 \subsubsection{Status}
 
-Exit status of the process to be passed to waiting thread.
+The exit status of the process, which is passed to any thread waiting for the process to complete.
 
 \subsubsection{Wait Queue}
 
-\textbf{Wait Queue} used to store threads waiting for this process to finish. Each of them will be woken up when the process finished its execution.
+The \textbf{Wait Queue} stores threads that are waiting for this process to finish. All threads in this queue are woken up upon process termination.
 
 \subsection{Kernel Address Space}
 
-There is only one Kernel Address Space in the entire OS. Each kernel process is working inside this address space. Additionally each userspace process's address space had kernel addres space mapped for performance and ease of life reasons. User threads will be calling system calls quite frequently, changing address space on each syscall would infer huge performance cost and would additionally complicate syscall logic.
+The entire operating system shares a single Kernel Address Space. Every kernel process operates within this space. Additionally, the kernel address space is mapped into every user space process's address space. This design choice enhances performance and simplifies architecture, as user threads frequently invoke system calls. Switching address spaces on every system call would incur significant performance overhead and complicate the logic required for handling syscalls.
 
 \subsection{Thread Structure}
 
-Our definition of thread looks like that:
+The thread structure is defined as follows:
 
 \begin{lstlisting}[caption={Thread Structure}, label={lst:threadStruct}]
 enum class UserPriority : u8 { kLow = 0, kMediumLow, kMedium, kMediumHigh, kHigh, kLast };
@@ -1076,56 +1076,56 @@ struct Thread : data_structures::IntrusiveRbNode<Thread, u64, kSchedulingIntrusi
 
 \subsubsection{TID}
 
-Similarly to PID \ref{subsubsec:pid}, we limits the amout of available threads and we use that property to create unique TID allowing for fast lookups.
+Similar to the PID \ref{subsubsec:pid}, the system limits the number of available threads. This property is utilized to create unique \textbf{TIDs} (Thread Identifiers), allowing for rapid lookups.
 
 \subsubsection{Owner's PID}
 
-PID of the process we are operating in.
+The PID of the process that owns the thread.
 
 \subsubsection{Thread Flags}
 
-Collection of bitfields altering how the scheduler treats the thread.
+A collection of bitfields that determine how the scheduler manages the thread:
 
-\textbf{SchedulingPolicy policy} defines in which policy the thread is currently operating in. Refer to Policies \ref{subsec:policies} for more details.
+\textbf{SchedulingPolicy policy} -- defines the scheduling policy under which the thread currently operates. Refer to Policies \ref{subsec:policies} for more details.
 
-\textbf{u8 priority} defines how important is our thread inside the policy we operate in. Internal for the kernel.
+\textbf{u8 priority} -- defines the internal priority of the thread within its assigned policy. This value is managed by the kernel.
 
-\textbf{UserPriority user\_priority} may be specified by the User Space to inform the scheduler that some threads are more important than others.
+\textbf{UserPriority user\_priority} -- may be specified by User Space to inform the scheduler of the relative importance of threads.
 
-\textbf{bool preserve\_floats} specifies whether on context switches floting point state is preserved.
+\textbf{bool preserve\_floats} -- specifies whether the floating-point state is preserved during context switches.
 
-\textbf{bool detached} specifies whether scheduler should automatically cleanup the thread without waiting for joins.
+\textbf{bool detached} -- specifies whether the scheduler should automatically clean up the thread upon termination, without waiting for a join operation.
 
 \subsubsection{Thread State}
 
-Describes what is currently going on with the thread. Allows us to nicely track each thread individually and verfiy the integrity of the system as only couple of state conversions are possible.
+Describes the current status of the thread. This state tracking allows the kernel to monitor each thread individually and verify system integrity, as only specific state transitions are permitted.
 
 \subsubsection{Stacks}
 
-For each thread we need two distinct stacks, one for the user and other for kernel. We need a separate stack for kernel for security and stability issues. There is also not efficient to have single stack for kernel as we also want to make context switches inside the kernel code. For example during thread joining or other synchronization.
+Two distinct stacks are required for each thread: one for user space and one for kernel space. A separate kernel stack is essential for security and stability. Furthermore, sharing a kernel single stack is inefficient because context switches may occur within kernel code, such as during thread joining or other synchronization events.
 
 \subsubsection{Statistics}
 
-Allow us trace each threads execution specifics and adjust the scheduling module dynamically or simply debug/test the scheduler.
+Statistics tracking allows for the analysis of execution specifics for each thread. This data is used to dynamically adjust the scheduling module and to debug or test the scheduler.
 
 \subsubsection{Wait Queue}
 
-Allow us to block other threads and wait for that thread to finish execution (Thread joining).
+Allows other threads to block and wait for a specific thread to finish execution (Thread joining).
 
 \subsection{Kernel Workers}
 \label{subsubsec:kworkers}
 
-The OS also before converting to the scheduling module create three kernel workers, which are crucial for the system:
+Before initializing the scheduling module, the operating system creates three essential kernel workers:
 
-\textbf{Trace Dumper} - this worker is responsible to dump the kernel traces to the terminal or files to enable debugability and stability. This cannot be done by kernel code itself as writing to devices or files take much too long for system calls or interrupts. The buffers are dumped periodically each 20ms
+\textbf{Trace Dumper} -- responsible for dumping kernel traces to the terminal or files, ensuring debuggability and stability. This task cannot be performed directly by the kernel code during critical execution paths, as writing to devices or files is too slow for system calls or interrupt handlers. The buffers are dumped periodically every 20ms.
 
-\textbf{Thread Ripper} - this worker is responsible for deallocation of thread resources including descriptors or stacks.
+\textbf{Thread Ripper} -- responsible for the deallocation of thread resources, including descriptors and stacks.
 
-\textbf{Process Ripper} - this worker is responsible for deallocation of process resources including address space.
+\textbf{Process Ripper} -- responsible for the deallocation of process resources, including the address space.
 
 \subsection{Intrusive Data Structures}
 
-Because threads will be frequently changing linked lists or data structures they reside in, idea to each time allocate and free list nodes looks rather stupid so we used introduced schemue to always use intrusive data structures. That means insted of allocating a node and storing field with pointer to the object, the node itself resides inside the object. We allocate the object and simple modify object fields to operate on the lists.
+Since threads frequently migrate between different linked lists and data structures, allocating and freeing list nodes for every operation introduces significant overhead. To address this, the system employs intrusive data structures. Instead of allocating a node that contains a pointer to the object, the node structure is embedded directly within the object itself. Operations on the lists are performed by simply modifying the fields of the object.
 
 \begin{lstlisting}[caption={Intrusive Nodes}, label={lst:intrusiveNodes}]
 template <class T, int kIntrusiveLevel>
@@ -1160,44 +1160,44 @@ struct IntrusiveRbNode {
 };
 \end{lstlisting}
 
-We can see on Thread data structure how to use such nodes \ref{lst:threadStruct}. Such approach has multiple benefits for, which includes:
+The Thread data structure \ref{lst:threadStruct} demonstrates the usage of such nodes. This approach offers multiple benefits, including:
 \begin{itemize}
-  \item No allocation or deallocation during instert or pop operations
-  \item Better memory acces, in traditional model we have to acces object by pointer, here we directly acccess the object
-  \item Verify if object belongs to some list or not in \textbf{O(1)}, having only the object itself
-  \item Removal of the object from the list done always in \textbf{O(1)}
-  \item Removal of the object from the list without accessing the list itself
+\item No dynamic allocation or deallocation during insert or pop operations.
+\item Improved memory access patterns, the object is accessed directly rather than via a pointer from a separate node.
+\item Verification of whether an object belongs to a list in \textbf{O(1)} time, given only the object itself.
+\item Removal of the object from the list in \textbf{O(1)} time.
+\item Removal of the object from the list without requiring access to the list head structure.
 \end{itemize}
 
 \subsection{Meta-Scheduler}
 
-The base arichtecture of the scheduler is similar to used in most of the popular that is \textbf{meta-scheduler}. This approach is based on bulding all scheduler operations on abstractions called \textbf{Policies}. Policies are mostly responsible for picking next task from set of tasks that currently belongs to the policy and react on thread behaviour (punish or reward it with CPU time based on work characteristics). Wheras the scheduler is responsible for all other operations, which includes 
+The scheduler architecture follows the \textbf{meta-scheduler} design pattern, which is common in modern operating systems. This approach relies on abstracting scheduling logic into Policies. Policies are primarily responsible for selecting the next task from the set of tasks they manage and reacting to thread behavior (e.g., punishing or rewarding threads with CPU time based on workload characteristics). The scheduler itself is responsible for all other operations, including:
 \begin{itemize}
-  \item managing thread states,
-  \item putting threads into sleep
-  \item waking up threads
-  \item idling
-  \item setting up next time events by timing infrastructure
-  \item blocking threads on wait queues
-  \item releasing threads from wait queues
+\item Managing thread states.
+\item Transitioning threads to sleep.
+\item Waking up threads.
+\item Managing idle time.
+\item Configuring next timing events via the timing infrastructure.
+\item Blocking threads on wait queues.
+\item Releasing threads from wait queues.
 \end{itemize}
-There exists hierarchy between the policies and threads from more important ones are picked before threads from less important ones.
+A hierarchy exists between policies, ensuring that threads from higher-priority policies are selected before threads from lower-priority ones.
 
 \subsection{Timing Model}
 
-We decided to take more modern approach and implement tickless kernel which instead of firing interripts at constant frequency (so called \textbf{Kernel Tick}) - \textbf{Ticked Kernel}, we calculate precisely when next timing event should occur.
+The system implements a tickless kernel architecture. Instead of relying on a periodic interrupt (the \textbf{Kernel Tick}) at a fixed frequency, the scheduler calculates precisely when the next timing event must occur. This approach improves efficiency and precision.
 
 \subsection{Policies}
 
-The type of the policies we defined in our code are following:
+The following scheduling policies have been implemented:
 
-\textbf{Round Robin Scheduling Policy} -- Very simply policy iterating through linked list from front to end. Threads are ordered by time of added to the policy
+\textbf{Round Robin Scheduling Policy} -- simple policy that iterates through a linked list from front to back. Threads are ordered based on their arrival time in the policy.
 
-\textbf{Priority Queue Scheduling Policy} -- Very simple policy ordering threads thgrough kernel assigned priorities. The priorities are capped to 0-64 range to use \textbf{O(1)} priority queue called \textbf{Bitmap Priority Queue}. The idea is that we store table of linked lists, which represents individual priorities and additionaly we store information about present priority inside the integer and on each lookup we use bit opreation count leading/trailing zeros to find the minimal or maximal value in the queue.
+\textbf{Priority Queue Scheduling Policy} -- policy that orders threads based on kernel-assigned priorities. Priorities are capped at a range of 0-64 to enable the use of an \textbf{O(1)} priority queue, known as a \textbf{Bitmap Priority Queue}. This structure maintains an array of linked lists representing individual priorities. Additionally, a bitmask indicates the presence of tasks at specific priority levels. Lookup operations utilize bitwise instructions (counting leading/trailing zeros) to efficiently find the minimum or maximum priority value (\textbf{O(1)}).
 
 \textbf{Multi-Level Feedback Queue (MLFQ) Scheduling Policy} -- TODO ADAM
 
-\noindent We use this type of priorities to define the hierarych which is given by that enum:
+\noindent These policies establish a hierarchy defined by the following enumeration:
 
 \begin{lstlisting}[caption={Scheduling Policy Hierarchy}, label={lst:policyHierarchy}]
 // PO > P1 > .. > P4
@@ -1211,22 +1211,22 @@ enum SchedulingPolicy {
 };
 \end{lstlisting}
 
-Each policy is used for different group of tasks:
+Each policy is designated for a specific group of tasks:
 
-\textbf{Uber Tasks} -- tasks that must be done as fast as possible, most probably rescue actions or some kernel space saving. For example saving state before shutdown or killing some processes when system is out of the memory. 
+\textbf{Uber Tasks} -- Tasks that must be executed as quickly as possible, such as emergency recovery actions or critical kernel state preservation (e.g., saving state before shutdown or terminating processes during out-of-memory conditions).
 
-\textbf{Drivers} -- driver tasks that must be done as fast as possible to not block the devices and enable smooth operation of the system. For example audio drivers or net interfaces.
+\textbf{Drivers} -- Driver tasks that require immediate execution to prevent device blocking and ensure smooth system operation (e.g., audio drivers or network interfaces).
 
-\textbf{Urgent Tasks} -- tasks that are less important that the drivers itself but more important than user tasks. Possibly privliged userspace tasks consuming the driver informations.
+\textbf{Urgent Tasks} -- Tasks that are less critical than drivers but more important than standard user tasks. These may include privileged user-space tasks that consume data from drivers.
 
-\textbf{Normal Tasks} -- most popular group of tasks there are all usual userspace programs inclduing graphical interfaces, data processing etc. Also basic kernel workers are here, including workers listed in kworkers section \label{subsubsec:kworkers}.
+\textbf{Normal Tasks} -- The most common group of tasks, comprising standard user-space programs such as graphical interfaces and data processing applications. Basic kernel workers, including those listed in the kernel workers section \ref{subsubsec:kworkers}, also belong to this category.
 
-\textbf{Background Tasks} -- group of tasks that are not relevant at all, but may be done when there is nothing to do. It may include update checks or some non urgent cleanup tasks.
+\textbf{Background Tasks} -- Tasks that are not time-critical and should only be executed when the system is otherwise idle. Examples include update checks or non-urgent cleanup operations.
 
 \subsubsection{Policies Abstraction}
 \label{subsec:policies}
 
-The abstraction of policies is following:
+The policy abstraction is defined as follows:
 
 \begin{lstlisting}[caption={Policy Abstraction}, label={lst:policyStruct}]
 struct Policy {
@@ -1247,11 +1247,11 @@ struct Policy {
 };
 \end{lstlisting}
 
-As we can see the most imprtant operation is \textbf{pick\_next\_task}, obvious \textbf{add_task} and \textbf{remove_task} and finally some helpers for the scheduler or statistics gathering.
+As shown, the primary operation is \textbf{pick_next_task}, alongside standard \textbf{add_task} and \textbf{remove_task} operations. Additionally, helper functions are provided for the scheduler and for statistics gathering.
 
 \subsection{Sleeping}
 
-To provide high precision sleeping we had to work on oneshot precise timing events. That means each time we receive and timing event we must deduce the time for the next event based on schedulers state, that include current thread preemption time or wakup times of sleeping threads. That means each time we receive timer interrupt we must look through sleeping threads. To ensure high performance and low stable complexity of priority queue we decided to use Intrusive Red-Black Tree (Linked list as node and storing min/max on insert/delete) as base data structure for \textbf{Sleeping Queue}. The operation we cared the most are \textbf{Insert}, \textbf{ExtractMin} and \textbf{Remove}, also the execution times must be predictable and stable. The requirement for quick removal excludes Binary priority queues and requirement for stability excludues all heaps operating on amortized complexities. The RB Tree was good enough and was also needed in other places so the choice was obvious. 
+To provide high-precision sleeping, the system relies on one-shot, precise timing events. Upon receiving a timer interrupt, the scheduler determines the timestamp for the next event based on the system state, which includes the current thread preemption time and the wake-up times of sleeping threads. Consequently, every timer interrupt necessitates a traversal of the sleeping threads. To ensure high performance and stable time complexity for the priority queue, an Intrusive Red-Black Tree was selected as the underlying data structure for the \textbf{Sleeping Queue}. The critical operations are \textbf{Insert}, \textbf{ExtractMin}, and \textbf{Remove}, all of which must have predictable execution times. The requirement for efficient arbitrary removal excluded binary heaps, while the need for stability excluded heaps with amortized complexity bounds. The Red-Black Tree satisfied all requirements and was already implemented for other system components, making it the optimal choice.
 
 % ==================================================================
 
