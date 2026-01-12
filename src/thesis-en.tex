@@ -1548,7 +1548,7 @@ The following scheduling policies have been implemented:
 
 \textbf{Priority Queue Scheduling Policy} -- policy that orders threads based on kernel-assigned priorities. Priorities are capped at a range of 0-64 to enable the use of an \textbf{O(1)} priority queue, known as a \textbf{Bitmap Priority Queue}. This structure maintains an array of linked lists representing individual priorities. Additionally, a bitmask indicates the presence of tasks at specific priority levels. Lookup operations utilize bitwise instructions (counting leading/trailing zeros) to efficiently find the minimum or maximum priority value (\textbf{O(1)}).
 
-\textbf{Multi-Level Feedback Queue (MLFQ) Scheduling Policy} -- TODO ADAM
+\textbf{Multi-Level Feedback Queue (MLFQ) Scheduling Policy} -- policy that segregates threads into distinct queues according to their workload characteristics. The policy penalizes CPU-bound threads by demoting them to lower priorities, whereas I/O-bound threads are elevated to higher priorities, thereby favoring interactive performance. To prevent the starvation of low-priority tasks, a periodic reset mechanism promotes all threads to the highest priority queue every 100ms. Within each queue, threads are managed using \textbf{Red-Black trees}, sorted by a key that combines user-defined priority and agregated CPU burst times (The amount of time a thread spends executing on the CPU before it either completes, requires I/O operations, or is interrupted by the operating system). This ensures that each thread in the given queue receives a fair share of CPU time.
 
 \noindent These policies establish a hierarchy defined by the following enumeration:
 
@@ -1558,7 +1558,7 @@ enum SchedulingPolicy {
     kUberTask_PQ_P0 = 0,
     kDrivers_PQ_P1,
     kUrgentTasks_PQ_P2,
-    kNormalTasks_RR_P3,
+    kNormalTasks_MLFQ_P3,
     kBackgroundTasks_RR_P4,
     kLast,
 };
@@ -1600,7 +1600,7 @@ struct Policy {
 };
 \end{lstlisting}
 
-As shown, the primary operation is \textbf{pick_next_task}, alongside standard \textbf{add_task} and \textbf{remove_task} operations. Additionally, helper functions are provided for the scheduler and for statistics gathering.
+As shown, the primary operation is \textbf{pick\_next\_task}, alongside standard \textbf{add\_task} and \textbf{remove\_task} operations. Additionally, helper functions are provided for the scheduler and for statistics gathering.
 
 \subsection{Sleeping}
 
