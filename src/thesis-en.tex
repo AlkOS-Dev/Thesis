@@ -484,7 +484,59 @@ TODO
 TODO
 
 \section{Bootloader}
-TODO
+
+Before any code can run, the hardware must achieve a known state. 
+
+TODO - Explain \\
+1. The difficulty of unifying that, since it's strictly hardware dependent \\
+2. For this reason we expect a given architecture to just load the final kernel into memory \\
+   with a given well defined state
+3. what sort of state do we expect the bootloader to load our kernel into \\
+
+\subsection{x86-64 Bootloading}
+
+Following a power up, or resetting the reset pin, each processor on the bus performs a hardware reset.
+Since most modern cpu's are multicore - they first execute an internal negotation over which one runs code, and which fall asleep. (Mulit Processor (MP) Initialization protocol)
+The processor selected through this process, later called Bootstrap Processor starts immediately. And starts executing the firmware code. Every other core enters a halt state and waits for a special startup interrupt to wake it up.
+When the signal drops,  the CPU registers are hardwired to specific values.
+The CPU may perform a Built in self test on itself. 
+
+It then immediately fetches and executes the instruction located at accesses the physical address 0xFFFFFFF0. This is mapped to firmware, either modern UEFI or legacy BIOS.
+
+
+\subsubsection{Firmware}
+- {BIOS}
+If the machine uses BIOS (Basic Input / Output System)
+The cpu starts in 16bit real mode, it can only access first 1MB (2^20bytes) of RAM. 
+It uses segmented addressing. 
+It runs a power on self test (POST) then
+iterates over boot devices (CD, HDD, USB). It reads the first sector of them
+512 bytes
+it checks the last two bytes of this sector. they need to be 0x55 and 0xAA.
+if it exists, bios copies that entire segment into physical ram and makes the cpu jump there
+
+- {UEFI}
+If the machine is using Unified Extensible Firmware Interface, the process is more sophisticated.
+Unlike BIOS which only read sectors, UEFI has filesystem awareness (can read fat32), and looks for a specific file on
+an EFI file system partition. It then loads the executable into ram and executes it.
+Notably it doesnt stay in 16 bit mode, and switches to 32 bit protected mode.
+
+\subsubsection{Multiboot2}
+
+Ultimately, no matter if BIOS or UEFI, it ends up loading another piece in the chain, a bootloader,
+This program will in our case be grub, but could be any multiboot2 compliant bootloader.
+It normalizes the environment, so the kernel doesn't care if it was loaded with BIOS or EFI. 
+It also utilizes code exposed by UEFI and BIOS to scan for important hardware related data, such as the memory map, or information about the framebuffer. It also normalizes it. Getting this information after we quit uefi/bios services is hard
+It loads the kernel and all asociated modules (binaries) from the device to the ram, and gives control to the kernel.
+
+The cpu is loaded in 32-bit protection mode. Paging disabled. Interrupts disabled. The EAX register confirms that that kernel was loaded with multiboot compliant bootloader, while the EBX 
+
+This state is inappropiate for the kernel. First - we're only in 32 bit mode and not 64. Second. Paging is disabled, so we dont have access to the higher half of memory, where the kernel should reside.
+Third. There is no stack, so C won't work. Most cpu features are still disabled (like floating point registers or AVX)
+
+\subsubsection{Loader32}
+\subsubsection{Loader64}
+
 \section{Assumptions}
 TODO
 \section{Memory Management}
