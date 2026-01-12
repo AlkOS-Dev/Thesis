@@ -46,12 +46,13 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then
 else
     echo "Running on host..."
     
+    IMAGE_NAME="${IMAGE_NAME:-latex-thesis}"
     if [ "$SKIP_BUILD" != "true" ]; then
-        docker build -t latex-thesis .devcontainer
+        docker build -t "$IMAGE_NAME" .devcontainer
     fi
     if [ -t 0 ]; then
-        docker run --rm -it -v "$(pwd):/workspace" latex-thesis ./compile.sh "$@"
+        docker run --rm -it -v "$(pwd):/workspace" "$IMAGE_NAME" ./compile.sh "$@"
     else
-        docker run --rm -i  -v "$(pwd):/workspace" latex-thesis ./compile.sh "$@"
+        docker run --rm -i  -v "$(pwd):/workspace" "$IMAGE_NAME" ./compile.sh "$@"
     fi
 fi
