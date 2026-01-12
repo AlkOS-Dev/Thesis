@@ -1292,7 +1292,7 @@ Consequently, the destruction of an \texttt{OpenFileEntry} releases its hold on 
 
 \section{Scheduling}
 
-The scheduling module is the final core component of the operating system, relying heavily on and utilizing all previously described modules. Although the current implementation targets a single-core architecture for simplicity, the design is extensible to multi-core systems, as discussed later in this document.
+The scheduling module is the final core component of the operating system, relying heavily on and utilizing the previously described modules. Although the current implementation targets a single-core architecture for simplicity, the design is extensible to multi-core systems, as discussed later in this document.
 
 \subsection{Process Structure}
 
@@ -1350,13 +1350,13 @@ struct Process : hal::Process {
 \subsubsection{PID}
 \label{subsubsec:pid}
 
-As mentioned in the limitations section \ref{subsec:limitations}, the system imposes a hard limit on the maximum number of existing processes. This constraint allows for optimized process lookup by establishing a 1:1 identity hash map. The \textbf{PID} (Process Identifier) is composed of a reservable identifier and an atomic counter, ensuring that each PID remains unique throughout the entire lifetime of the system.
+As mentioned in the limitations section \ref{subsec:limitations}, the system imposes a hard limit on the maximum number of existing processes. This constraint allows for optimized process lookup via direct indexing. The \textbf{PID} (Process Identifier) is composed of a reservable identifier and an atomic counter, ensuring that each PID remains unique throughout the entire lifetime of the system.
 
 \subsubsection{Process Flags}
 
-\textbf{KernelSpaceOnly} -- enables the creation of kernel-only threads and processes. These processes do not require a separate user space address space or user space stack. This minimization of resource consumption improves performance, additionally context switching between kernel-only threads does not necessitate switching the address space.
+\textbf{KernelSpaceOnly} -- enables the creation of kernel-only threads and processes. These processes do not require a separate user-space address space or user-space stack. This minimization of resource consumption improves performance; additionally, context switching between kernel-only threads does not necessitate switching the address space.
 
-\textbf{PreserveFloats} -- informs that all threads within the process save and restore floating-point registers during context switches by default. Disabling this flag allows the system to omit these potentially expensive operations for threads that do not utilize floating-point arithmetic.
+\textbf{PreserveFloats} -- indicates that all threads within the process save and restore floating-point registers during context switches by default. Disabling this flag allows the system to omit these potentially expensive operations for threads that do not utilize floating-point arithmetic.
 
 \subsubsection{Process State}
 
@@ -1380,7 +1380,7 @@ The name of the process typically corresponds to the name of the executable. Unl
 
 \subsubsection{Threads}
 
-This field points to an first element of doubly linked list of threads running in this environment. It is used primarily for operations such as termination (kill/exit).
+This field points to the first element of a doubly linked list of threads running in this environment. It is used primarily for operations such as termination (kill/exit).
 
 \subsubsection{Live Threads and Threads to Clean}
 
@@ -1396,7 +1396,7 @@ The \textbf{Wait Queue} stores threads that are waiting for this process to fini
 
 \subsection{Kernel Address Space}
 
-The entire operating system shares a single Kernel Address Space. Every kernel process operates within this space. Additionally, the kernel address space is mapped into every user space process's address space. This design choice enhances performance and simplifies architecture, as user threads frequently invoke system calls. Switching address spaces on every system call would incur significant performance overhead and complicate the logic required for handling syscalls.
+The entire operating system shares a single Kernel Address Space. Every kernel process operates within this space. Additionally, the kernel address space is mapped into every user-space process's address space. This design choice enhances performance and simplifies architecture, as user threads frequently invoke system calls. Switching address spaces on every system call would incur significant performance overhead and complicate the logic required for handling syscalls.
 
 \subsection{Thread Structure}
 
@@ -1499,11 +1499,23 @@ A collection of bitfields that determine how the scheduler manages the thread:
 
 \subsubsection{Thread State}
 
-Describes the current status of the thread. This state tracking allows the kernel to monitor each thread individually and verify system integrity, as only specific state transitions are permitted.
+Describes the current status of the thread. This state tracking allows the kernel to monitor each thread individually and verify system integrity, as only specific state transitions are permitted. The thread state transitions graph is defined as follows:
+
+\newgeometry{top=1cm, bottom=1.5cm, left=1cm, right=1cm} 
+
+\begin{figure}[p]
+    \centering
+    % Teraz mamy więcej miejsca, więc height może być większe
+    \includesvg[height=0.95\textheight, width=\textwidth, keepaspectratio]{res/thread-states.svg}
+    \caption{Thread State Transitions Graph}
+    \label{fig:thread-states}
+\end{figure}
+
+\restoregeometry % Bardzo ważne: przywraca normalne marginesy dla reszty pracy
 
 \subsubsection{Stacks}
 
-Two distinct stacks are required for each thread: one for user space and one for kernel space. A separate kernel stack is essential for security and stability. Furthermore, sharing a kernel single stack is inefficient because context switches may occur within kernel code, such as during thread joining or other synchronization events.
+Two distinct stacks are required for each thread: one for user space and one for kernel space. A separate kernel stack is essential for security and stability. Furthermore, sharing a single kernel stack is inefficient because context switches may occur within kernel code, such as during thread joining or other synchronization events.
 
 \subsubsection{Statistics}
 
@@ -1518,7 +1530,7 @@ Allows other threads to block and wait for a specific thread to finish execution
 
 Before initializing the scheduling module, the operating system creates three essential kernel workers:
 
-\textbf{Trace Dumper} -- responsible for dumping kernel traces to the terminal or files, ensuring debuggability and stability. This task cannot be performed directly by the kernel code during critical execution paths, as writing to devices or files is too slow for system calls or interrupt handlers. The buffers are dumped periodically every 20ms.
+\textbf{Trace Dumper} -- responsible for dumping kernel traces to the terminal or storage files, ensuring debuggability and stability. This task cannot be performed directly by the kernel code during critical execution paths, as writing to devices or files is too slow for system calls or interrupt handlers. The buffers are dumped periodically every 20ms.
 
 \textbf{Thread Ripper} -- responsible for the deallocation of thread resources, including descriptors and stacks.
 
@@ -1596,7 +1608,7 @@ The following scheduling policies have been implemented:
 
 \textbf{Priority Queue Scheduling Policy} -- policy that orders threads based on kernel-assigned priorities. Priorities are capped at a range of 0-64 to enable the use of an \textbf{O(1)} priority queue, known as a \textbf{Bitmap Priority Queue}. This structure maintains an array of linked lists representing individual priorities. Additionally, a bitmask indicates the presence of tasks at specific priority levels. Lookup operations utilize bitwise instructions (counting leading/trailing zeros) to efficiently find the minimum or maximum priority value (\textbf{O(1)}).
 
-\textbf{Multi-Level Feedback Queue (MLFQ) Scheduling Policy} -- policy that segregates threads into distinct queues according to their workload characteristics. The policy penalizes CPU-bound threads by demoting them to lower priorities, whereas I/O-bound threads are elevated to higher priorities, thereby favoring interactive performance. To prevent the starvation of low-priority tasks, a periodic reset mechanism promotes all threads to the highest priority queue every 100ms. Within each queue, threads are managed using \textbf{Red-Black trees}, sorted by a key that combines user-defined priority and aggregated CPU burst times (The amount of time a thread spends executing on the CPU before it either completes, requires I/O operations, or is interrupted by the operating system). This ensures that each thread in the given queue receives a fair share of CPU time.
+\textbf{Multi-Level Feedback Queue (MLFQ) Scheduling Policy} -- policy that segregates threads into distinct queues according to their workload characteristics. The policy penalizes CPU-bound threads by demoting them to lower priorities, whereas I/O-bound threads are elevated to higher priorities, thereby favoring interactive performance. To prevent the starvation of low-priority tasks, a periodic reset mechanism promotes all threads to the highest priority queue every 100ms. Within each queue, threads are managed using \textbf{Red-Black trees}, sorted by a key that combines user-defined priority and aggregated CPU burst times (the amount of time a thread spends executing on the CPU before it either completes, requires I/O operations, or is interrupted by the operating system). This ensures that each thread in the given queue receives a fair share of CPU time.
 
 \noindent These policies establish a hierarchy defined by the following enumeration:
 
@@ -1652,7 +1664,7 @@ As shown, the primary operation is \textbf{pick\_next\_task}, alongside standard
 
 \subsection{Sleeping}
 
-To provide high-precision sleeping, the system relies on one-shot, precise timing events. Upon receiving a timer interrupt, the scheduler determines the timestamp for the next event based on the system state, which includes the current thread preemption time and the wake-up times of sleeping threads. Consequently, every timer interrupt necessitates a traversal of the sleeping threads. To ensure high performance and stable time complexity for the priority queue, an Intrusive Red-Black Tree was selected as the underlying data structure for the \textbf{Sleeping Queue}. The critical operations are \textbf{Insert}, \textbf{ExtractMin}, and \textbf{Remove}, all of which must have predictable execution times. The requirement for efficient arbitrary removal excluded binary heaps, while the need for stability excluded heaps with amortized complexity bounds. The Red-Black Tree satisfied all requirements and was already implemented for other system components, making it the optimal choice.
+To provide high-precision sleeping, the system relies on one-shot, precise timing events. Upon receiving a timer interrupt, the scheduler determines the timestamp for the next event based on the system state, which includes the current thread preemption time and the wake-up times of sleeping threads. Consequently, the scheduler must inspect the sleeping queue to process expired events. To ensure high performance and stable time complexity, an Intrusive Red-Black Tree was selected as the underlying data structure for the \textbf{Sleeping Queue}. The critical operations are \textbf{Insert}, \textbf{ExtractMin}, and \textbf{Remove}, all of which must have predictable execution times. The requirement for efficient arbitrary removal excluded binary heaps, while the need for stability excluded heaps with amortized complexity bounds. The Red-Black Tree satisfied all requirements and was already implemented for other system components, making it the optimal choice.
 
 % ==================================================================
 
