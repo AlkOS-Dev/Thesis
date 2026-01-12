@@ -34,9 +34,9 @@ do_compile() {
         echo "Modify your .tex files and save them. The PDF will update automatically."
         echo "Press Ctrl+C to stop."
         
-        latexmk -pdf -pvc -view=none -outdir=../output -interaction=nonstopmode thesis-en.tex
+        latexmk -pdf -pdflatex="pdflatex --shell-escape %O %S" -pvc -view=none -outdir=../output -interaction=nonstopmode thesis-en.tex
     else
-        latexmk -pdf -g -outdir=../output -interaction=nonstopmode thesis-en.tex
+        latexmk -pdf -pdflatex="pdflatex --shell-escape %O %S" -g -outdir=../output -interaction=nonstopmode thesis-en.tex
     fi
 }
 
