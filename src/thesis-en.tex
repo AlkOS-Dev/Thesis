@@ -794,7 +794,7 @@ Prior to the implementation of the Scheduler, and alongside functional memory ma
 
 \subsection{Infrastructure}
 
-The architecture-specific code is responsible for detecting available hardware and registering it within the central timing infrastructure, specifically the \textbf{ClockRegistry} and \textbf{EventClockRegistry}. Subsequently, architecture-agnostic components, such as the \textbf{ACPI} subsystem, may register additional clocks by parsing system description tables. Finally, the architecture-defined functions \textbf{hal::PickSystemClockSource()} and \textbf{hal::PickSystemEventClockSource()} are invoked during the initialization of the timing module to select the optimal sources for each purpose.
+The architecture-specific code is responsible for detecting available hardware and registering it within the central timing infrastructure, specifically the \textbf{ClockRegistry} and \textbf{EventClockRegistry}. Subsequently, architecture-agnostic components, such as the \textbf{ACPI} subsystem, may register additional clocks by parsing system description tables. Finally, the architecture-defined functions \textbf{hal::PickSystemClockSource()} and \textbf{hal::PickSystemEventClockSource()} are invoked during the initialization of the timing module to select the optimal sources for each purpose. The infrastructure allows to scheduler to both implement tick or tickless startegy.
 
 \subsection{Clocks}
 
@@ -844,26 +844,7 @@ static_assert(sizeof(EventClockFlags) == sizeof(u32));
 
 enum class EventClockState : u8 {
     kDisabled = 0,  // Clock is disabled
-    kPeriodic,      // Clock \begin{lstlisting}[caption={Clock Driver Structure}, label={lst:clockDriver}]
-      struct alignas(arch::kCacheLineSizeBytes) ClockRegistryEntry : data_structures::RegistryEntry {
-        /* Clock numbers */
-        u64 frequency_kHz; // Frequency in kHz
-        u64 ns_uncertainty_margin_per_sec;  
-          // Uncertainty margin in femto seconds per second
-        u64 clock_numerator; // For conversion to nanoseconds, this is the numerator
-        u64 clock_denominator; // For conversion to nanoseconds, this is the denominator
-      
-        /* Callbacks */
-        u64 (*read)(ClockRegistryEntry *);
-        bool (*enable_device)(ClockRegistryEntry *);
-        bool (*disable_device)(ClockRegistryEntry *);
-        void (*stop_counter)(ClockRegistryEntry *);
-        void (*resume_counter)(ClockRegistryEntry *);
-      
-        /* Own data */
-        void *own_data;
-      };
-      \end{lstlisting}is in periodic mode
+    kPeriodic,      // Clock is in periodic mode
     kOneshot,       // Clock is in oneshot mode
     kOneshotIdle,   // Clock is in oneshot mode but no event is scheduled
     klast,
@@ -1020,7 +1001,7 @@ There is only one Kernel Address Space in the entire OS. Each kernel process is 
 
 Our definition of thread looks like that:
 
-\begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
+\begin{lstlisting}[caption={Thread Structure}, label={lst:threadStruct}]
 enum class UserPriority : u8 { kLow = 0, kMediumLow, kMedium, kMediumHigh, kHigh, kLast };
 
 struct PACK Tid {
@@ -1095,7 +1076,7 @@ struct Thread : data_structures::IntrusiveRbNode<Thread, u64, kSchedulingIntrusi
 
 \subsubsection{TID}
 
-Similarly to PID\ref{subsubsec:pid}, we limits the amout of available threads and we use that property to create unique TID allowing for fast lookups.
+Similarly to PID \ref{subsubsec:pid}, we limits the amout of available threads and we use that property to create unique TID allowing for fast lookups.
 
 \subsubsection{Owner's PID}
 
@@ -1105,53 +1086,172 @@ PID of the process we are operating in.
 
 Collection of bitfields altering how the scheduler treats the thread.
 
-\textbf{SchedulingPolicy policy} defines in which policy the thread is currently operating in. Refer to Policies\ref{subsec:policies} for more details.
+\textbf{SchedulingPolicy policy} defines in which policy the thread is currently operating in. Refer to Policies \ref{subsec:policies} for more details.
 
 \textbf{u8 priority} defines how important is our thread inside the policy we operate in. Internal for the kernel.
 
-\textbf{UserPriority user_priority} may be specified by the User Space to inform the scheduler that some threads are more important than others.
+\textbf{UserPriority user\_priority} may be specified by the User Space to inform the scheduler that some threads are more important than others.
 
-\textbf{bool preserve_floats} specifies whether on context switches floting point state is preserved.
+\textbf{bool preserve\_floats} specifies whether on context switches floting point state is preserved.
 
 \textbf{bool detached} specifies whether scheduler should automatically cleanup the thread without waiting for joins.
 
+\subsubsection{Thread State}
+
+Describes what is currently going on with the thread. Allows us to nicely track each thread individually and verfiy the integrity of the system as only couple of state conversions are possible.
+
+\subsubsection{Stacks}
+
+For each thread we need two distinct stacks, one for the user and other for kernel. We need a separate stack for kernel for security and stability issues. There is also not efficient to have single stack for kernel as we also want to make context switches inside the kernel code. For example during thread joining or other synchronization.
+
+\subsubsection{Statistics}
+
+Allow us trace each threads execution specifics and adjust the scheduling module dynamically or simply debug/test the scheduler.
+
+\subsubsection{Wait Queue}
+
+Allow us to block other threads and wait for that thread to finish execution (Thread joining).
+
 \subsection{Kernel Workers}
 \label{subsubsec:kworkers}
-TODO
+
+The OS also before converting to the scheduling module create three kernel workers, which are crucial for the system:
+
+\textbf{Trace Dumper} - this worker is responsible to dump the kernel traces to the terminal or files to enable debugability and stability. This cannot be done by kernel code itself as writing to devices or files take much too long for system calls or interrupts. The buffers are dumped periodically each 20ms
+
+\textbf{Thread Ripper} - this worker is responsible for deallocation of thread resources including descriptors or stacks.
+
+\textbf{Process Ripper} - this worker is responsible for deallocation of process resources including address space.
 
 \subsection{Intrusive Data Structures}
-TODO
 
-\subsection{Thread States}
-TODO
+Because threads will be frequently changing linked lists or data structures they reside in, idea to each time allocate and free list nodes looks rather stupid so we used introduced schemue to always use intrusive data structures. That means insted of allocating a node and storing field with pointer to the object, the node itself resides inside the object. We allocate the object and simple modify object fields to operate on the lists.
 
-\subsection{Wait Queues}
-TODO
+\begin{lstlisting}[caption={Intrusive Nodes}, label={lst:intrusiveNodes}]
+template <class T, int kIntrusiveLevel>
+struct IntrusiveListNode {
+    T *next;
+};
 
-\subsection{Preserve Floats}
-TODO
+template <class T, int kIntrusiveLevel>
+struct IntrusiveDoubleListNode {
+    T *next;
+    T *prev;
+};
 
-\subsection{GS and FS Segments}
-TODO
+template <class T, class KeyT, int kIntrusiveLevel>
+struct IntrusiveRbNode {
+    enum class Color : u8 {
+        kBlack = 0,
+        kRed   = 1,
+    };
+
+    T *parent;
+    union {
+        struct {
+            T *left;
+            T *right;
+        };
+        T *child[2];
+    };
+
+    Color color;
+    KeyT key;
+};
+\end{lstlisting}
+
+We can see on Thread data structure how to use such nodes \ref{lst:threadStruct}. Such approach has multiple benefits for, which includes:
+\begin{itemize}
+  \item No allocation or deallocation during instert or pop operations
+  \item Better memory acces, in traditional model we have to acces object by pointer, here we directly acccess the object
+  \item Verify if object belongs to some list or not in \textbf{O(1)}, having only the object itself
+  \item Removal of the object from the list done always in \textbf{O(1)}
+  \item Removal of the object from the list without accessing the list itself
+\end{itemize}
 
 \subsection{Meta-Scheduler}
-TODO
+
+The base arichtecture of the scheduler is similar to used in most of the popular that is \textbf{meta-scheduler}. This approach is based on bulding all scheduler operations on abstractions called \textbf{Policies}. Policies are mostly responsible for picking next task from set of tasks that currently belongs to the policy and react on thread behaviour (punish or reward it with CPU time based on work characteristics). Wheras the scheduler is responsible for all other operations, which includes 
+\begin{itemize}
+  \item managing thread states,
+  \item putting threads into sleep
+  \item waking up threads
+  \item idling
+  \item setting up next time events by timing infrastructure
+  \item blocking threads on wait queues
+  \item releasing threads from wait queues
+\end{itemize}
+There exists hierarchy between the policies and threads from more important ones are picked before threads from less important ones.
+
+\subsection{Timing Model}
+
+We decided to take more modern approach and implement tickless kernel which instead of firing interripts at constant frequency (so called \textbf{Kernel Tick}) - \textbf{Ticked Kernel}, we calculate precisely when next timing event should occur.
 
 \subsection{Policies}
-\label{subsec:policies}
-TODO
+
+The type of the policies we defined in our code are following:
+
+\textbf{Round Robin Scheduling Policy} -- Very simply policy iterating through linked list from front to end. Threads are ordered by time of added to the policy
+
+\textbf{Priority Queue Scheduling Policy} -- Very simple policy ordering threads thgrough kernel assigned priorities. The priorities are capped to 0-64 range to use \textbf{O(1)} priority queue called \textbf{Bitmap Priority Queue}. The idea is that we store table of linked lists, which represents individual priorities and additionaly we store information about present priority inside the integer and on each lookup we use bit opreation count leading/trailing zeros to find the minimal or maximal value in the queue.
+
+\textbf{Multi-Level Feedback Queue (MLFQ) Scheduling Policy} -- TODO ADAM
+
+\noindent We use this type of priorities to define the hierarych which is given by that enum:
+
+\begin{lstlisting}[caption={Scheduling Policy Hierarchy}, label={lst:policyHierarchy}]
+// PO > P1 > .. > P4
+enum SchedulingPolicy {
+    kUberTask_PQ_P0 = 0,
+    kDrivers_PQ_P1,
+    kUrgentTasks_PQ_P2,
+    kNormalTasks_RR_P3,
+    kBackgroundTasks_RR_P4,
+    kLast,
+};
+\end{lstlisting}
+
+Each policy is used for different group of tasks:
+
+\textbf{Uber Tasks} -- tasks that must be done as fast as possible, most probably rescue actions or some kernel space saving. For example saving state before shutdown or killing some processes when system is out of the memory. 
+
+\textbf{Drivers} -- driver tasks that must be done as fast as possible to not block the devices and enable smooth operation of the system. For example audio drivers or net interfaces.
+
+\textbf{Urgent Tasks} -- tasks that are less important that the drivers itself but more important than user tasks. Possibly privliged userspace tasks consuming the driver informations.
+
+\textbf{Normal Tasks} -- most popular group of tasks there are all usual userspace programs inclduing graphical interfaces, data processing etc. Also basic kernel workers are here, including workers listed in kworkers section \label{subsubsec:kworkers}.
+
+\textbf{Background Tasks} -- group of tasks that are not relevant at all, but may be done when there is nothing to do. It may include update checks or some non urgent cleanup tasks.
 
 \subsubsection{Policies Abstraction}
-TODO
+\label{subsec:policies}
+
+The abstraction of policies is following:
+
+\begin{lstlisting}[caption={Policy Abstraction}, label={lst:policyStruct}]
+struct Policy {
+    struct {
+        Thread *(*pick_next_task)(void *);
+
+        void (*add_task)(void *, Thread *);
+        void (*remove_task)(void *, Thread *);
+
+        u64 (*get_preempt_time)(void *, Thread *);
+        bool (*is_first_higher_priority)(void *, Thread *, Thread *);
+        bool (*validate_flags)(void *, const ThreadFlags *);
+
+        void (*on_thread_yield)(void *, Thread *);
+        void (*on_periodic_update)(void *, u64 current_time_ns);
+    } cbs;
+    void *self;
+};
+\end{lstlisting}
+
+As we can see the most imprtant operation is \textbf{pick\_next\_task}, obvious \textbf{add_task} and \textbf{remove_task} and finally some helpers for the scheduler or statistics gathering.
 
 \subsection{Sleeping}
-TODO
 
-\subsubsection{Sleeping Queue}
-TODO
-
-\subsection{Waiting On Event}
-TODO
+To provide high precision sleeping we had to work on oneshot precise timing events. That means each time we receive and timing event we must deduce the time for the next event based on schedulers state, that include current thread preemption time or wakup times of sleeping threads. That means each time we receive timer interrupt we must look through sleeping threads. To ensure high performance and low stable complexity of priority queue we decided to use Intrusive Red-Black Tree (Linked list as node and storing min/max on insert/delete) as base data structure for \textbf{Sleeping Queue}. The operation we cared the most are \textbf{Insert}, \textbf{ExtractMin} and \textbf{Remove}, also the execution times must be predictable and stable. The requirement for quick removal excludes Binary priority queues and requirement for stability excludues all heaps operating on amortized complexities. The RB Tree was good enough and was also needed in other places so the choice was obvious. 
 
 % ==================================================================
 
