@@ -21,6 +21,8 @@
 
 \usepackage[hidelinks]{hyperref}
 
+\usepackage[inkscapepath=../output/svg/]{svg}
+
 
 % ---------------- MARGINS, INDENTATION, LINESPREAD ------------------
 
@@ -887,7 +889,358 @@ Similar to the TSC, the LAPIC Timer is local to the processor core, ensuring ext
 
 \section{File System}
 \label{section:fs}
-TODO
+
+The file system is a fundamental part of any operating system, providing mechanisms to store, access, and manage data on storage devices. We have designed a unified abstraction layer known as the Virtual File System (VFS). The VFS abstracts the underlying implementation details of specific file systems, providing the kernel and user space with an API for operations such as reading, writing, creating, moving, and deleting files and directories.
+
+\subsection{VFS}
+
+The VFS enables the operating system to interact with various file system types (e.g., FAT12, FAT16, FAT32) through a uniform interface, eliminating the need for the kernel to understand the specific implementation details. This modularity is achieved through a combination of compile-time enforced interfaces (Concepts) and a runtime dispatch mechanism.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+      node distance=1.5cm,
+      block/.style={
+        rectangle, draw, fill=gray!10,
+        text width=5cm, text centered,
+        rounded corners, minimum height=1cm
+      },
+      component/.style={
+        rectangle, draw, fill=gray!10,
+        text width=5cm, text centered,
+        minimum height=1cm
+      },
+      interface/.style={
+        rectangle, draw, dashed, fill=gray!10,
+        text width=5cm, text centered,
+        minimum height=1cm
+      },
+      storage/.style={
+        cylinder, draw, fill=gray!10,
+        shape aspect=0.5,
+        text width=4.5cm, text centered,
+        minimum height=1cm
+      },
+      arrow/.style={-Latex, thick}
+  ]
+
+  \node (user_process) [block] {User Process};
+  \node (fd_manager) [block, below=of user_process] {File Descriptor Manager};
+  \node (vfs_module) [block, below=of fd_manager] {VFS Module};
+  \node (fs_interface) [interface, below=of vfs_module] {Filesystem Interface};
+  \node (fs_driver) [component, below=of fs_interface] {File System Driver \\ (FAT12 / FAT16 / FAT32)};
+  \node (vfs_io) [interface, below=of fs_driver] {VFS I/O Interface};
+  \node (storage_device) [storage, below=of vfs_io] {Storage Device \\ (RAM, Disk, Network)};
+
+  \draw [arrow] (user_process) -- (fd_manager) node [midway, right] {Syscalls};
+  \draw [arrow] (fd_manager) -- (vfs_module) node [midway, right] {File Operations};
+  \draw [arrow] (vfs_module) -- (fs_interface) node [midway, right] {Dispatch};
+  \draw [arrow] (fs_interface) -- (fs_driver) node [midway, right] {Implements};
+  \draw [arrow] (fs_driver) -- (vfs_io) node [midway, right] {Uses};
+  \draw [arrow] (vfs_io) -- (storage_device) node [midway, right] {I/O Operations};
+
+  \end{tikzpicture}
+  \caption{High-level VFS Architecture}
+  \label{fig:vfs_architecture}
+\end{figure}
+
+As illustrated in Figure \ref{fig:vfs_architecture}, the VFS architecture is composed of four primary layers:
+
+\begin{itemize}
+\item \textbf{VFS Module}: The central orchestrator for path resolution and operation delegation.
+\item \textbf{Filesystem Interface}: A struct containing function pointers that abstract specific driver operations.
+\item \textbf{Filesystem Driver}: The concrete implementation of a specific file system format.
+\item \textbf{VFS I/O Interface}: An abstraction for block-level data access.
+\end{itemize}
+
+The following subsections describe each of these components in detail.
+
+\subsubsection*{VFS Module}
+
+The VFS module serves as the entry point for all file operations and is responsible for managing file system mounts. It exposes the internal kernel API for operations such as opening, reading, and writing files. The module's primary responsibility is to translate these requests into calls to the appropriate filesystem instance based on the provided file path and the currently registered mount points.
+
+When a VFS operation (e.g., \texttt{CreateFile}) is invoked, the module executes the following sequence:
+\begin{enumerate}
+    \item \textbf{Find Mount Point}: The system utilizes a \textbf{crit-bit tree} \cite{critbit} to efficiently locate the longest prefix match for the given path among all registered mount points. This step identifies the specific filesystem driver responsible for handling the operation.
+    \item \textbf{Check Permissions}: The module validates the operation against the mount point options (e.g., ensuring write operations are not attempted on read-only mounts).
+    \item \textbf{Path Translation}: The absolute system path is translated into a path relative to the mount point root.
+    \item \textbf{Delegation}: The operation is delegated to the corresponding method of the specific filesystem driver.
+\end{enumerate}
+
+\begin{lstlisting}[caption={VfsModule CreateFile Implementation}, label={lst:vfsModuleCreateFile}]
+Result<> internal::VfsModule::CreateFile(const Path &path)
+{
+    auto mount_result = FindMountPoint(path);
+    RET_UNEXPECTED_IF_ERR(mount_result);
+
+    MountPoint *mount = mount_result.value();
+
+    RET_UNEXPECTED_IF(mount->options.read_only, VfsError::kReadOnly);
+
+    Path relative_path = GetRelativePath_(path, mount->path);
+    return mount->fs.CreateFile(relative_path);
+}
+\end{lstlisting}
+
+\subsubsection*{Filesystem Interface}
+
+The \texttt{vfs::Filesystem} struct acts as a uniform interface that all concrete filesystem drivers must expose. It contains function pointers for various file and directory manipulations, alongside metadata about the filesystem. Each function pointer accepts a \texttt{void* ctx} argument, allowing the generic VFS layer to pass the concrete driver instance.
+
+\begin{lstlisting}[caption={vfs::Filesystem Structure}, label={lst:vfsFilesystem}]
+struct Filesystem {
+    struct Operations {
+        // File operations
+        Result<> (*create_file)(void *ctx, const Path &path);
+        Result<size_t> (*read_file)(
+            void *ctx, const Path &path, void *buffer, size_t size, size_t offset
+        );
+        Result<size_t> (*write_file)(
+            void *ctx, const Path &path, const void *buffer, size_t size, size_t offset
+        );
+        Result<> (*delete_file)(void *ctx, const Path &path);
+        // ... (additional operations omitted for brevity)
+    };
+
+    struct Info {
+        Type type;
+        const char *name;  // e.g., "FAT32", "FAT16"
+    };
+    
+    Filesystem() = delete;
+    explicit Filesystem(void *context, const Operations &operations, const Info &info)
+    : context_(context), ops_(operations), info_(info) {}
+
+private:
+    void *context_;  // Pointer to the concrete driver instance
+    Operations ops_;
+    Info info_;
+};
+\end{lstlisting}
+
+\subsubsection*{Filesystem Driver}
+
+Each filesystem driver implements the logic required for a specific filesystem type (e.g., FAT12, FAT16, FAT32). The driver interprets the raw data structures on the storage device and performs the requested operations. For instance, the FAT32 driver handles the manipulation of the File Allocation Table, directory entries, and cluster chains according to the FAT32 specification (for details, see \cite{fat-spec}).
+
+To implement these drivers efficiently, we employ the Curiously Recurring Template Pattern (CRTP) \cite{crtp}. Each driver class inherits from a templated base class that provides common functionality, while the derived class implements format-specific details. This approach enables static polymorphism, reducing the runtime overhead typically associated with virtual function calls.
+
+\begin{lstlisting}[caption={FAT Driver CRTP Base Class}, label={lst:fatCrtp}]
+template <template <typename> typename T, typename IO>
+class Fat
+{
+    using ImplT  = T<IO>;
+    using Traits = FatTraits<T, IO>;
+
+protected:
+    // ... common FAT structures, validation, and operations
+
+public:
+    NODISCARD Filesystem GetFilesystem()
+    {
+        return Filesystem(
+            this, // 'this' pointer is passed as the context
+            Filesystem::Operations{
+                .create_file = &Fat::CreateFileCallback_,
+                // ...
+            },
+            Filesystem::Info{
+                .type = ImplT::kFsType,
+                .name = ImplT::kFsName,
+            }
+        );
+    }
+
+private:
+    FAST_CALL Result<> CreateFileCallback_(void *ctx, const Path &path)
+    {
+        return static_cast<Fat *>(ctx)->CreateFile(path);
+    }
+    // ...
+};
+\end{lstlisting}
+
+Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT entries differs between FAT12 and FAT32/16) and provides a static \texttt{IsValid(IO \&io)} method to probe whether a given I/O device contains a valid instance of that filesystem.
+
+\begin{lstlisting}[caption={Fat12 GetFATEntry Implementation}, label={lst:fat12GetFatEntry}]
+    NODISCARD FORCE_INLINE_F ClusterNumT GetFATEntry_(ClusterNumT cluster) const
+    {
+        ASSERT_LT(
+            cluster, BaseT::cluster_count_ + BaseT::kFirstClusterNumber,
+            "Cluster number out of range"
+        );
+        const size_t fat_offset = cluster + (cluster / 2);
+        const size_t sector_number =
+            BaseT::fat_region_.start + (fat_offset / boot_sector_.fat.bytes_per_sector);
+        const size_t sector_offset = fat_offset % boot_sector_.fat.bytes_per_sector;
+
+        // Load 2 sectors if entry spans two sectors
+        size_t count =
+            (sector_offset == static_cast<size_t>(boot_sector_.fat.bytes_per_sector - 1)) ? 2 : 1;
+        auto range = BaseT::io_.ReadRange({sector_number, count});
+        if ((cluster % 2) == 0) {  // Even cluster
+            return internal::get<ClusterNumT>(range, sector_offset) & kClusterMask;
+        } else {
+            return internal::get<ClusterNumT>(range, sector_offset) >> 4;
+        }
+    }
+\end{lstlisting}
+
+\subsubsection*{VFS Interfaces and Concepts}
+
+To enforce architectural compliance at compile time, we utilize C++20 Concepts to define strict contracts for both filesystem drivers and low-level storage operations.
+
+The \texttt{VFSInterface} concept (Listing \ref{lst:vfsInterfaceConcept}) mandates that any compliant driver class must provide a constructor accepting an I/O backend, a static method to validate the filesystem signature on the storage medium, and a method to retrieve the runtime function table.
+
+\begin{lstlisting}[caption={VFSInterface Concept Definition}, label={lst:vfsInterfaceConcept}]
+template <template <typename> typename T, typename IO>
+concept VFSInterface = VFSIO<IO> and requires(T<IO> fs, IO io) {
+    T<IO>(io);
+    { T<IO>::IsValid(io) } -> std::same_as<bool>;
+    { fs.GetFilesystem() } -> std::same_as<Filesystem>;
+};
+\end{lstlisting}
+
+The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, filesystem drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends --- such as RAM disks, physical partitions, or network storage --- without requiring implementation changes.
+
+\begin{lstlisting}[caption={VFSIO Concept Definition}, label={lst:vfsioConcept}]
+template <typename IO>
+concept VFSIO =
+    requires(IO io, size_t offset, io::SectorRange range, std::span<const byte> data, size_t size) {
+        { io.ReadRange(range) } -> std::same_as<std::span<byte>>;
+        { io.ReadSector(offset) } -> std::same_as<std::span<byte>>;
+        { io.WriteRange(range, data) } -> std::same_as<void>;
+        { io.WriteSector(offset, data) } -> std::same_as<void>;
+        { io.GetSectorSize() } -> std::same_as<size_t>;
+    };
+\end{lstlisting}
+
+\subsection{File Descriptors}
+
+The file descriptor system provides a hierarchical structure to handle file I/O operations initiated by user processes. This design tracks open files, maintains current read/write offsets, and enforces access rights.
+
+\begin{figure}[htbp]
+  \centering
+  \includesvg[width=\textwidth]{res/fd-diagram.svg}
+  \caption{File Descriptor Design}
+  \label{fig:fd_architecture}
+\end{figure}
+
+As depicted in Figure \ref{fig:fd_architecture}, the system comprises three main tables:
+
+\subsubsection*{FdTable (Per-Process)}
+Each process maintains its own \texttt{FdTable}, which is an array mapping integer file descriptors to \texttt{RefPtr<OpenFileEntry>} objects.
+
+\begin{lstlisting}[caption={FdTable Allocation}, label={lst:fdTableAllocate}]
+FdResult<fd_t> FdTable::Allocate(data_structures::RefPtr<OpenFileEntry> global_entry)
+{
+    std::lock_guard lock(lock_);
+    for (size_t i = 0; i < kMaxFdsPerProcess; ++i) {
+        if (entries_[i] == nullptr) {
+            entries_[i] = std::move(global_entry);
+            ++count_;
+            return static_cast<fd_t>(i);
+        }
+    }
+    return std::unexpected(FdError::kFdTableFull);
+}
+\end{lstlisting}
+
+\subsubsection*{OpenFileTable (Global)}
+
+The \texttt{OpenFileTable} is a system-wide pool of \texttt{OpenFileEntry} objects. Each entry represents a unique "open" instance of a resource (file or pipe), maintaining dynamic state such as the current read/write offset, access flags (e.g., Read/Write), and a handle to the underlying resource. Multiple file descriptors from different processes can point to the same \texttt{OpenFileEntry}, allowing them to share the cursor position.
+
+\begin{lstlisting}[caption={OpenFileTable Creation}, label={lst:openFileTableOpenFile}]
+FdResult<data_structures::RefPtr<OpenFileEntry>> OpenFileTable::OpenFile(File *file, OpenMode flags)
+{
+    RET_UNEXPECTED_IF(file == nullptr, FdError::kInvalidArgument);
+
+    std::lock_guard lock(lock_);
+
+    const size_t idx = entries_.Allocate();
+    RET_UNEXPECTED_IF(idx == std::numeric_limits<size_t>::max(), FdError::kIoError);
+
+    OpenFileEntry *entry = entries_.Get(idx);
+    ASSERT_NOT_NULL(entry);
+
+    new (entry) OpenFileEntry();
+    entry->pool_idx_ = idx;
+
+    entry->handle    = FileHandle::Wrap(file);
+    entry->flags     = static_cast<u32>(flags);
+    entry->offset    = 0;
+    entry->is_append = HasMode(flags, OpenMode::kAppend);
+    ++count_;
+
+    return data_structures::RefPtr(entry);
+}
+\end{lstlisting}
+
+The \texttt{FileHandle} utilizes a \texttt{NonOwningTaggedPtr} to hold either a pointer to a \texttt{File} object or a \texttt{Pipe} instance, enabling the \texttt{OpenFileEntry} to manage both cases seamlessly.
+
+\subsubsection*{FileTable (Global)}
+The \texttt{FileTable} manages unique \texttt{File} objects system-wide. Each \texttt{File} object acts as the in-memory representation of a physical file on the filesystem, storing static attributes such as the path and file size. This ensures that a file on the VFS has a single representation in memory, regardless of how many times it has been opened.
+
+\begin{lstlisting}[caption={FileTable GetOrCreate}, label={lst:fileTableGetOrCreate}]
+FdResult<data_structures::RefPtr<File>> FileTable::GetOrCreate(const vfs::Path &path)
+{
+    RET_UNEXPECTED_IF(path.IsEmpty(), FdError::kInvalidArgument);
+
+    File *existing = Find(path);
+    if (existing != nullptr) {
+        return data_structures::RefPtr(existing, false);
+    }
+
+    const size_t idx = files_.Allocate();
+    RET_UNEXPECTED_IF(idx == std::numeric_limits<size_t>::max(), FdError::kIoError);
+
+    File *file = files_.Get(idx);
+    ASSERT_NOT_NULL(file);
+
+    new (file) File();
+    file->pool_idx_ = idx;
+
+    file->size = 0;
+    file->mode = 0;
+    file->path = path;
+    ++count_;
+
+    return data_structures::RefPtr(file);
+}
+\end{lstlisting}
+
+\subsubsection*{FdManager}
+The \texttt{FdManager} integrates these three tables and exposes file descriptor operations (e.g., \texttt{Open}, \texttt{Close}, \texttt{Read}). When a process requests to open a file, the \texttt{FdManager} coordinates the interaction: it validates existence via the VFS module, retrieves the \texttt{File} object, creates a new entry in the \texttt{OpenFileTable}, and finally assigns a file descriptor in the process's \texttt{FdTable}.
+
+\begin{lstlisting}[caption={FdManager Open Implementation}, label={lst:fdManagerOpen}]
+FdResult<fd_t> FdManager::Open(const vfs::Path &path, OpenMode flags)
+{
+    // Check if file exists in VFS
+    auto exists_result = VfsModule::Get().FileExists(path);
+    RET_UNEXPECTED_IF(!exists_result, FdError::kIoError);
+    RET_UNEXPECTED_IF(!*exists_result, FdError::kNotFound));
+
+    auto file_result = file_table_.GetOrCreate(path);
+    RET_UNEXPECTED_IF_ERR(file_result);
+
+    auto open_result = open_file_table_.OpenFile(file_result->Get(), flags);
+    RET_UNEXPECTED_IF_ERR(open_result);
+
+    FdTable *fd_table = GetCurrentProcessFdTable();
+    RET_UNEXPECTED_IF(fd_table == nullptr, FdError::kIoError);
+
+    auto fd_result = fd_table->Allocate(std::move(*open_result));
+    RET_UNEXPECTED_IF_ERR(fd_result);
+
+    return *fd_result;
+}
+\end{lstlisting}
+
+\subsubsection*{Resource Lifecycle Management}
+
+To ensure efficient memory usage and prevent resource leaks, the life cycle of \texttt{OpenFileEntry} and \texttt{File} objects is managed through intrusive reference counting. Both structures inherit from a \texttt{RefCounted} base class and are managed via smart pointers (\texttt{RefPtr} and \texttt{TaggedPointer}).
+
+When a process closes a file descriptor (or terminates), the reference to the corresponding \texttt{OpenFileEntry} in the process's \texttt{FdTable} is released. If the reference count drops to zero --- indicating that no other file descriptors (across any process) refer to this open stream --- the \texttt{OpenFileEntry} is automatically deallocated and removed from the global \texttt{OpenFileTable}.
+
+Consequently, the destruction of an \texttt{OpenFileEntry} releases its hold on the underlying \texttt{File} object. Similarly, if the reference count of the \texttt{File} object reaches zero, it implies that no active streams are reading from or writing to that specific file. The system then automatically reclaims the associated memory from the \texttt{FileTable}. This cascading deallocation mechanism ensures that kernel memory is only consumed for files that are actively in use by at least one process.
 
 \section{Scheduling}
 
@@ -1307,19 +1660,22 @@ TODO
 \chapter*{List of symbols and abbreviations}
 
 \begin{tabular}{cl}
-PIC & Programmable Interrupt Controller \\
+API & Application Programming Interface \\
 APIC & Advanced Programmable Interrupt Controller \\
-LAPIC & Local Advanced Programmable Interrupt Controller \\
-PIT & Programmable Interrupt Timer \\
+CRTP & Curiously Recurring Template Pattern \\
+ISR & Interrupt Service Routine \\
 IDT & Interrupt Descriptor Table \\
-TSS & Task State Segment \\
+LAPIC & Local Advanced Programmable Interrupt Controller \\
 LIT & Logical Interrupt Table \\
-TSC & TimeStamp Counter \\
-MMIO & Memory-Mapped I/O  \\
-PID & Process IDentifier  \\
-MMU & Memory Managment Unit  \\
+MMU & Memory Management Unit \\
+MMIO & Memory-Mapped I/O \\
+PIC & Programmable Interrupt Controller \\
+PID & Process IDentifier \\
+PIT & Programmable Interrupt Timer \\
 TID & Thread IDentifier \\
-ISR & Interrupt Service Routine
+TSC & TimeStamp Counter \\
+TSS & Task State Segment \\
+VFS & Virtual File System \\
 \end{tabular}
 \\
 \thispagestyle{empty}
