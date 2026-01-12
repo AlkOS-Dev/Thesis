@@ -1019,7 +1019,7 @@ private:
 
 \subsubsection*{Filesystem Driver}
 
-Each filesystem driver implements the logic required for a specific filesystem type (e.g., FAT12, FAT16, FAT32). The driver interprets the raw data structures on the storage device and performs the requested operations. For instance, the FAT32 driver handles the manipulation of the File Allocation Table, directory entries, and cluster chains according to the FAT32 specification \cite{fat-spec}, which is not detailed here.
+Each filesystem driver implements the logic required for a specific filesystem type (e.g., FAT12, FAT16, FAT32). The driver interprets the raw data structures on the storage device and performs the requested operations. For instance, the FAT32 driver handles the manipulation of the File Allocation Table, directory entries, and cluster chains according to the FAT32 specification (for details, see \cite{fat-spec}).
 
 To implement these drivers efficiently, we employ the Curiously Recurring Template Pattern (CRTP) \cite{crtp}. Each driver class inherits from a templated base class that provides common functionality, while the derived class implements format-specific details. This approach enables static polymorphism, reducing the runtime overhead typically associated with virtual function calls.
 
@@ -1027,17 +1027,19 @@ To implement these drivers efficiently, we employ the Curiously Recurring Templa
 template <template <typename> typename T, typename IO>
 class Fat
 {
-    using ImplT  = T<IO>; // The concrete derived class
+    using ImplT  = T<IO>;
     using Traits = FatTraits<T, IO>;
 
 protected:
     // ... common FAT structures, validation, and operations
+
+public:
     NODISCARD Filesystem GetFilesystem()
     {
         return Filesystem(
             this, // 'this' pointer is passed as the context
             Filesystem::Operations{
-                .create_file      = &Fat::CreateFileCallback_,
+                .create_file = &Fat::CreateFileCallback_,
                 // ...
             },
             Filesystem::Info{
@@ -1082,9 +1084,34 @@ Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT en
     }
 \end{lstlisting}
 
-\subsubsection*{VFS I/O Interface}
+\subsubsection*{VFS Interfaces and Concepts}
 
-The VFS I/O interface abstracts low-level input/output operations. This layer uses C++20 Concepts to define a contract for block-level operations, allowing filesystem drivers to interact seamlessly with various storage media --- such as RAM disks, physical disk partitions, or network storage --- without implementation coupling.
+To enforce architectural compliance at compile time, we utilize C++20 Concepts to define strict contracts for both filesystem drivers and low-level storage operations.
+
+The \texttt{VFSInterface} concept (Listing \ref{lst:vfsInterfaceConcept}) mandates that any compliant driver class must provide a constructor accepting an I/O backend, a static method to validate the filesystem signature on the storage medium, and a method to retrieve the runtime function table.
+
+\begin{lstlisting}[caption={VFSInterface Concept Definition}, label={lst:vfsInterfaceConcept}]
+template <template <typename> typename T, typename IO>
+concept VFSInterface = VFSIO<IO> and requires(T<IO> fs, IO io) {
+    T<IO>(io);
+    { T<IO>::IsValid(io) } -> std::same_as<bool>;
+    { fs.GetFilesystem() } -> std::same_as<Filesystem>;
+};
+\end{lstlisting}
+
+The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, filesystem drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends --- such as RAM disks, physical partitions, or network storage --- without requiring implementation changes.
+
+\begin{lstlisting}[caption={VFSIO Concept Definition}, label={lst:vfsioConcept}]
+template <typename IO>
+concept VFSIO =
+    requires(IO io, size_t offset, io::SectorRange range, std::span<const byte> data, size_t size) {
+        { io.ReadRange(range) } -> std::same_as<std::span<byte>>;
+        { io.ReadSector(offset) } -> std::same_as<std::span<byte>>;
+        { io.WriteRange(range, data) } -> std::same_as<void>;
+        { io.WriteSector(offset, data) } -> std::same_as<void>;
+        { io.GetSectorSize() } -> std::same_as<size_t>;
+    };
+\end{lstlisting}
 
 \subsection{File Descriptors}
 
@@ -1635,18 +1662,19 @@ TODO
 \begin{tabular}{cl}
 API & Application Programming Interface \\
 APIC & Advanced Programmable Interrupt Controller \\
+CRTP & Curiously Recurring Template Pattern \\
 ISR & Interrupt Service Routine \\
 IDT & Interrupt Descriptor Table \\
 LAPIC & Local Advanced Programmable Interrupt Controller \\
 LIT & Logical Interrupt Table \\
+MMU & Memory Management Unit \\
+MMIO & Memory-Mapped I/O \\
 PIC & Programmable Interrupt Controller \\
+PID & Process IDentifier \\
 PIT & Programmable Interrupt Timer \\
-TSS & Task State Segment \\
-TSC & TimeStamp Counter \\
-MMIO & Memory-Mapped I/O  \\
-PID & Process IDentifier  \\
-MMU & Memory Managment Unit  \\
 TID & Thread IDentifier \\
+TSC & TimeStamp Counter \\
+TSS & Task State Segment \\
 VFS & Virtual File System \\
 \end{tabular}
 \\
