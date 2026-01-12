@@ -46,7 +46,9 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then
 else
     echo "Running on host..."
     
-    docker build -t latex-thesis .devcontainer
+    if [ "$SKIP_BUILD" != "true" ]; then
+        docker build -t latex-thesis .devcontainer
+    fi
     if [ -t 0 ]; then
         docker run --rm -it -v "$(pwd):/workspace" latex-thesis ./compile.sh "$@"
     else
