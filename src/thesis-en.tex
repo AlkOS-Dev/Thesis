@@ -494,7 +494,7 @@ Upon power-up or a hardware reset, every processor on the system bus executes a 
 
 Once the BSP is active, its registers are hardwired to specific architecture-defined values. The CPU may optionally perform a Built-In Self-Test (BIST). Subsequently, it fetches and executes the instruction located at the physical address \texttt{0xFFFFFFF0} (the Reset Vector). This address is memory-mapped to the non-volatile system firmware.
 
-\todo[inline]{Intel® 64 and IA-32 Architectures Software Developer’s Manual (SDM) Vol. 3A, Chapter 9}
+For further details, see \cite{IntelManual-Reset}.
 
 \subsubsection{Firmware Interfaces}
 
@@ -508,8 +508,7 @@ $2^20$
 \textbf{UEFI (Unified Extensible Firmware Interface)} \
 UEFI provides a significantly more sophisticated environment. Unlike BIOS, which operates on raw disk sectors, UEFI possesses file system awareness (specifically FAT32). It searches for a specific EFI application file on the EFI System Partition (ESP), loads the executable into RAM, and executes it. Notably, UEFI transitions the processor out of 16-bit Real Mode, typically handing over control in 32-bit or 64-bit Protected Mode.
 
-\todo[inline]{https://uefi.org/specifications}
-\todo[inline]{https://uefi.org/specs/UEFI/2.10\_A/03\_Boot\_Manager.html}
+For the complete specification, refer to \cite{UEFI-Spec, UEFI-BootManager}.
 
 \subsubsection{Multiboot2 Specification}
 
@@ -525,7 +524,7 @@ At this stage, the machine state is defined as follows:
 \item \textbf{Registers:} \texttt{EAX} contains the Multiboot2 magic number (\texttt{0x36d76289}), and \texttt{EBX} contains the physical address of the Multiboot2 information structure.
 \end{itemize}
 
-\todo[inline]{https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html}
+See \cite{Multiboot2-Spec} for the full specification.
 
 While standardized, this state is insufficient for the immediate execution of the AlkOS kernel. The kernel requires a 64-bit Long Mode environment, access to the higher-half of the virtual memory space via paging, and a valid stack for C++ execution. Furthermore, advanced CPU features (such as floating-point units or AVX) remain disabled. Consequently, the boot process requires intermediate initialization stages - \textbf{Loader32} and \textbf{Loader64} - to bridge the gap between the Multiboot2 state and the kernel's requirements. \todo[inline]{Split this between Our Solution and How to implement os (generic)}
 \subsubsection{Loader32}
