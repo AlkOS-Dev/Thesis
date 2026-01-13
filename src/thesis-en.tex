@@ -453,17 +453,146 @@ TODO
 \subsection{System Interface}
 TODO
 
-\section{Minix}
-TODO
+\section{Minix 3}
+
+Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, Minix 3 relocates the majority of operating system components --- including device drivers, file systems, memory management mechanisms, and scheduling services --- into user-space processes. As a result, the kernel's responsibilities are strictly minimized to functions such as message passing, interrupt handling, and low-level scheduling. Currently, the system supports two hardware architectures: x86 and ARM.
+
+This architectural approach provides several notable advantages. By isolating critical system services in user space, Minix 3 significantly improves fault tolerance, as failures in individual components do not lead to the compromise of the entire system. Moreover, these components can be restarted independently, enabling efficient recovery from faults instead of system-wide crashes. The resulting modularity also simplifies system maintenance and evolution, since services may be updated, replaced, or extended without requiring recompilation of the kernel.
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{1\textwidth}{!}{%
+    \begin{tikzpicture}
+    \tikzstyle{every node}=[font=\large]
+
+    % --- Background Layers ---
+    % Kernel Mode Background
+    \draw [fill={rgb,255:red,242; green,242; blue,242}] (2.5,10.75) rectangle (17.25,8.25);
+    % User Mode Background
+    \draw [fill={rgb,255:red,242; green,242; blue,242}] (2.5,18.5) rectangle (17.25,11);
+    
+    % Horizontal Separators
+    \draw [short] (2.5,16) -- (17.25,16);
+    \draw [short] (2.5,13.5) -- (17.25,13.5);
+
+    % --- User Processes Layer (Layer 4) ---
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (2.75,18) rectangle node {\large User Processes} (7,16.5);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (7.25,18) rectangle node {\large Shell} (9.5,16.5);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (9.75,18) rectangle node {\large Make} (12,16.5);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (12.25,18) rectangle node {\large User} (14.5,16.5);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (14.75,18) rectangle node {\LARGE ...} (17,16.5);
+
+    % --- Server Processes Layer (Layer 3) ---
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (2.75,15.5) rectangle node {\large Server Processes} (7,14);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (7.25,15.5) rectangle node {\large File} (9.5,14);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (9.75,15.5) rectangle node {\large PM} (12,14);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (12.25,15.5) rectangle node {\large Sched} (14.5,14);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (14.75,15.5) rectangle node {\LARGE ...} (17,14);
+
+    % --- Device Driver Layer (Layer 2) ---
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (2.75,13) rectangle node {\large Device Processes} (7,11.5);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (7.25,13) rectangle node {\large Disk} (9.5,11.5);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (9.75,13) rectangle node {\large TTY} (12,11.5);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (12.25,13) rectangle node {\large Net} (14.5,11.5);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (14.75,13) rectangle node {\LARGE ...} (17,11.5);
+
+    % --- Kernel Layer (Layer 1) ---
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (2.75,10.25) rectangle node {\large Kernel} (7.25,8.75);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (7.75,10.25) rectangle node {\large Clock Task} (12,8.75);
+    \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (12.5,10.25) rectangle node {\large System Task} (17,8.75);
+    
+    % --- Labels and Brackets ---
+    % User Mode bracket
+    \draw [thick] (2.0,11) -- (2.0,18.5);
+    \draw [thick] (2.0,11) -- (2.2,11);
+    \draw [thick] (2.0,18.5) -- (2.2,18.5);
+    \node[left, align=center] at (1.8,14.75) {\large \textbf{User}\\\large \textbf{Mode}};
+    
+    % Kernel Mode bracket
+    \draw [thick] (2.0,8.25) -- (2.0,10.75);
+    \draw [thick] (2.0,8.25) -- (2.2,8.25);
+    \draw [thick] (2.0,10.75) -- (2.2,10.75);
+    \node[left, align=center] at (1.8,9.5) {\large \textbf{Kernel}\\\large \textbf{Mode}};
+    
+    % --- Right Side Layer Labels ---
+    \node[right] at (17.5, 17.25) {\large \textbf{Layer 4}};
+    \node[right] at (17.5, 14.75) {\large \textbf{Layer 3}};
+    \node[right] at (17.5, 12.25) {\large \textbf{Layer 2}};
+    \node[right] at (17.5, 9.5)   {\large \textbf{Layer 1}};
+    
+    \end{tikzpicture}
+  }%
+\caption{The Minix 3 Microkernel Architecture}
+\label{fig:minix_architecture}
+\end{figure}
 
 \subsection{Scheduler}
-TODO
-\subsection{Timing}
-TODO
+Adhering to the microkernel philosophy, Minix 3 separates scheduling policy from the low-level context switching mechanism. While the kernel remains responsible for the mechanics of context switching and interrupt handling, scheduling decisions are delegated to a dedicated user-space server, referred to as the \texttt{Sched} server.
+
+The scheduler employs a multi-level priority round-robin algorithm \cite{minix_sched}. The system maintains sixteen priority queues organized hierarchically. Kernel tasks occupy the highest priority levels, followed by device drivers, system servers, and user applications. The lowest priority queue is reserved exclusively for idle tasks. At any scheduling decision point, the scheduler selects the next runnable process from the highest non-empty priority queue.
+
+Every process is assigned a specific time quantum, representing the maximum CPU time allowed before preemption occurs. Upon the exhaustion of a process's time quantum, the kernel notifies the scheduler server. To penalize CPU-bound tasks and maintain system responsiveness, the scheduler lowers the priority of such processes, moving them to a lower queue.
+
+To prevent indefinite starvation of low-priority processes, a \texttt{balance\_queues} function executes periodically at five-second intervals \cite{minix_sched_bq}. This function re-evaluates process states and promotes tasks that have not received CPU time for an extended period, thereby ensuring that interactive applications remain responsive.
+
+\subsection{Timing Subsystem}
+The timing subsystem in Minix 3 is responsible for maintaining system time, coordinating scheduling intervals, and handling alarms and timers. The core timing functionality is encapsulated within the Clock Task, a kernel-level process that manages time-related operations.
+
+\subsubsection*{Hardware Abstraction}
+Minix 3 provides an abstraction layer over platform-specific timing hardware. On x86 systems, this includes the legacy Programmable Interval Timer (PIT) \cite{osdev-pit}, while ARM-based platforms rely on board-specific timer implementations \cite{minix_arch_clock}. During system initialization, the kernel configures the selected hardware timer to generate periodic interrupts. If not specified in the kernel environment, the default interrupt frequency is architecture-dependent: 60 Hz on x86 and 1000 Hz on ARM systems.
+
+\subsubsection*{Timers and Alarms}
+The kernel maintains a \texttt{clock\_timers} queue to manage synchronous timers and alarms \cite{minix_kernel_clock}. Upon receipt of a hardware timer interrupt, the \texttt{timer\_int\_handler} routine is executed. If the expiration time of the next scheduled timer in the \texttt{clock\_timers} queue has been reached, the kernel executes the associated callback function. 
+
+In the case of system alarms, this callback is the \texttt{cause\_alarm} function \cite{minix_do_setalarm}. This function sends a notification message from the Clock Task to the requesting process (e.g., the Process Manager or Scheduler), informing it that the requested time interval has elapsed. This mechanism allows user-space servers to perform periodic tasks, such as the scheduler's queue balancing.
+
+\subsubsection*{Real-Time Clock (RTC)}
+Persistent wall-clock time is provided by a dedicated user-space driver, \texttt{readclock}. This driver interfaces directly with the CMOS Real-Time Clock (RTC) to retrieve the current date and time. During system initialization, this information is communicated to the process manager to establish the system's initial time reference \cite{minix_readclock}.
+
 \subsection{Memory Management}
-TODO
+Memory management in Minix 3 is primarily handled by the user-space Virtual Memory (VM) server. The kernel retains control over the hardware Memory Management Unit (MMU) and address space switching but delegates higher-level memory policies to the VM server.
+
+\subsubsection*{VM Server}
+The VM server is responsible for memory region allocation, page table administration, and page fault handling. It implements a region-based memory model in which a process address space is divided into contiguous regions with defined access permissions (read, write, and execute). To efficiently manage free and allocated memory regions, the VM server uses \textbf{AVL tree} \cite{minix_vm}.
+
+\subsubsection*{Allocation and Paging}
+Internal memory allocation for kernel data structures and VM metadata is performed using a slab allocator. Minix 3 supports demand paging: when a process attempts to access an unmapped virtual address, a page fault is raised. The kernel intercepts this exception and forwards the fault information to the VM server, which resolves it by mapping an appropriate physical frame or retrieving the required page from secondary storage \cite{shenoy_lecture}.
+
+\subsubsection*{Memory Grants} Due to the strict isolation of address spaces in the microkernel architecture, processes cannot directly access the memory of others. To facilitate the exchange of large data structures without violating protection boundaries, Minix 3 provides a capability-based mechanism known as \textit{Memory Grants}, accessed via the \texttt{safecopy} API \cite{minix_safecopy}.
+
+A process (the grantor) dynamically generates a grant capability that explicitly permits a specific peer process (the grantee) to read from or write to a designated memory range. The grantee utilizes this grant ID to request a data transfer from the System Task. The kernel validates the grant permissions before performing the copy operation between the disjoint address spaces. This mechanism ensures that drivers and servers can operate on client buffers while preventing unauthorized access to arbitrary memory locations.
+
 \subsection{System Interface}
-TODO
+Although Minix 3 conforms to the POSIX standard, its underlying system interface differs substantially from monolithic operating systems due to its message-based microkernel architecture.
+
+\subsubsection*{IPC Primitives}
+Inter-process communication (IPC) is built upon four fundamental primitives provided by the kernel. For each operation, the kernel mediates communication by copying message contents directly from the sender's address space to that of the receiver.
+\begin{itemize}
+    \item \texttt{send(dest, \&message)}: Sends a message to the specified destination. The sender blocks if the destination is not ready to receive.
+    \item \texttt{receive(source, \&message)}: Blocks the calling process until a message is received from the specified source.
+    \item \texttt{sendrec(src\_dest, \&message)}: A combined operation that sends a message and then blocks until a reply is received from the same process.
+    \item \texttt{notify(dest)}: A non-blocking signaling mechanism used to inform a destination of an event without transmitting a data payload.
+\end{itemize}
+
+\subsubsection*{Communication Policies}
+IPC in Minix 3 is governed by these strict policies:
+\begin{enumerate}
+    \item \textbf{Access Control:} Processes may exchange messages only with explicitly authorized peers.
+    \item \textbf{Hierarchical Communication:} Message flow generally follows the system's layered architecture (Layer 4 $\rightarrow$ Layer 3 $\rightarrow$ Layer 2).
+    \item \textbf{User-Space Isolation:} User processes are prohibited from communicating directly with one another or with the kernel.
+\end{enumerate}
+
+\subsubsection*{System Call Implementation}
+In Minix 3, system calls are not implemented as direct kernel invocations. Instead, standard library functions (e.g., \texttt{read}, \texttt{fork}) serve as wrappers that construct a message containing the call arguments and transmit it to the appropriate server using the \texttt{sendrec} primitive \cite{minix_ipc}. If the server needs to perform a privileged operation, it forwards the request to the System Task on behalf of the calling process, as servers possess higher privileges than user processes.
+
+\subsubsection*{Server Delegation}
+System calls are dispatched to specialized servers according to their functionality \cite{minix_callnr}:
+\begin{itemize}
+    \item \textbf{Process Manager (PM):} Responsible for process lifecycle operations such as \texttt{fork}, \texttt{exec}, \texttt{exit}, and \texttt{wait}.
+    \item \textbf{Virtual File System (VFS):} Handles file-related operations including \texttt{open}, \texttt{read}, \texttt{write}, and \texttt{stat}.
+\end{itemize}
+The kernel acts solely as a transport mechanism and remains agnostic to the semantics of the system call. After processing a request, the server returns a reply message to the calling process, thereby unblocking it and delivering the result.
+
 
 % ==================================================================
 
@@ -1707,6 +1836,12 @@ TODO
 \subsection{Scheduler Tests}
 TODO
 
+\chapter{Future Work}
+TODO
+
+\chapter{Conclusion}
+TODO
+
 % ------------------------------- BIBLIOGRAPHY ---------------------------
 
 \printbibliography[heading=bibintoc]
@@ -1724,6 +1859,7 @@ API & Application Programming Interface \\
 APIC & Advanced Programmable Interrupt Controller \\
 CRTP & Curiously Recurring Template Pattern \\
 IDT & Interrupt Descriptor Table \\
+IPC & Inter-Process Communication \\
 ISR & Interrupt Service Routine \\
 LAPIC & Local Advanced Programmable Interrupt Controller \\
 LIT & Logical Interrupt Table \\
@@ -1732,7 +1868,8 @@ MMIO & Memory-Mapped I/O \\
 MMU & Memory Management Unit \\
 PIC & Programmable Interrupt Controller \\
 PID & Process IDentifier \\
-PIT & Programmable Interrupt Timer \\
+PIT & Programmable Interval Timer \\
+RTC & Real-Time Clock \\
 TID & Thread IDentifier \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
