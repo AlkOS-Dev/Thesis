@@ -2,37 +2,36 @@
 
 @manual{IntelManual-Interrupts,
   author  = {Intel Corporation},
-  title   = {Intel Manual - Software Developer's manual combined},
-  volume  = {3A},
+  title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
   pages   = {199--257},
   url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html}
 },
 
 @manual{IntelManual-Segments,
   author  = {Intel Corporation},
-  title   = {Intel Manual - Software Developer's manual combined},
+  title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
   pages   = {85--100},
   url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html}
 },
 
 @manual{IntelManual-TSC,
   author  = {Intel Corporation},
-  title   = {Intel Manual - Software Developer's manual combined},
-  pages   = {684-686},
+  title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
+  pages   = {684--686},
   url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html}
 },
 
 @manual{IntelManual-APIC,
   author  = {Intel Corporation},
-  title   = {Intel Manual - Software Developer's manual combined},
-  pages   = {393-443},
+  title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
+  pages   = {393--443},
   url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html}
 },
 
 @manual{IntelManual-LAPIC-Timer,
   author  = {Intel Corporation},
-  title   = {Intel Manual - Software Developer's manual combined},
-  pages   = {408-409},
+  title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
+  pages   = {408--409},
   url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html}
 },
 
@@ -68,6 +67,12 @@
   author  = {OsDev community},
   title   = {OsDev - LAPIC Timer},
   url     = {https://wiki.osdev.org/APIC_Timer}
+},
+
+@manual{osdev-pit,
+  author  = {OsDev community},
+  title   = {OsDev - PIT},
+  url     = {https://wiki.osdev.org/Programmable_Interval_Timer}
 },
 
 %% Bootloader
@@ -112,8 +117,8 @@
 % FAT SPEC
 
 @techreport{fat-spec,
-  title        = {{FAT32} File System Specification: {FAT}: General Overview of On-Disk Format},
-  author       = {{Microsoft Corporation}},
+  author       = {Microsoft Corporation},
+  title        = {FAT32 File System Specification: FAT: General Overview of On-Disk Format},
   institution  = {Microsoft Corporation},
   year         = {2000},
   month        = {December},
@@ -121,8 +126,7 @@
   type         = {Hardware White Paper},
   number       = {Version 1.03},
   note         = {Designing Hardware for Microsoft Operating Systems, Microsoft Extensible Firmware Initiative},
-  url          = {https://www.cs.fsu.edu/~cop4610t/assignments/project3/spec/fatspec.pdf},
-  keywords     = {FAT12, FAT16, FAT32, file system, file allocation table}
+  url          = {https://www.cs.fsu.edu/~cop4610t/assignments/project3/spec/fatspec.pdf}
 },
 
 % CPPREFERENCE
@@ -131,4 +135,91 @@
   author  = {cppreference.com},
   title   = {Curiously Recurring Template Pattern},
   url     = {https://en.cppreference.com/w/cpp/language/crtp}
+},
+
+% MINIX 3
+
+@misc{minix_repo,
+  author = {Stichting MINIX Research Foundation},
+  title  = {MINIX 3 Operating System Repository},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix}
+},
+
+@misc{minix_sched,
+  author = {Stichting MINIX Research Foundation},
+  title  = {Scheduling Implementation},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/servers/sched/schedule.c},
+  howpublished = {Source Code}
+},
+
+@misc{minix_sched_bq,
+  author = {Stichting MINIX Research Foundation},
+  title  = {Queue Balancing Logic},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/servers/sched/schedule.c},
+  howpublished = {Source Code},
+  note   = {See function \texttt{balance\_queues()}}
+},
+
+@misc{minix_arch_clock,
+  author = {Stichting MINIX Research Foundation},
+  title  = {Architecture Dependent Clock},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/arch/earm/arch_clock.c},
+  howpublished = {Source Code}
+},
+
+@misc{minix_kernel_clock,
+  author = {Stichting MINIX Research Foundation},
+  title  = {Kernel Clock Driver},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/clock.c},
+  howpublished = {Source Code}
+},
+
+@misc{minix_do_setalarm,
+  author = {Stichting MINIX Research Foundation},
+  title  = {Set Alarm System Call Handler},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/system/do_setalarm.c},
+  howpublished = {Source Code}
+},
+
+@misc{minix_readclock,
+  author = {Stichting MINIX Research Foundation},
+  title  = {Readclock Driver},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/drivers/clock/readclock/readclock.c},
+  howpublished = {Source Code}
+},
+
+@misc{minix_vm,
+  author = {Stichting MINIX Research Foundation},
+  title  = {Virtual Memory Server},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/tree/master/minix/servers/vm/},
+  howpublished = {Source Code}
+},
+
+@misc{minix_ipc,
+  author = {Stichting MINIX Research Foundation},
+  title  = {Inter-Process Communication Header},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/include/minix/ipc.h},
+  howpublished = {Source Code}
+},
+
+@misc{minix_callnr,
+  author = {Stichting MINIX Research Foundation},
+  title  = {System Call Numbers},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/include/minix/callnr.h},
+  howpublished = {Source Code}
+},
+
+@misc{minix_safecopy,
+  author = {Stichting MINIX Research Foundation},
+  title  = {SafeCopy and Grant Mechanism},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/system/do_safecopy.c},
+  howpublished = {Source Code}
+},
+
+@misc{shenoy_lecture,
+  author      = {Shenoy, Prashant},
+  title       = {Lecture 11: Memory Management},
+  institution = {University of Massachusetts Amherst},
+  year        = {2020},
+  url         = {https://lass.cs.umass.edu/~shenoy/courses/spring20/lectures/lecture11-scribe.pdf}
 },
