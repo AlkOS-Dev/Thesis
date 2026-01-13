@@ -535,7 +535,7 @@ Every process is assigned a specific time quantum, representing the maximum CPU 
 
 To prevent indefinite starvation of low-priority processes, a \texttt{balance\_queues} function executes periodically at five-second intervals \cite{minix_sched_bq}. This function re-evaluates process states and promotes tasks that have not received CPU time for an extended period, thereby ensuring that interactive applications remain responsive.
 
-\subsection{Timing Subsystem}
+\subsection{Timing}
 The timing subsystem in Minix 3 is responsible for maintaining system time, coordinating scheduling intervals, and handling alarms and timers. The core timing functionality is encapsulated within the Clock Task, a kernel-level process that manages time-related operations.
 
 \subsubsection*{Hardware Abstraction}
@@ -547,18 +547,19 @@ The kernel maintains a \texttt{clock\_timers} queue to manage synchronous timers
 In the case of system alarms, this callback is the \texttt{cause\_alarm} function \cite{minix_do_setalarm}. This function sends a notification message from the Clock Task to the requesting process (e.g., the Process Manager or Scheduler), informing it that the requested time interval has elapsed. This mechanism allows user-space servers to perform periodic tasks, such as the scheduler's queue balancing.
 
 \subsubsection*{Real-Time Clock (RTC)}
-Persistent wall-clock time is provided by a dedicated user-space driver, \texttt{readclock}. This driver interfaces directly with the CMOS Real-Time Clock (RTC) to retrieve the current date and time. During system initialization, this information is communicated to the process manager to establish the system's initial time reference \cite{minix_readclock}.
+Persistent wall-clock time is provided by a dedicated user-space driver, \texttt{readclock}. This driver interfaces directly with the CMOS Real-Time Clock (RTC) to retrieve the current date and time. During system initialization, this information is communicated to the Process Manager to establish the system's initial time reference \cite{minix_readclock}.
 
 \subsection{Memory Management}
 Memory management in Minix 3 is primarily handled by the user-space Virtual Memory (VM) server. The kernel retains control over the hardware Memory Management Unit (MMU) and address space switching but delegates higher-level memory policies to the VM server.
 
 \subsubsection*{VM Server}
-The VM server is responsible for memory region allocation, page table administration, and page fault handling. It implements a region-based memory model in which a process address space is divided into contiguous regions with defined access permissions (read, write, and execute). To efficiently manage free and allocated memory regions, the VM server uses \textbf{AVL tree} \cite{minix_vm}.
+The VM server is responsible for memory region allocation, page table administration, and page fault handling. It implements a region-based memory model in which a process address space is divided into contiguous regions with defined access permissions (read, write, and execute). To efficiently manage free and allocated memory regions, the VM server uses \textbf{AVL trees} \cite{minix_vm}.
 
 \subsubsection*{Allocation and Paging}
 Internal memory allocation for kernel data structures and VM metadata is performed using a slab allocator. Minix 3 supports demand paging: when a process attempts to access an unmapped virtual address, a page fault is raised. The kernel intercepts this exception and forwards the fault information to the VM server, which resolves it by mapping an appropriate physical frame or retrieving the required page from secondary storage \cite{shenoy_lecture}.
 
-\subsubsection*{Memory Grants} Due to the strict isolation of address spaces in the microkernel architecture, processes cannot directly access the memory of others. To facilitate the exchange of large data structures without violating protection boundaries, Minix 3 provides a capability-based mechanism known as \textit{Memory Grants}, accessed via the \texttt{safecopy} API \cite{minix_safecopy}.
+\subsubsection*{Memory Grants}
+Due to the strict isolation of address spaces in the microkernel architecture, processes cannot directly access the memory of others. To facilitate the exchange of large data structures without violating protection boundaries, Minix 3 provides a capability-based mechanism known as \texttt{Memory Grants}, accessed via the \texttt{safecopy} API \cite{minix_safecopy}.
 
 A process (the grantor) dynamically generates a grant capability that explicitly permits a specific peer process (the grantee) to read from or write to a designated memory range. The grantee utilizes this grant ID to request a data transfer from the System Task. The kernel validates the grant permissions before performing the copy operation between the disjoint address spaces. This mechanism ensures that drivers and servers can operate on client buffers while preventing unauthorized access to arbitrary memory locations.
 
