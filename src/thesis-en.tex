@@ -405,7 +405,9 @@ TODO
 \subsection{Bootloader}
 \label{subsec:theory_bootloader}
 
-The process of bringing a computer from a powered-off state to a fully functional operating system is governed by a rigid chain of physical and logical constraints. At the hardware level, the Central Processing Unit (CPU) functions as a complex state machine. Upon the application of power or a reset signal, the CPU resets its internal registers to default values and sets the Instruction Pointer to a specific, hardcoded physical address known as the \textit{Reset Vector}.
+
+
+The process of bringing a computer from a powered-off state to a fully functional operating system is governed by a rigid chain of physical and logical constraints. At the hardware level, the Central Processing Unit (CPU) functions as a complex state machine. Upon the application of power or a reset signal, the CPU resets its internal registers to default values and sets the Instruction Pointer to a specific, hardcoded physical address known as the \textit{Reset Vector} \cite{IntelManual-Reset}.
 
 \subsubsection{The Memory Paradox and Storage}
 A fundamental challenge in this sequence is the source of the initial instructions. The standard Random Access Memory (RAM), which serves as the primary workspace for modern operating systems, is volatile. It requires active electrical flow to maintain its state. When the system is powered off, the state is lost; upon power-up, the memory cells contain random garbage data. Consequently, the CPU cannot fetch valid instructions from standard RAM immediately after a reset.
@@ -413,7 +415,7 @@ A fundamental challenge in this sequence is the source of the initial instructio
 To resolve this, hardware architects map the Reset Vector address to a non-volatile memory region, typically Flash Memory or Read-Only Memory (ROM), which retains data without power.
 
 \subsubsection{Embedded vs. Complex Architectures}
-In simple embedded architectures (e.g., microcontrollers used in automotive braking systems or household appliances), the entire application code is often stored in this non-volatile memory. The memory controller maps this storage directly into the CPU's addressable space. This technique, known as \textbf{Execute In Place (XIP)}, allows the CPU to fetch and execute the developer's code from the very first clock cycle. The developer "owns" the machine from the first nanosecond.
+In simple embedded architectures (e.g., microcontrollers used in automotive braking systems or household appliances), the entire application code is often stored in this non-volatile memory. The memory controller maps this storage directly into the CPU's addressable space. This technique, known as \textbf{Execute In Place (XIP)}, allows the CPU to fetch and execute the developer's code from the very first clock cycle \cite{ARM-CortexM4-Generic-User-Guide}. The developer "owns" the machine from the first nanosecond.
 
 In contrast, more complex architectures (such as ARM-based smartphones or single-board computers like the Raspberry Pi) often store the main operating system on external, complex storage media like SD cards or eMMC chips. The CPU cannot simply memory-map an SD card; it requires a sophisticated software driver to communicate with the storage controller. To bridge this gap, manufacturers embed a tiny, immutable piece of software called the \textbf{BootROM} directly into the silicon. This code initializes the minimal required hardware (often internal SRAM) and loads a secondary bootloader from the external storage into that SRAM, which in turn loads the main software.
 
@@ -517,7 +519,7 @@ On modern "heavy" machines, such as x86-64 workstations, the initialization proc
 To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution.
 
 \subsubsection{The Chain of Trust and Abstraction}
-By the time a modern Operating System kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for defining the interface between the hardware and the OS is the \textbf{System Firmware}.
+By the time a modern Operating System kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for defining the interface between the hardware and the OS is the \textbf{System Firmware} \cite{UEFI-Base-Spec, UEFI-PI-Spec}.
 
 The firmware's responsibility is to abstract the diverse implementations of different motherboards (e.g., how the disk controller is wired) and provide a mechanism to load an OS from a disk into RAM. However, relying solely on firmware is often insufficient for a portable operating system:
 \begin{itemize}
@@ -526,7 +528,7 @@ The firmware's responsibility is to abstract the diverse implementations of diff
     \item \textbf{Interface Variance:} The method used to retrieve a memory map or video configuration can vary wildly between hardware generations.
 \end{itemize}
 
-To solve this, a \textbf{Third-Party Bootloader} is often utilized. This program acts as a "Normalizer." It knows how to talk to various firmware types and storage devices. Its job is to abstract away the firmware differences, load the kernel file into memory, and pass control to the OS in a unified, predictable manner.
+To solve this, a \textbf{Third-Party Bootloader} is often utilized. This program acts as a "Normalizer" \cite{Limine-Spec}. It knows how to talk to various firmware types and storage devices. Its job is to abstract away the firmware differences, load the kernel file into memory, and pass control to the OS in a unified, predictable manner.
 
 \begin{figure}[htbp]
 \centering
