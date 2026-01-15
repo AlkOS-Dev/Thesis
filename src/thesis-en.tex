@@ -148,7 +148,7 @@
 % --------------------------- DRAWING ---------------------
 
 \usepackage{tikz}
-\usetikzlibrary{shapes, arrows.meta, positioning, calc, chains}
+\usetikzlibrary{fit, backgrounds, shapes, arrows.meta, positioning, calc, chains}
 \usepackage[colorinlistoftodos]{todonotes}
 
 % --------------------------- CHAPTER HEADERS ---------------------
@@ -417,6 +417,96 @@ In simple embedded architectures (e.g., microcontrollers used in automotive brak
 
 In contrast, more complex architectures (such as ARM-based smartphones or single-board computers like the Raspberry Pi) often store the main operating system on external, complex storage media like SD cards or eMMC chips. The CPU cannot simply memory-map an SD card; it requires a sophisticated software driver to communicate with the storage controller. To bridge this gap, manufacturers embed a tiny, immutable piece of software called the \textbf{BootROM} directly into the silicon. This code initializes the minimal required hardware (often internal SRAM) and loads a secondary bootloader from the external storage into that SRAM, which in turn loads the main software.
 
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    % Standard block style
+    block/.style={
+        rectangle, 
+        draw=black!70, 
+        rounded corners=3pt, 
+        minimum width=2.2cm, 
+        minimum height=1cm, 
+        align=center, 
+        fill=white,
+        font=\small
+    },
+    % Style for the "Silicon" container
+    soc/.style={
+        rectangle,
+        draw=black!40,
+        dashed,
+        fill=gray!5,
+        rounded corners=5pt,
+        inner sep=0.5cm
+    },
+    % Arrow styles
+    arrow/.style={-Latex, thick, color=black!80},
+    data/.style={-Latex, thick, dashed, color=black!80},
+    % Label style for arrows
+    lbl/.style={
+        font=\footnotesize\bfseries, 
+        fill=white, 
+        inner sep=1pt,
+        text=black!80
+    }
+]
+
+% =========================================================
+% LEFT SIDE: SIMPLE XIP
+% =========================================================
+
+\node (cpu1) [block, fill=blue!10] {CPU};
+\node (flash) [block, below=1.5cm of cpu1, fill=orange!10] {NOR Flash\\(Memory Mapped)};
+\node (label1) [above=0.1cm of cpu1, font=\bfseries] {Simple (XIP)};
+
+% Arrow
+\draw[arrow] (cpu1) -- node[midway, right, font=\footnotesize] {Direct Fetch} (flash);
+
+
+% =========================================================
+% RIGHT SIDE: COMPLEX BOOT
+% =========================================================
+
+% We place CPU2 to the right
+\node (cpu2) [block, right=6cm of cpu1, fill=blue!10] {CPU};
+
+% Define relative positions for BootROM and SRAM relative to CPU2
+\node (bootrom) [block, below left=1.2cm and -0.5cm of cpu2, fill=gray!20] {BootROM\\(Immutable)};
+\node (sram) [block, below right=1.2cm and -0.5cm of cpu2, fill=green!10] {Internal\\SRAM};
+
+% Draw the SoC Boundary around them
+\begin{scope}[on background layer]
+    \node (soc_box) [soc, fit=(cpu2) (bootrom) (sram), label={[anchor=south west, inner sep=5pt]north west:\tiny System on Chip (SoC)}] {};
+\end{scope}
+
+% External Storage below the SoC
+\node (sdcard) [block, below=1.0cm of soc_box, fill=orange!10] {SD Card / Disk\\(External)};
+\node (label2) [above=0.5cm of soc_box, font=\bfseries] {Complex (Bootload)};
+
+
+% =========================================================
+% ARROWS & FLOW (Complex)
+% =========================================================
+
+% 1. Power On -> BootROM
+\draw[arrow] (cpu2) -- node[lbl, pos=0.6] {1. Init} (bootrom);
+
+% 2. BootROM -> External
+\draw[arrow] (bootrom) -- node[lbl, pos=0.4] {2. Load} (sdcard);
+
+% 3. External -> SRAM (Data copy)
+\draw[data] (sdcard) -- node[lbl, pos=0.4] {3. Copy} (sram);
+
+% 4. CPU -> SRAM (Execution)
+\draw[arrow] (cpu2) -- node[lbl, pos=0.6] {4. Jump} (sram);
+
+\end{tikzpicture}
+\caption{Comparison of Boot Architectures}
+\label{fig:boot_methods}
+\end{figure}
+
 On modern "heavy" machines, such as x86-64 workstations, the initialization process is exponentially more complex. The main CPU is fragile and dependent on a specific environment to function. Before the main cores can execute a single instruction, the hardware requires:
 \begin{enumerate}
     \item \textbf{Power Sequencing:} Multiple voltage rails (Vcore, VccSA, VccIO) must be brought up in a specific order with millisecond-precision timing.
@@ -437,6 +527,30 @@ The firmware's responsibility is to abstract the diverse implementations of diff
 \end{itemize}
 
 To solve this, a \textbf{Third-Party Bootloader} is often utilized. This program acts as a "Normalizer." It knows how to talk to various firmware types and storage devices. Its job is to abstract away the firmware differences, load the kernel file into memory, and pass control to the OS in a unified, predictable manner.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1cm,
+    stage/.style={rectangle, draw, fill=white, text width=4cm, align=center, minimum height=1cm},
+    arrow/.style={-Latex, thick}
+]
+
+\node (power) [stage, fill=gray!10] {\textbf{Hardware Power-On}\\(Reset Vector)};
+\node (firmware) [stage, below=of power] {\textbf{System Firmware}\\(BIOS / UEFI)};
+\node (loader) [stage, below=of firmware] {\textbf{Bootloader}\\(GRUB / Limine)};
+\node (trampoline) [stage, below=of loader] {\textbf{OS Trampoline}\\(Arch Specific)};
+\node (kernel) [stage, below=of trampoline, fill=gray!30] {\textbf{Kernel Main}\\(Arch Agnostic)};
+
+\draw[arrow] (power) -- node[right, font=\footnotesize] {Init Platform} (firmware);
+\draw[arrow] (firmware) -- node[right, font=\footnotesize] {Load from Disk} (loader);
+\draw[arrow] (loader) -- node[right, font=\footnotesize] {Normalize State} (trampoline);
+\draw[arrow] (trampoline) -- node[right, font=\footnotesize] {Enable Features (AVX, Paging)} (kernel);
+
+\end{tikzpicture}
+\caption{Typical Boot Chain for x86_64}
+\label{fig:boot_chain}
+\end{figure}
 
 \subsubsection{The OS-Level Trampoline}
 Even with a standardized bootloader, the kernel cannot assume full control immediately. A generic bootloader cannot know the specific internal requirements of the OS. For instance:
