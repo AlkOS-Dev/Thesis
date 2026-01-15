@@ -417,7 +417,6 @@ In simple embedded architectures (e.g., microcontrollers used in automotive brak
 
 In contrast, more complex architectures (such as ARM-based smartphones or single-board computers like the Raspberry Pi) often store the main operating system on external, complex storage media like SD cards or eMMC chips. The CPU cannot simply memory-map an SD card; it requires a sophisticated software driver to communicate with the storage controller. To bridge this gap, manufacturers embed a tiny, immutable piece of software called the \textbf{BootROM} directly into the silicon. This code initializes the minimal required hardware (often internal SRAM) and loads a secondary bootloader from the external storage into that SRAM, which in turn loads the main software.
 
-\subsubsection{The Complexity of the x86 Platform}
 On modern "heavy" machines, such as x86-64 workstations, the initialization process is exponentially more complex. The main CPU is fragile and dependent on a specific environment to function. Before the main cores can execute a single instruction, the hardware requires:
 \begin{enumerate}
     \item \textbf{Power Sequencing:} Multiple voltage rails (Vcore, VccSA, VccIO) must be brought up in a specific order with millisecond-precision timing.
@@ -427,27 +426,27 @@ On modern "heavy" machines, such as x86-64 workstations, the initialization proc
 
 To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution.
 
-\subsubsection{The Role of Firmware and Bootloaders}
-By the time a modern Operating System kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for handing over control to the OS is the system Firmware (Legacy BIOS or UEFI).
+\subsubsection{The Chain of Trust and Abstraction}
+By the time a modern Operating System kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for defining the interface between the hardware and the OS is the \textbf{System Firmware}.
 
-The firmware's responsibility is to abstract the diverse hardware implementations of different motherboards and provide a mechanism to load an OS from a disk. However, relying solely on firmware is insufficient for a portable operating system for several reasons:
+The firmware's responsibility is to abstract the diverse implementations of different motherboards (e.g., how the disk controller is wired) and provide a mechanism to load an OS from a disk into RAM. However, relying solely on firmware is often insufficient for a portable operating system:
 \begin{itemize}
-    \item \textbf{Inconsistent State:} The state of the CPU (interrupts, paging, modes) varies significantly between BIOS and UEFI.
-    \item \textbf{Feature Limitations:} Firmware often leaves the CPU in a conservative state (e.g., 16-bit Real Mode or 32-bit Protected Mode) with advanced features disabled.
-    \item \textbf{Format Differences:} BIOS loads raw sectors, while UEFI understands file systems.
+    \item \textbf{Inconsistent State:} Different firmware implementations may leave the CPU in varying states (e.g., different interrupt configurations or privilege modes).
+    \item \textbf{Feature Limitations:} Firmware is designed to be simple and compatible, often leaving the CPU in a conservative, low-feature mode with caches or advanced vector units disabled.
+    \item \textbf{Interface Variance:} The method used to retrieve a memory map or video configuration can vary wildly between hardware generations.
 \end{itemize}
 
-To solve this, a third-party \textbf{Bootloader} (such as GRUB or Limine) is utilized. The bootloader normalizes the environment, abstracting away the underlying firmware differences, and loads the kernel file into memory.
+To solve this, a \textbf{Third-Party Bootloader} is often utilized. This program acts as a "Normalizer." It knows how to talk to various firmware types and storage devices. Its job is to abstract away the firmware differences, load the kernel file into memory, and pass control to the OS in a unified, predictable manner.
 
-\subsubsection{The OS-Level Bootloader}
-Even with a standardized bootloader, the kernel cannot assume full control immediately. The generic bootloader cannot know the specific requirements of the OS kernel. For instance:
+\subsubsection{The OS-Level Trampoline}
+Even with a standardized bootloader, the kernel cannot assume full control immediately. A generic bootloader cannot know the specific internal requirements of the OS. For instance:
 \begin{itemize}
-    \item The kernel may require the memory to be mapped to the higher half of the virtual address space.
-    \item Floating-point units (FPU, SSE, AVX) are typically disabled at boot and must be explicitly enabled; attempting to use them without initialization results in hardware exceptions.
-    \item The OS must define its own Global Descriptor Table (GDT) and Interrupt Descriptor Table (IDT) to enforce its specific security model and segment access rights.
+    \item The kernel may typically require memory to be mapped to a specific virtual address range (e.g., the higher half).
+    \item Specific hardware features (like Floating Point Units or Virtualization Extensions) are often disabled by default to save power and must be explicitly enabled.
+    \item The OS must define its own memory protection structures to enforce its specific security model.
 \end{itemize}
 
-Therefore, a robust operating system must implement its own initialization stage—effectively an \textbf{OS-Level Bootloader} or "Trampoline." This architecture-specific code is responsible for taking the machine from the normalized state provided by the external bootloader, enabling the specific CPU features required by the kernel (Virtualization extensions, AVX, Paging modes), and establishing the runtime environment (Stack, Virtual Memory) before passing control to the architecture-agnostic kernel main function.
+Therefore, a robust operating system must implement its own initialization stage, effectively an \textbf{OS-Level Bootloader} or "Trampoline." This architecture-specific code is responsible for taking the machine from the normalized state provided by the external bootloader, enabling the specific CPU features required by the kernel, and establishing the runtime environment before passing control to the architecture-agnostic kernel main function.
 
 \subsection{Memory Preloading and Discovery}
 TODO
@@ -686,7 +685,7 @@ TODO
 TODO
 
 \section{Bootloader}
-\todo[inline]{Loader32 and Loader64 are very simplified here}
+\todo[inline]{Loader32 and Loader64 are very simplified here. This is very much in progress. Don't read it}
 
 Before the architecture-agnostic kernel can commence execution, the underlying hardware must be brought to a known, deterministic state. As discussed in Section \ref{subsec:theory_bootloader}, the initialization protocols differ significantly depending on the specific hardware architecture and the firmware interface.
 
