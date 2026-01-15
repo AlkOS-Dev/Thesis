@@ -403,7 +403,52 @@ TODO
 \subsection{Implementation of Libc and Libc++}
 TODO
 \subsection{Bootloader}
-TODO
+\label{subsec:theory_bootloader}
+
+The process of bringing a computer from a powered-off state to a fully functional operating system is governed by a rigid chain of physical and logical constraints. At the hardware level, the Central Processing Unit (CPU) functions as a complex state machine. Upon the application of power or a reset signal, the CPU resets its internal registers to default values and sets the Instruction Pointer to a specific, hardcoded physical address known as the \textit{Reset Vector}.
+
+\subsubsection{The Memory Paradox and Storage}
+A fundamental challenge in this sequence is the source of the initial instructions. The standard Random Access Memory (RAM), which serves as the primary workspace for modern operating systems, is volatile. It requires active electrical flow to maintain its state. When the system is powered off, the state is lost; upon power-up, the memory cells contain random garbage data. Consequently, the CPU cannot fetch valid instructions from standard RAM immediately after a reset.
+
+To resolve this, hardware architects map the Reset Vector address to a non-volatile memory region, typically Flash Memory or Read-Only Memory (ROM), which retains data without power.
+
+\subsubsection{Embedded vs. Complex Architectures}
+In simple embedded architectures (e.g., microcontrollers used in automotive braking systems or household appliances), the entire application code is often stored in this non-volatile memory. The memory controller maps this storage directly into the CPU's addressable space. This technique, known as \textbf{Execute In Place (XIP)}, allows the CPU to fetch and execute the developer's code from the very first clock cycle. The developer "owns" the machine from the first nanosecond.
+
+In contrast, more complex architectures (such as ARM-based smartphones or single-board computers like the Raspberry Pi) often store the main operating system on external, complex storage media like SD cards or eMMC chips. The CPU cannot simply memory-map an SD card; it requires a sophisticated software driver to communicate with the storage controller. To bridge this gap, manufacturers embed a tiny, immutable piece of software called the \textbf{BootROM} directly into the silicon. This code initializes the minimal required hardware (often internal SRAM) and loads a secondary bootloader from the external storage into that SRAM, which in turn loads the main software.
+
+\subsubsection{The Complexity of the x86 Platform}
+On modern "heavy" machines, such as x86-64 workstations, the initialization process is exponentially more complex. The main CPU is fragile and dependent on a specific environment to function. Before the main cores can execute a single instruction, the hardware requires:
+\begin{enumerate}
+    \item \textbf{Power Sequencing:} Multiple voltage rails (Vcore, VccSA, VccIO) must be brought up in a specific order with millisecond-precision timing.
+    \item \textbf{Clock Stabilization:} Phase-Locked Loops (PLLs) must be tuned and stabilized to generate the gigahertz-range frequencies required by the cores.
+    \item \textbf{DRAM Training:} Modern DDR4/DDR5 memory requires a complex calibration process to align signal timing before it becomes usable.
+\end{enumerate}
+
+To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution.
+
+\subsubsection{The Role of Firmware and Bootloaders}
+By the time a modern Operating System kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for handing over control to the OS is the system Firmware (Legacy BIOS or UEFI).
+
+The firmware's responsibility is to abstract the diverse hardware implementations of different motherboards and provide a mechanism to load an OS from a disk. However, relying solely on firmware is insufficient for a portable operating system for several reasons:
+\begin{itemize}
+    \item \textbf{Inconsistent State:} The state of the CPU (interrupts, paging, modes) varies significantly between BIOS and UEFI.
+    \item \textbf{Feature Limitations:} Firmware often leaves the CPU in a conservative state (e.g., 16-bit Real Mode or 32-bit Protected Mode) with advanced features disabled.
+    \item \textbf{Format Differences:} BIOS loads raw sectors, while UEFI understands file systems.
+\end{itemize}
+
+To solve this, a third-party \textbf{Bootloader} (such as GRUB or Limine) is utilized. The bootloader normalizes the environment, abstracting away the underlying firmware differences, and loads the kernel file into memory.
+
+\subsubsection{The OS-Level Bootloader}
+Even with a standardized bootloader, the kernel cannot assume full control immediately. The generic bootloader cannot know the specific requirements of the OS kernel. For instance:
+\begin{itemize}
+    \item The kernel may require the memory to be mapped to the higher half of the virtual address space.
+    \item Floating-point units (FPU, SSE, AVX) are typically disabled at boot and must be explicitly enabled; attempting to use them without initialization results in hardware exceptions.
+    \item The OS must define its own Global Descriptor Table (GDT) and Interrupt Descriptor Table (IDT) to enforce its specific security model and segment access rights.
+\end{itemize}
+
+Therefore, a robust operating system must implement its own initialization stage—effectively an \textbf{OS-Level Bootloader} or "Trampoline." This architecture-specific code is responsible for taking the machine from the normalized state provided by the external bootloader, enabling the specific CPU features required by the kernel (Virtualization extensions, AVX, Paging modes), and establishing the runtime environment (Stack, Virtual Memory) before passing control to the architecture-agnostic kernel main function.
+
 \subsection{Memory Preloading and Discovery}
 TODO
 \subsection{Discovering and Enabling CPU Features}
@@ -641,52 +686,55 @@ TODO
 TODO
 
 \section{Bootloader}
+\todo[inline]{Loader32 and Loader64 are very simplified here}
 
-Before the kernel can commence execution, the underlying hardware must be brought to a known, deterministic state. Unifying this process is non-trivial, as initialization protocols differ significantly depending on the specific hardware architecture and the firmware interface (Legacy BIOS vs. UEFI). To mitigate this complexity, the operating system expects the bootloading mechanism to load the final kernel image into memory and establish a well-defined machine state, abstracting the underlying firmware details.
+Before the architecture-agnostic kernel can commence execution, the underlying hardware must be brought to a known, deterministic state. As discussed in Section \ref{subsec:theory_bootloader}, the initialization protocols differ significantly depending on the specific hardware architecture and the firmware interface.
 
-\subsection{x86-64 Bootloading Sequence}
+For the AlkOS kernel on the x86-64 architecture, we rely on the \textbf{Multiboot2} specification. This allows us to utilize a battle-tested external bootloader, such as GRUB, to handle the intricacies of storage drivers, filesystem parsing, and memory map retrieval. GRUB loads our kernel binary into memory and transfers control to our entry point.
 
-Upon power-up or a hardware reset, every processor on the system bus executes a hardware reset sequence. In modern multi-core architectures, the processors engage in the Multi-Processor (MP) Initialization Protocol. This negotiation designates one core as the Bootstrap Processor (BSP), which immediately begins executing firmware code. All remaining cores, known as Application Processors (APs), enter a halt state and await a specific Startup Inter-Processor Interrupt (SIPI) to begin execution.
+However, the state provided by Multiboot2 is insufficient for the immediate execution of our C++ kernel. Upon entry, the system is in \textbf{32-bit Protected Mode}, paging is disabled, interrupts are disabled, and the stack pointer is undefined. Furthermore, the kernel is loaded at a low physical address, whereas AlkOS is designed as a higher-half kernel.
 
-Once the BSP is active, its registers are hardwired to specific architecture-defined values. The CPU may optionally perform a Built-In Self-Test (BIST). Subsequently, it fetches and executes the instruction located at the physical address \texttt{0xFFFFFFF0} (the Reset Vector). This address is memory-mapped to the non-volatile system firmware.
+To bridge this gap, we implemented a two-stage internal bootloader: \textbf{Loader32} and \textbf{Loader64}.
 
-For further details, see \cite{IntelManual-Reset}.
+\subsection{Multiboot2 Entry and Loader32}
 
-\subsubsection{Firmware Interfaces}
+The entry point of the OS is defined in assembly language within the \texttt{Loader32} section. The primary responsibility of this stage is to transition the CPU from the 32-bit legacy environment into 64-bit Long Mode.
 
-The initialization path diverges depending on the firmware implementation:
+The sequence of operations is as follows:
+\begin{enumerate}
+    \item \textbf{Stack Setup:} A temporary stack is established to allow C-like operations and basic function calls.
+    \item \textbf{Multiboot Validation:} The code verifies the Magic Number in the \texttt{EAX} register to ensure the kernel was loaded by a compliant bootloader. The pointer to the Multiboot information structure (stored in \texttt{EBX}) is saved for later processing.
+    \item \textbf{Paging Initialization:} Long Mode requires paging to be enabled. Loader32 constructs a temporary \textbf{Page Global Directory (PML4)}. To allow the code to continue executing seamlessly after enabling paging, we employ \textit{identity mapping} for the lower megabytes of memory (where the loader resides) and simultaneously map the higher-half virtual addresses to the same physical location.
+    \item \textbf{Long Mode Enablement:} The transition is performed by setting the \texttt{PAE} (Physical Address Extension) bit in control register \texttt{CR4}, setting the \texttt{LME} (Long Mode Enable) bit in the \texttt{EFER} Model Specific Register (MSR), loading the address of the PML4 into \texttt{CR3}, and finally enabling paging via \texttt{CR0}.
+    \item \textbf{GDT Update:} A temporary 64-bit Global Descriptor Table is loaded to define the code segments required for 64-bit execution.
+\end{enumerate}
 
-\textbf{Legacy BIOS (Basic Input/Output System)} \
-Under BIOS, the CPU initializes in 16-bit Real Mode, limiting addressable memory to the first 1 MB (
-$2^20$
- bytes) via segmented addressing. The BIOS executes the Power-On Self-Test (POST) and iterates through the configured boot priority list (e.g., CD-ROM, HDD, USB). It reads the first 512-byte sector of the boot device. If the last two bytes of this sector contain the boot signature \texttt{0x55AA}, the BIOS copies the sector to physical RAM address \texttt{0x7C00} and transfers execution to it.
+Once these steps are complete, the code performs a long jump to the 64-bit entry point, effectively flushing the CPU pipeline and entering Long Mode.
 
-\textbf{UEFI (Unified Extensible Firmware Interface)} \
-UEFI provides a significantly more sophisticated environment. Unlike BIOS, which operates on raw disk sectors, UEFI possesses file system awareness (specifically FAT32). It searches for a specific EFI application file on the EFI System Partition (ESP), loads the executable into RAM, and executes it. Notably, UEFI transitions the processor out of 16-bit Real Mode, typically handing over control in 32-bit or 64-bit Protected Mode.
+\subsection{Loader64}
 
-For the complete specification, refer to \cite{UEFI-Spec, UEFI-BootManager}.
+At this stage, the CPU is operating in 64-bit mode, but the environment is still bare. The \texttt{Loader64} is responsible for enabling specific CPU features that the C++ kernel and standard library rely on.
 
-\subsubsection{Multiboot2 Specification}
+\subsubsection{Feature Discovery and Enablement}
+Modern compilers and C++ standard libraries frequently utilize SIMD instructions (SSE/AVX) for optimization, even in non-mathematical code (e.g., \texttt{memcpy} or string operations). However, these features are disabled by default upon boot. Attempting to execute an SSE instruction before enabling the unit results in an \textit{Invalid Opcode} exception.
 
-Regardless of whether the system utilizes BIOS or UEFI, the boot process ultimately invokes a dedicated bootloader. AlkOS utilizes a Multiboot2-compliant bootloader (such as GRUB) to normalize the execution environment. This abstraction layer ensures that the kernel remains agnostic to the underlying firmware type.
-
-The bootloader leverages firmware services to query essential hardware configuration data, including the physical memory map and framebuffer parameters. This information is standardized into the Multiboot2 Information Structure. The bootloader loads the kernel binary and any associated modules (such as the initial ramdisk) into memory and transfers control to the kernel entry point.
-
-At this stage, the machine state is defined as follows:
+Loader64 performs the following:
 \begin{itemize}
-\item \textbf{CPU Mode:} 32-bit Protected Mode.
-\item \textbf{Paging:} Disabled.
-\item \textbf{Interrupts:} Disabled.
-\item \textbf{Registers:} \texttt{EAX} contains the Multiboot2 magic number (\texttt{0x36d76289}), and \texttt{EBX} contains the physical address of the Multiboot2 information structure.
+    \item Checks for CPUID availability and verifies supported features.
+    \item Enables the \textbf{FPU} (Floating Point Unit) via the \texttt{CR0} register.
+    \item Enables \textbf{SSE} (Streaming SIMD Extensions) by setting the OSFXSR bit in \texttt{CR4}.
+    \item If supported, enables \textbf{AVX} (Advanced Vector Extensions) by manipulating the XCR0 extended control register.
 \end{itemize}
 
-See \cite{Multiboot2-Spec} for the full specification.
+\subsubsection{Runtime Environment Setup}
+Before calling the main kernel function, Loader64 performs the final cleanup:
+\begin{itemize}
+    \item \textbf{High-Memory Stack:} The stack pointer (\texttt{RSP}) is moved to the virtual higher-half address space, unmapping the identity-mapped low memory to catch null-pointer dereferences early.
+    \item \textbf{BSS Initialization:} The \texttt{.bss} section (containing uninitialized static variables) is zeroed out, as the bootloader does not guarantee this operation.
+    \item \textbf{Global Constructors:} The loader iterates through the \texttt{.init\_array} section to execute C++ global constructors.
+\end{itemize}
 
-While standardized, this state is insufficient for the immediate execution of the AlkOS kernel. The kernel requires a 64-bit Long Mode environment, access to the higher-half of the virtual memory space via paging, and a valid stack for C++ execution. Furthermore, advanced CPU features (such as floating-point units or AVX) remain disabled. Consequently, the boot process requires intermediate initialization stages - \textbf{Loader32} and \textbf{Loader64} - to bridge the gap between the Multiboot2 state and the kernel's requirements. \todo[inline]{Split this between Our Solution and How to implement os (generic)}
-\subsubsection{Loader32}
-TODO
-\subsubsection{Loader64}
-TODO
+Finally, Loader64 parses the Multiboot2 tags to extract the memory map and framebuffer information, converts them into AlkOS-internal structures, and calls \texttt{kernel\_main}.
 
 \section{Assumptions}
 TODO
