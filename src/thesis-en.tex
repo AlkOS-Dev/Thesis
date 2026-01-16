@@ -150,6 +150,7 @@
 \usepackage{tikz}
 \usetikzlibrary{shapes, arrows.meta, positioning, calc, chains}
 \usepackage[colorinlistoftodos]{todonotes}
+\usepackage{svg}
 
 % --------------------------- CHAPTER HEADERS ---------------------
 
@@ -338,6 +339,9 @@ TODO
 
 \subsubsection{Interrupts}
 \subsubsection{Exceptions}
+\subsubsection{Virtualization}
+\subsubsection{Address Space}
+\subsubsection{Context Switch}
 
 \section{Scope of the Thesis} 
 TODO
@@ -466,12 +470,63 @@ TODO
 \chapter{Analysis of Existing Solutions}
 
 \section{Linux}
-TODO
+Family of operating systems working on Linux kernel is one of the most known in the world of operating systems, together with windows. The linux kernel is based on monolithic architecture. That means the range of responsibilities, the kernel has is wide and userspace is reduced to programs, which are only capable to obey the system and fully rely on it. In practices that means whole code managing memory, scheduling, interrupts and devices resides in kernel address space. Such approach has various pros and cons.
+
+Advantages:
+\begin{itemize}
+    \item No-copy and memory efficiency -- as everything resides in single address space there is no need to copy the data itself between various address spaces a pointer is sufficient to pass the data between module.
+    \item No context switch inside the kernel -- as we have single address-space if we enter the kernel we are able to simply invoke some function from different module rather than context-switching to some driver service.
+    \item Easy source managment -- as we have single binary we only have to prepare single strong scheme for that binary and that is enought. Developing 20 services compiled separatly may lead to differing behaviour or data model between binaries easly.
+    \item Easy implementation for small/mid size projects.
+\end{itemize}
+
+Disadvantages:
+\begin{itemize}
+    \item Stability -- some bug in some unused device's drivers may lead to system faulty
+    \item Security -- some bug in some unused device's drivers may lead to exposing the kernel space address space to user space malicious executable
+    \item Scales badly -- for huge projects, high standards must be ensured. As it is very easy to make the project messy and create unmaintainable net of references and dependencies.
+\end{itemize}
+
+To add some extensibility and prevent kernel recompilation to add drivers or modules linux introduces loadable kernel modules \cite{linux_lkm}. Those allow to dynamically extend the kernel code using well defined interface during the kernel.
+
+\begin{figure}[htbp]
+    \centering
+    \resizebox{\textwidth}{!}{%
+        \begin{tikzpicture}
+            \tikzstyle{every node}=[font=\large]
+            \draw [fill={rgb,255:red,242; green,242; blue,242}, thick] (0,0) rectangle (14, 8);
+            \node [anchor=north west, font=\bfseries\Large] at (0.3, 7.7) {Kernel Address Space};
+            \draw [fill=white, thick, rounded corners=3.0] (0.5, 4.5) rectangle (13.5, 6.5);
+            \node [font=\Large, align=center] at (7, 5.5) {Base Linux Kernel Components};
+    
+            \tikzstyle{mod}=[draw, fill=white, thick, rounded corners=3.0, minimum width=2cm, minimum height=1.3cm, font=\small]
+    
+            \node[mod] at (1.5, 3.2) {vfat};
+            \node[mod] at (3.7, 3.2) {fat};
+            \node[mod] at (5.9, 3.2) {realtek};
+            \node[mod] at (8.1, 3.2) {pcspkr};
+            \node[mod] at (10.3, 3.2) {kvm-intel};
+            \node[mod] at (12.5, 3.2) {kvm};
+    
+`'            \node[mod] at (1.5, 1.5) {nvme};
+            \node[mod] at (3.7, 1.5) {nvidia};
+            \node[mod] at (5.9, 1.5) {rfkill};
+            \node[mod] at (8.1, 1.5) {nf\_tables};
+            \node[mod] at (10.3, 1.5) {snd};
+            \node[mod] at (12.5, 1.5) {\Huge \dots};
+    
+        \end{tikzpicture}
+    }
+    \caption{Linux Monolithic Architecture with Loadable Kernel Modules}
+    \label{fig:linux_lkm}
+\end{figure}
+
+\subsection{Timing}
+Linux in older versions utilized periodic tick, that means the kernel was setting the timing devices to run the interrupt periodically in constant frequency e.g 1000hz. Such solution is very easy to implement and think about as we dont have to manage the event timeline at all. But it has some longstanding consequences. For example the constant frequency defines the granularity of sleep. As the solution is far from ideal linux introduced dynamic ticks utilizing high precision devices. That means the interrupts are scheduled based on the kernel needs and \texttt{hrtimer.h} infrastructure is utilized for that purpose \cite{linux_highres}\cite{linux_highres_code}. Such approach allows the cpu to be much more efficient or event disable the cores if there are no tasks to execute for them. But there is still some concept of \textbf{tick} mainly for performance matters, that means (not always in \texttt{CONFIG_NO_HZ} mode for single task there will be no interrupts) in most scenarios the time between the interrupts is capped to min(next_event_ns, tick_ns). When some does not need high precision (\texttt{nanosleep}) or quickly read the timer (without syscall, simply readonly mapped variable) this approach is ideal. Based on the kernel \textbf{tick} the \texttt{jiffies} variable is incremented \cite{linux_jiffies}. This is for example used for tcp connection timeouts to allows handling thousands of such connection, bookkeeping all of such event with high precision would be a real pain and waste of resources. For example \texttt{msleep} is working based on jiffies counter.
 
 \subsection{Scheduler}
 TODO
-\subsection{Timing}
-TODO
+
 \subsection{Memory Management}
 TODO
 \subsection{System Interface}
@@ -1659,13 +1714,12 @@ Describes the current status of the thread. This state tracking allows the kerne
 
 \begin{figure}[p]
     \centering
-    % Teraz mamy więcej miejsca, więc height może być większe
     \includesvg[height=0.95\textheight, width=\textwidth, keepaspectratio]{res/thread-states.svg}
     \caption{Thread State Transitions Graph}
     \label{fig:thread-states}
 \end{figure}
 
-\restoregeometry % Bardzo ważne: przywraca normalne marginesy dla reszty pracy
+\restoregeometry
 
 \subsubsection{Stacks}
 
