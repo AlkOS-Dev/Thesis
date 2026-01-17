@@ -151,6 +151,7 @@
 \usetikzlibrary{fit, backgrounds, shapes, arrows.meta, positioning, calc, chains}
 \usepackage[colorinlistoftodos]{todonotes}
 \usepackage{svg}
+\usepackage{graphicx}
 
 % --------------------------- CHAPTER HEADERS ---------------------
 
@@ -570,14 +571,23 @@ Even with a standardized bootloader, the kernel cannot assume full control immed
 Therefore, a robust operating system must implement its own initialization stage, effectively an \textbf{OS-Level Bootloader} or "Trampoline." This architecture-specific code is responsible for taking the machine from the normalized state provided by the external bootloader, enabling the specific CPU features required by the kernel, and establishing the runtime environment before passing control to the architecture-agnostic kernel main function.
 
 \subsection{Establishment of Basic Communication}
-TODO 
+
+Probably first thing that must be done after running any code on the target architecture is to establish some communication with world. For emulation environment one may use some devices to communicate with emulating framework (e.g. qemu uses serial port for communication and it may be attachted to linux shell session) for real devices user may have to display some fonts on the screen (e.g. on amd64 desktop platforms VGA may be easly used) or even implement some basic net stack. The preffered communicatin type should allow two-way communication on early-stages to allow some testing and providing input to the kernel. This mostly will be required for debug purposes and testing and as the development goes further it will be reasonable to disable the communication and associated debug traces by some compilation flags. It is important to separate debug only communication from real output devices as it must be disabled for release builds. 
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\textwidth]{res/debug-output.png}
+    \caption{QEMU serial-port Communication}
+    \label{fig:qemu_comms}
+\end{figure}
+
+As we can see on \ref{fig:qemu_comms} alongisde typical communication on the screen together with keyboard the kernel outputs some text to the qemu serial-port, which then streams that to the shell. Such approach allows some host script to quickly parse the logs and detect some bugs or failures or manually inspect what happend before the failure.
 
 \subsection{Memory Preloading and Discovery}
-TODO
-\subsection{Discovering and Enabling CPU Features}
-TODO
+TODO: Kryczka opisz multiboot2 przykladowo i zbieranie informacji o zarezerowowanych przestrzeniach
 
 \subsection{Enabling Interrupts and Exceptions}
+\label{subsec:os-tutorial-interrupts}
 
 Before proceeding to implementation of memory \ref{subsec:os_tutorial_mem} its quite important to establish at least some basic interrupt handling. On most platforms exception system relies fully on interrupt mappings. That means without them we are not able to display any debug information on desired communication device.
 
@@ -624,9 +634,13 @@ While implementing the abstraction we can assume easly these three classes of in
     \item \textbf{Software Interrupts} -- Initiated by software instructions. For example, on the x86-64 architecture, the instruction \texttt{INT 0x80} triggers an interrupt with the vector number \texttt{0x80}.
 \end{itemize}
 
-Some architectures (for on example amd64 we have old PIC \cite{osdev-pic} and improved SMP supprting APIC \cite{osdev-apic}) we should also take that into account when designing the abstraction. And finally when we you want to enable SMP and utilize multiple cores the interurpt mechanism will be a major way of communication between the cores.
+Some architectures (for on example amd64 we have old PIC \cite{osdev-pic} and improved SMP supprting APIC \cite{osdev-apic}) we should also take that into account when designing the abstraction. And finally when we you want to enable SMP and utilize multiple cores the interurpt mechanism will be a major way of communication between the cores. 
 
 \subsection{Tracing System}
+
+As we learned from \ref{subsec:os-tutorial-interrupts} in some situations we should not trace anything at all, but in general case we want to have some kernel log and dump messages to file or terminal. The problem here is that writing to a file or any device at all takes a lot of time and our system code should work as fast as possible. To solve this we may want to design tracing framework which is robust (will work properly in concurrent environment, interrupts + SMP) and allows to fast writing the traces bypassing immediate writes to devices. It may be done by allocating big cyclic buffor for the messages and dumping it using special dumping task working periodically. 
+
+\subsection{Testing framework}
 TODO
 
 \subsection{Memory Management}
