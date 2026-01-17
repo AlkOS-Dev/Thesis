@@ -626,29 +626,28 @@ TODO
 
 % ==================================================================
 
-% jak to robia inni, same najwazniejsze elementy
-
 \chapter{Analysis of Existing Solutions}
 
 \section{Linux}
-Family of operating systems working on Linux kernel is one of the most known in the world of operating systems, together with windows. The linux kernel is based on monolithic architecture. That means the range of responsibilities, the kernel has is wide and userspace is reduced to programs, which are only capable to obey the system and fully rely on it. In practices that means whole code managing memory, scheduling, interrupts and devices resides in kernel address space. Such approach has various pros and cons.
 
-Advantages:
+The Linux operating system family is one of the most widely used globally, alongside Windows. The Linux kernel relies on a monolithic architecture. This implies that the kernel has a broad range of responsibilities, while user space contains applications that rely entirely on system capabilities. In practice, all code responsible for memory management, scheduling, interrupt handling, and device drivers resides within the kernel address space. This approach presents various advantages and disadvantages.
+
+\noindent Advantages:
 \begin{itemize}
-    \item No-copy and memory efficiency -- as everything resides in single address space there is no need to copy the data itself between various address spaces a pointer is sufficient to pass the data between module.
-    \item No context switch inside the kernel -- as we have single address-space if we enter the kernel we are able to simply invoke some function from different module rather than context-switching to some driver service.
-    \item Easy source managment -- as we have single binary we only have to prepare single strong scheme for that binary and that is enought. Developing 20 services compiled separatly may lead to differing behaviour or data model between binaries easly.
-    \item Easy implementation for small/mid size projects.
+    \item \textbf{Zero-copy and memory efficiency} -- As all components reside in a single address space, data does not need to be copied between distinct address spaces. Passing a pointer is sufficient to transfer data between modules.
+    \item \textbf{Minimized context switching} -- Within the single kernel address space, invoking functions from different modules is a direct function call, avoiding the overhead of context switching required by microkernels to access driver services.
+    \item \textbf{Simplified source management} -- A single binary structure allows for a unified build scheme. Developing numerous separately compiled services can easily lead to inconsistencies in behavior or data models.
+    \item \textbf{Ease of implementation} -- This architecture is often easier to implement for small to mid-sized projects.
 \end{itemize}
 
-Disadvantages:
+\noindent Disadvantages:
 \begin{itemize}
-    \item Stability -- some bug in some unused device's drivers may lead to system faulty
-    \item Security -- some bug in some unused device's drivers may lead to exposing the kernel space address space to user space malicious executable
-    \item Scales badly -- for huge projects, high standards must be ensured. As it is very easy to make the project messy and create unmaintainable net of references and dependencies.
+    \item \textbf{Stability} -- A bug in a single driver, even for an unused device, can compromise the stability of the entire system.
+    \item \textbf{Security} -- Vulnerabilities in drivers can potentially expose the kernel address space to malicious user-space execution.
+    \item \textbf{Scalability challenges} -- For large-scale projects, strict standards are necessary. Without them, the code base can easily become unmaintainable due to complex webs of references and dependencies.
 \end{itemize}
 
-To add some extensibility and prevent kernel recompilation to add drivers or modules linux introduces loadable kernel modules \cite{linux_lkm}. Those allow to dynamically extend the kernel code using well defined interface during the kernel.
+To enhance extensibility and avoid the need for recompilation when adding drivers, Linux employs Loadable Kernel Modules (LKMs) \cite{linux_lkm}. These allow the kernel functionality to be extended dynamically via well-defined interfaces during runtime.
 
 \begin{figure}[htbp]
     \centering
@@ -681,25 +680,28 @@ To add some extensibility and prevent kernel recompilation to add drivers or mod
     \label{fig:linux_lkm}
 \end{figure}
 
-\subsection{Timing}
-Linux in older versions utilized periodic tick, that means the kernel was setting the timing devices to run the interrupt periodically in constant frequency e.g 1000hz. Such solution is very easy to implement and think about as we dont have to manage the event timeline at all. But it has some longstanding consequences. For example the constant frequency defines the granularity of sleep. As the solution is far from ideal linux introduced dynamic ticks utilizing high precision devices. That means the interrupts are scheduled based on the kernel needs and \texttt{hrtimer.h} infrastructure is utilized for that purpose \cite{linux_highres}\cite{linux_highres_code}. Such approach allows the cpu to be much more efficient or event disable the cores if there are no tasks to execute for them. But there is still some concept of \textbf{tick} mainly for performance and compatiblity matters, that means (not always in \texttt{CONFIG\_NO\_HZ} mode for single task there will be no interrupts) in most scenarios the time between the interrupts is capped to min(next\_event\_ns, tick\_ns). In other words hight resolution timer simulates periodic tick \cite{linux_highres}. When some does not need high precision (\texttt{nanosleep}) or quickly read the timer (without syscall, simply readonly mapped variable) this approach is ideal. Based on the kernel \textbf{tick} the \texttt{jiffies} variable is incremented \cite{linux_jiffies}. This is for example used for tcp connection timeouts to allows handling thousands of such connection, bookkeeping all of such event with high precision would be a real pain and waste of resources. For example \texttt{msleep} is working based on jiffies counter.
+Historically, Linux utilized a strictly periodic tick (defined by hardware), configuring hardware timers to generate interrupts at a fixed frequency (e.g., 100 Hz or 1000 Hz). While this design was straightforward, it imposed limitations on sleep granularity and power efficiency. To address these issues, Linux introduced High Resolution Timers (\texttt{hrtimers}), which allow the kernel to schedule interrupts with nanosecond precision based on immediate needs rather than a fixed cadence. Despite the capabilities of high-resolution timers, the concept of a periodic tick is maintained within the kernel for performance reasons and architectural legacy, by simulating the tick with high precision framework.
+
+This hight precision framework has one major drawback - it can get slow for big number of events as it based on priority queue with O(logn) complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers O(q) complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
 
 \subsection{Scheduler}
-Linux introduces several scheduling policies \cite{linux_policies}\cite{linux_cfs} which operates based on priorities assigned to tasks. We have two major classes \textbf{Real Time} and \textbf{Fair}. Real time policies operates on priorities in range 1-99 and \textbf{Fair} tasks which operates only on 0 priority. Tasks with higher priorities are always scheduled before tasks with lower priorities. Linux provides 6 policy clasesses:
+
+Linux implements several scheduling policies \cite{linux_policies}\cite{linux_cfs} operating on task priorities. There are two major classes: \textbf{Real Time}, which operates on priorities 1--99, and \textbf{Fair}, which operates on priority 0. Tasks with higher priorities preempt those with lower priorities. Linux provides six policy classes:
 
 \begin{itemize}
-    \item \texttt{SCHED\_DEADLINE} -- more important than any other policy and provides real time capabilities
-    \item \texttt{SCHED\_FIFO} -- in given priority task has unlimited time and must leave the queue by himself - give the control back
-    \item \texttt{SCHED\_RR} -- in given priority each task has constant time slice and after preempting is attachted to the end of queue
-    \item \texttt{SCHED\_OTHER} -- 99\% of tasks, most of usual tasks resides here, managed by main algorithm
-    \item \texttt{SCHED\_BATCH} -- less interactive tasks, runs longer without context switches, thus need to wait longer before being executed again
-    \item \texttt{SCHED\_IDLE} -- the most important tasks runs only when there is nothing else to do
+\item \texttt{SCHED\_DEADLINE} -- Takes precedence over any other policy and provides real-time capabilities.
+\item \texttt{SCHED\_FIFO} -- A real-time policy where a task runs until it yields control or is preempted by a higher-priority task.
+\item \texttt{SCHED\_RR} (Round Robin) -- A real-time policy where each task is assigned a time slice. Upon exhaustion, the task is moved to the end of the queue.
+\item \texttt{SCHED\_OTHER} -- The standard policy for the majority of non-real-time tasks.
+\item \texttt{SCHED\_BATCH} -- Designed for non-interactive tasks that run for longer periods without context switches, tolerating longer scheduling latencies.
+\item \texttt{SCHED\_IDLE} -- Used for very low priority tasks that run only when the system is otherwise idle.
 \end{itemize}
 
-Starting from versions 2.6.23 Linux \cite{linux_cfs} up to 6.6 \cite{linux_eevdf} the \texttt{CFS} (Completly Fair Scheduler)  was the architecture of linux scheduling. Starting from 6.6 the \texttt{EEVDF} (Earliest Eligible Virtual Deadline First) started to replace the CFS architecture. Those algorithms are used for \textbf{Fair} tasks class. We will briefly describe both of those.
+From version 2.6.23 \cite{linux_cfs} up to 6.6 \cite{linux_eevdf}, the \texttt{CFS} (Completely Fair Scheduler) was the default scheduler for the \textbf{Fair} class. Starting with version 6.6, the \texttt{EEVDF} (Earliest Eligible Virtual Deadline First) scheduler began replacing CFS.
 
-\subsubsection{Completly Fair Scheduler}
-Linux documentation describes \textbf{CFS} quite accuratly:
+\subsubsection{Completely Fair Scheduler}
+The Linux documentation summarizes the design of the \textbf{CFS} as follows:
+
 \begin{quote}
 80\% of CFS's design can be summed up in a single sentence: CFS basically models an “ideal, precise multi-tasking CPU” on real hardware.
 
@@ -709,58 +711,60 @@ On real hardware, we can run only a single task at once, so we have to introduce
 \cite{linux_cfs}
 \end{quote}
 
-The implementation uses red-black tree sorted by the virtual runtime representing the execution timeline. The next task is picked as a leftmost tasks from the tree (less time on CPU spent) and runs until the second leftmost task becomes the actual min task with some minimal granularity to prevent over-scheduling.
+The implementation uses a red-black tree sorted by virtual runtime, representing the execution timeline. The next task selected is the leftmost node in the tree (the task with the least spent execution time) and runs until next another taks becomes the leftmost + some granularity to prevent over-scheduling.
 
 \subsubsection{Earliest Eligible Virtual Deadline First Scheduler}
-This is becoming the new version of linux scheduling and is addressing issues of previous \textbf{CFS} implementation. New approach works similarly as \textbf{CFS} but operates on deadlines instead of runtime \cite{linux_eevdf}. That allows latency-sensitive tasks to be prioritized.
+
+This algorithm is becoming the new standard for Linux scheduling, addressing shortcomings of the previous \textbf{CFS} implementation. The new approach functions similarly to CFS but operates on deadlines rather than accumulated runtime \cite{linux_eevdf}. This modification allows for better prioritization of latency-sensitive tasks.
 
 \subsection{Memory Management}
 \label{subsec:linux_mem}
-Linux has centralized memory management with various APIs available: \texttt{kmalloc}, \texttt{kzalloc}, \texttt{vmalloc}, \texttt{kvmalloc} and many more \cite{linux_mem_interfaces}. 
+
+Linux features centralized memory management with various APIs, including \texttt{kmalloc}, \texttt{kzalloc}, \texttt{vmalloc}, and \texttt{kvmalloc} \cite{linux_mem_interfaces}.
 
 \subsubsection{Physical Memory}
-As linux is architecture independant kernel it abstracts the architecture detail. The physical memory is partitioned into zones each of them with different purpose \cite{linux_mem_phys}:
+As an architecture-independent kernel, Linux abstracts hardware details. Physical memory is partitioned into zones, each serving a distinct purpose \cite{linux_mem_phys}:
 
 \begin{itemize}
-    \item \texttt{ZOME\_DMA} -- represents memory suitable for DMA (Direct Memory Access) by devices that cannot access all addressable memory.
-    \item \texttt{ZONE\_NORMAL} -- normal memory accessible by the kernel all the time
-    \item \texttt{ZONE\_MOVABLE} -- normal accessible memory as \texttt{ZONE\_NORMAL} but their content may be moved between physical pages while not changing the virtual address
-    \item \texttt{ZONE\_DEVICE} -- memory reserved for devices such as GPUs and maps to device drivers
-    \item \texttt{ZONE\_HIGHMEM} -- not covered by permanent mappings. Not used frequently mostly available on 32-bit architectures. 
+    \item \texttt{ZONE_DMA} -- Memory suitable for DMA (Direct Memory Access) by devices that cannot access the full addressable range.
+    \item \texttt{ZONE_NORMAL} -- Standard memory directly accessible by the kernel.
+    \item \texttt{ZONE_MOVABLE} -- Similar to \texttt{ZONE_NORMAL}, but the content of pages in this zone can be migrated to different physical frames (preserving virtual address).
+    \item \texttt{ZONE_DEVICE} -- Memory reserved for specific hardware, such as GPUs, mapped to device drivers.
+    \item \texttt{ZONE_HIGHMEM} -- Memory not covered by permanent kernel mappings, used only by some 32-bit architectures.
 \end{itemize}
 
-To enchance the performance of multi core system linux takes two-step strategy \cite{linux_mem_phys}. There is one global buddy allocator \ref{buddy_allocator} operting with locks and full synchronization and \texttt{PCP} (Per-CPU Pagessets) with stores free ares assigned to specific core. First we allocate from local PCP and afterwards we fallback to global allocator.
+To enhance multi-core performance, Linux employs a two-step strategy \cite{linux_mem_phys}. It utilizes a global buddy allocator \ref{buddy_allocator} alongside Per-CPU Pagesets (PCP). Allocations are first attempted from the local PCP and if that fails, the system falls back to the global allocator with full synchronization.
 
 \subsubsection{Virtual Memory}
 
-Each process has own Page Table which is responsible for mapping the virtual address to physical one. The physical space is acquired from Physical Memory managmenet \ref{subsec:linux_mem}. Then managing the virtual addresses is done per each process utilizing red-black trees for fast lookup for free areas. The kernel address space is mapped to each process. Additionally linux implement on demand paging, that is lazy approach alloation physical pages only when the process actually needs them utilizing page-fault mechanism.
+Each process possesses its own Page Table, responsible for mapping virtual addresses to physical ones. Physical frames are acquired from the Physical Memory Manager \ref{subsec:linux_mem}. Virtual address space management for each process utilizes red-black trees to efficiently locate free areas. The kernel address space is mapped into every process. Additionally, Linux implements demand paging, a lazy allocation approach where physical pages are assigned only when the process actually accesses the memory, utilizing the page-fault mechanism.
 
 \subsection{System Interface}
 
-Linux is a kernel from family of unix-like operating systems. The main communication with system goes through system calls and glibc which provides wrappers around those calls. 
+Linux is a Unix-like operating system kernel. The primary interface for system communication is provided via system calls, wrapped by the GNU C Library (glibc).
 
 \subsubsection{Standards}
 
-Linux implements \textbf{POSIX} standard which includes functions like \texttt{fork()}, \texttt{exec()} or concept of \texttt{pthread}.
+Linux adheres to the \textbf{POSIX} standard, implementing functions such as \texttt{fork()} and \texttt{exec()}, as well as the concept of \texttt{pthread}.
 
-\subsubsection{Fork mechanism}
+\subsubsection{Fork Mechanism}
 
-\texttt{fork()} mechanism comes from historical decisions. The idea to copy everything from parrent process sounds like terrible idea and in reality may introduce performans issues. That makes this approach quie hard to implement as it must be extremely efficient in real world scenarios. Especcialy considering that 99.9\% cases after \texttt{fork()} the \texttt{exec()} function is called immidiently erasing mostly everything from previous process. Because of that Linux implemented various optimizations to not make it into a bottleneck, including \texttt{COW} mechanism. To sum up fork has some advantages and disadvantages:
+The \texttt{fork()} mechanism is rooted in historical design decisions. While copying the entire parent process state appears inefficient and can introduce performance issues, Linux implements various optimizations, such as Copy-On-Write (\texttt{COW}), to mitigate overhead. This is particularly relevant given that \texttt{exec()} is frequently called immediately after \texttt{fork()}, discarding the copied state. The advantages and disadvantages of this mechanism include:
 
-\noindent Pros of implementing fork mechanism:
+\noindent Advantages:
 \begin{itemize}
-    \item Simple implementation of pipes and pipelining
-    \item Easier state propagation, no need to specify files or streams manually
+    \item Simplified implementation of pipes and pipelining.
+    \item Automatic state propagation, eliminating the need to manually specify files or streams in function call.
 \end{itemize}
 
 \noindent Disadvantages:
 \begin{itemize}
-    \item Hard to implement efficiently - requires multiple optimizations
-    \item Hard to implement overall as requires copying every structure 
-    \item Still might be slow in some edge cases - big page tables
-    \item Over-copying and puts some pressure on programmer to release the resources before exec
-    \item Concept hard to understand for begginers
-    \item Not portable to archtiectures without MMU
+    \item Complex implementation requiring multiple optimizations to remain efficient.
+    \item Requires the duplication of process structures, which is inherently complex.
+    \item Potential performance bottlenecks in edge cases, such as with large page tables.
+    \item Requires careful resource management by the programmer to release resources before execution.
+    \item Conceptually difficult for beginners to grasp.
+    \item Not portable to architectures lacking an MMU.
 \end{itemize}
 
 \section{Minix 3}
