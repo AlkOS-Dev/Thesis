@@ -570,9 +570,10 @@ Even with a standardized bootloader, the kernel cannot assume full control immed
 
 Therefore, a robust operating system must implement its own initialization stage, effectively an \textbf{OS-Level Bootloader} or "Trampoline." This architecture-specific code is responsible for taking the machine from the normalized state provided by the external bootloader, enabling the specific CPU features required by the kernel, and establishing the runtime environment before passing control to the architecture-agnostic kernel main function.
 
+
 \subsection{Establishment of Basic Communication}
 
-Probably first thing that must be done after running any code on the target architecture is to establish some communication with world. For emulation environment one may use some devices to communicate with emulating framework (e.g. qemu uses serial port for communication and it may be attachted to linux shell session) for real devices user may have to display some fonts on the screen (e.g. on amd64 desktop platforms VGA may be easly used) or even implement some basic net stack. The preffered communicatin type should allow two-way communication on early-stages to allow some testing and providing input to the kernel. This mostly will be required for debug purposes and testing and as the development goes further it will be reasonable to disable the communication and associated debug traces by some compilation flags. It is important to separate debug only communication from real output devices as it must be disabled for release builds. 
+One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on AMD64 desktop platforms) or implement a basic network stack. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing and as development progresses, it is advisable to disable this communication and associated debug traces via compilation flags. It is crucial to strictly separate debug-only communication from standard output devices, as the former must be disabled in release builds to ensure performance and security.
 
 \begin{figure}[h]
     \centering
@@ -581,7 +582,7 @@ Probably first thing that must be done after running any code on the target arch
     \label{fig:qemu_comms}
 \end{figure}
 
-As we can see on \ref{fig:qemu_comms} alongisde typical communication on the screen together with keyboard the kernel outputs some text to the qemu serial-port, which then streams that to the shell. Such approach allows some host script to quickly parse the logs and detect some bugs or failures or manually inspect what happend before the failure.
+As shown in Figure \ref{fig:qemu_comms}, alongside typical output to the screen and keyboard input, the kernel transmits text to the QEMU serial port, which is then streamed to the host shell. This approach enables host-side scripts to parse logs, detect bugs or failures, and allow manual inspection of the system state immediately preceding a crash.
 
 \subsection{Memory Preloading and Discovery}
 TODO: Kryczka opisz multiboot2 przykladowo i zbieranie informacji o zarezerowowanych przestrzeniach
@@ -589,56 +590,59 @@ TODO: Kryczka opisz multiboot2 przykladowo i zbieranie informacji o zarezerowowa
 \subsection{Enabling Interrupts and Exceptions}
 \label{subsec:os-tutorial-interrupts}
 
-Before proceeding to implementation of memory \ref{subsec:os_tutorial_mem} its quite important to establish at least some basic interrupt handling. On most platforms exception system relies fully on interrupt mappings. That means without them we are not able to display any debug information on desired communication device.
+Prior to the implementation of memory management (Section \ref{subsec:os_tutorial_mem}), it is essential to establish a basic interrupt handling mechanism. On most platforms, the exception system relies entirely on interrupt mappings. Consequently, without a functional interrupts, the kernel is unable to display debug information on the designated communication device when an error occurs.
 
-Exception Interrupt handlers should display some descriptive message in case of failures. Such message must contain the CPU state, source of the exception, location where it occurs (which instruction caused the exception) and possibly why it happend (might be implemented as error code). Example kernel dump on exception might look like this:
+Exception handlers should output a descriptive message detailing the failure. This message must include the CPU state, the source of the exception, the instruction pointer where the error occurred, and, if applicable, an error code explaining the cause. An example of a kernel dump following an exception is presented below:
 
 \begin{lstlisting}[caption={Example Kernel Panic on Exception}, label={lst:kernel_panic}]
     [ KERNEL PANIC ] Received exception: 0 (Divide Error (#DE))
     And error: 0
     At instruction address: 0xffffffff8021b856
-    rip: 0xffffffff8021b856
-    rflags: 0x0000000000010246
-    rsp: 0xffffffff8138dc20
-    rax: 0x0000000000000009
-    rbx: 0x000000000006f000
-    rcx: 0x0000000000000000
-    rdx: 0x0000000000000000
-    rsi: 0xffffffff803648f3
-    rdi: 0xffffffff80818c28
-    rbp: 0xffffffff8138dc40
-    r8: 0xffffffff80305d00
-    r9: 0xffffffff80305d59
-    r10: 0xffffffff8138df10
-    r11: 0xffffffff802fdfaf
-    r12: 0x0000000000000010
-    r13: 0x0000000000180000
-    r14: 0x0000000001a91000
-    r15: 0x0000000000000800
+    rip:                    0xffffffff8021b856
+    rflags:                 0x0000000000010246
+    rsp:                    0xffffffff8138dc20
+    rax:                    0x0000000000000009
+    rbx:                    0x000000000006f000
+    rcx:                    0x0000000000000000
+    rdx:                    0x0000000000000000
+    rsi:                    0xffffffff803648f3
+    rdi:                    0xffffffff80818c28
+    rbp:                    0xffffffff8138dc40
+    r8:                     0xffffffff80305d00
+    r9:                     0xffffffff80305d59
+    r10:                    0xffffffff8138df10
+    r11:                    0xffffffff802fdfaf
+    r12:                    0x0000000000000010
+    r13:                    0x0000000000180000
+    r14:                    0x0000000001a91000
+    r15:                    0x0000000000000800
     
-    RFLAGS: 0x0000000000010246
+    RFLAGS:                 0x0000000000010246
 \end{lstlisting}
 
-Before initializing Memory Management that is actually everything we need from interrupts, as we will probalby dont have any use case for interrupt driver devices without booting up the consumers (processes) or working with multiple cores (that also needs memory for bookeeping structures). But we will describe what we need from interrupts and what we should implement for that anyway.
+Before initializing Memory Management, exception handling is the primary function required from the interrupt system. At this stage, there is typically no use case for interrupt-driven devices, as the consumers (processes) have not yet been booted, and multicore operations (which require memory for bookkeeping structures) are not active. However, the design of the interrupt subsystem must account for future extensibility and requirements.
 
-\subsubsection{Design considerations}
+\subsubsection{Design Considerations}
 
-It is important to note that low-level hardware complying interrupt handlers usually differs strongly from usual compiled functions (requires special instruction on begining or end) and thus implementing multiple complying function to swap on runtime might be difficult. The good idea is probably to create low-level wrapper performing all needed architecture dependandt operations efficiently and invoking high level function performing actual kernel's work. It still has some drawbacks as we will not be able to swtich that high-level function as it will be compiled into the low-level handler. To address that problem we need some good hardware abstraction which will be a middle man between the architecture wrapper and kernel high-level function. This abstraction should perform operations on low-level table and allow swapping the functions on runtime, this might be done by simple array of abstracted handlers mapped to hardware interrupts.Also we will be mapping devices to hardware interrupts dynamically during runtime based on user configiration and discovery and we will have to swap drivers and logic anyway. Without this modularity we will have to struggle either with multiple stages of intterrupts init, implementing multiple handlers on architecture side or writing incredibly complex handlers quering the kernel if we already enabled some functionality or not (e.g. page fault handler would have to check if we already handle virtualization or we did something stupid).
+It is important to note that low-level, hardware-compliant interrupt handlers differ significantly from standard compiled functions. They often require specific entry and exit instructions, making the runtime swapping of these functions difficult. A robust solution is to create a low-level assembly wrapper that efficiently performs all architecture-dependent operations before invoking a high-level function responsible for the kernel's logic. However, this approach has limitations. The high-level function is typically hardcoded into the low-level handler, preventing runtime reconfiguration.
 
-It is also very important to design the handlers to perform as little work as possible. That excludes any waiting, sleeping or tracing. If device handling requires some more complex work or reacting on the change we may need to invoke the scheduler and perofrm context switch while exiting the interrupt to perform necessary actions. But we should avoid running this logic inside the interrupt as we are blocking any other interrupts while doing that and we may lose some informations during that process. That gives us another conclusion that we also have to consider how to switch tasks within interrupt system, it may be done in the abstraction.
+To address this, a hardware abstraction layer is required to serve as an intermediary between the architecture-specific wrapper and the high-level kernel logic. This abstraction should manage the low-level tables and facilitate the swapping of handlers at runtime. This can be implemented using an array of abstract handlers mapped to hardware interrupts. Furthermore, devices are mapped to hardware interrupts dynamically during runtime based on user configuration and hardware discovery, necessitating the ability to swap drivers and logic dynamically. Without this modularity, the system would require multiple stages of interrupt initialization, multiple architecture-specific handlers, or complex handlers that query the kernel state to determine valid operations (e.g., a page fault handler checking for virtualization support each time is invoked).
 
-While implementing the abstraction we can assume easly these three classes of interrupts:
+It is also critical to design handlers to perform minimal work. This precludes operations such as waiting, sleeping, or extensive tracing. If device handling requires complex logic or a state change, the handler should invoke the scheduler to perform a context switch upon exiting the interrupt. Executing complex logic within the interrupt context blocks other interrupts and may lead to data loss. Consequently, the interrupt abstraction layer must also support task switching.
+
+When implementing this abstraction, three distinct classes of interrupts can be identified:
+
 \begin{itemize}
-    \item \textbf{Exceptions} -- Generated by the CPU to inform the kernel about specific conditions requiring immediate attention, such as Page Faults, Division by Zero, or invalid instruction operands.
-    \item \textbf{Hardware Interrupts} -- Generated by external devices (e.g., Timers, Keyboard, Disk Controller) to efficiently communicate with the kernel without the need for polling.
+    \item \textbf{Exceptions} -- Generated by the CPU to indicate specific conditions requiring immediate attention, such as Page Faults, Division by Zero, or invalid instruction operands.
+    \item \textbf{Hardware Interrupts} -- Generated by external devices (e.g., Timers, Keyboard, Disk Controller) to communicate efficiently with the kernel without the need for polling.
     \item \textbf{Software Interrupts} -- Initiated by software instructions. For example, on the x86-64 architecture, the instruction \texttt{INT 0x80} triggers an interrupt with the vector number \texttt{0x80}.
 \end{itemize}
 
-Some architectures (for on example amd64 we have old PIC \cite{osdev-pic} and improved SMP supprting APIC \cite{osdev-apic}) we should also take that into account when designing the abstraction. And finally when we you want to enable SMP and utilize multiple cores the interurpt mechanism will be a major way of communication between the cores. 
+Architecture-specific details must also be considered. for example, the AMD64 architecture utilizes the legacy PIC \cite{osdev-pic} and the improved, SMP-supporting APIC \cite{osdev-apic}. Finally, to enable Symmetric Multiprocessing (SMP) and utilize multiple cores, the interrupt mechanism serves as the primary method of inter-core communication.
 
 \subsection{Tracing System}
 
-As we learned from \ref{subsec:os-tutorial-interrupts} in some situations we should not trace anything at all, but in general case we want to have some kernel log and dump messages to file or terminal. The problem here is that writing to a file or any device at all takes a lot of time and our system code should work as fast as possible. To solve this we may want to design tracing framework which is robust (will work properly in concurrent environment, interrupts + SMP) and allows to fast writing the traces bypassing immediate writes to devices. It may be done by allocating big cyclic buffor for the messages and dumping it using special dumping task working periodically. 
+As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. This can be achieved by allocating a large circular buffer for messages, which is then asynchronously flushed to the output device by a dedicated, low-priority task. Furthermore, to facilitate effective debugging in a multi-threaded and multi-core environment, each log entry should automatically capture essential context metadata, specifically the high-precision timestamp, the current Core ID, and the Process ID.
 
 \subsection{Testing framework}
 TODO
