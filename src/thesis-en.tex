@@ -150,6 +150,7 @@
 \usepackage{tikz}
 \usetikzlibrary{fit, backgrounds, shapes, arrows.meta, positioning, calc, chains}
 \usepackage[colorinlistoftodos]{todonotes}
+\usepackage{svg}
 
 % --------------------------- CHAPTER HEADERS ---------------------
 
@@ -337,7 +338,11 @@ TODO
 TODO
 
 \subsubsection{Interrupts}
+\subsubsection{Kernel Tick}
 \subsubsection{Exceptions}
+\subsubsection{Virtualization}
+\subsubsection{Address Space}
+\subsubsection{Context Switch}
 
 \section{Scope of the Thesis} 
 TODO
@@ -621,21 +626,153 @@ TODO
 
 % ==================================================================
 
-% jak to robia inni, same najwazniejsze elementy
-
 \chapter{Analysis of Existing Solutions}
 
 \section{Linux}
-TODO
+
+The Linux operating system family is one of the most widely used globally, alongside Windows. The Linux kernel relies on a monolithic architecture. This implies that the kernel has a broad range of responsibilities, while user space contains applications that rely entirely on system capabilities. In practice, all code responsible for memory management, scheduling, interrupt handling, and device drivers resides within the kernel address space. This approach presents various advantages and disadvantages.
+
+\noindent Advantages:
+\begin{itemize}
+    \item \textbf{Zero-copy and memory efficiency} -- As all components reside in a single address space, data does not need to be copied between distinct address spaces. Passing a pointer is sufficient to transfer data between modules.
+    \item \textbf{Minimized context switching} -- Within the single kernel address space, invoking functions from different modules is a direct function call, avoiding the overhead of context switching required by microkernels to access driver services.
+    \item \textbf{Simplified source management} -- A single binary structure allows for a unified build scheme. Developing numerous separately compiled services can easily lead to inconsistencies in behavior or data models.
+    \item \textbf{Ease of implementation} -- This architecture is often easier to implement for small to mid-sized projects.
+\end{itemize}
+
+\noindent Disadvantages:
+\begin{itemize}
+    \item \textbf{Stability} -- A bug in a single driver, even for an unused device, can compromise the stability of the entire system.
+    \item \textbf{Security} -- Vulnerabilities in drivers can potentially expose the kernel address space to malicious user-space execution.
+    \item \textbf{Scalability challenges} -- For large-scale projects, strict standards are necessary. Without them, the code base can easily become unmaintainable due to complex webs of references and dependencies.
+\end{itemize}
+
+To enhance extensibility and avoid the need for recompilation when adding drivers, Linux employs Loadable Kernel Modules (LKMs) \cite{linux_lkm}. These allow the kernel functionality to be extended dynamically via well-defined interfaces during runtime.
+
+\begin{figure}[htbp]
+    \centering
+    \resizebox{\textwidth}{!}{%
+        \begin{tikzpicture}
+            \tikzstyle{every node}=[font=\large]
+            \draw [fill={rgb,255:red,242; green,242; blue,242}, thick] (0,0) rectangle (14, 8);
+            \node [anchor=north west, font=\bfseries\Large] at (0.3, 7.7) {Kernel Address Space};
+            \draw [fill=white, thick, rounded corners=3.0] (0.5, 4.5) rectangle (13.5, 6.5);
+            \node [font=\Large, align=center] at (7, 5.5) {Base Linux Kernel Components};
+            \tikzstyle{mod}=[draw, fill=white, thick, rounded corners=3.0, minimum width=2cm, minimum height=1.3cm, font=\small]
+    
+            \node[mod] at (1.5, 3.2) {vfat};
+            \node[mod] at (3.7, 3.2) {fat};
+            \node[mod] at (5.9, 3.2) {realtek};
+            \node[mod] at (8.1, 3.2) {pcspkr};
+            \node[mod] at (10.3, 3.2) {kvm-intel};
+            \node[mod] at (12.5, 3.2) {kvm};
+    
+            \node[mod] at (1.5, 1.5) {nvme};
+            \node[mod] at (3.7, 1.5) {nvidia};
+            \node[mod] at (5.9, 1.5) {rfkill};
+            \node[mod] at (8.1, 1.5) {nf\_tables};
+            \node[mod] at (10.3, 1.5) {snd};
+            \node[mod] at (12.5, 1.5) {\Huge \dots};
+    
+        \end{tikzpicture}
+    }
+    \caption{Linux Monolithic Architecture with Loadable Kernel Modules}
+    \label{fig:linux_lkm}
+\end{figure}
+
+Historically, Linux utilized a strictly periodic tick (defined by hardware), configuring hardware timers to generate interrupts at a fixed frequency (e.g., 100 Hz or 1000 Hz). While this design was straightforward, it imposed limitations on sleep granularity and power efficiency. To address these issues, Linux introduced High Resolution Timers (\texttt{hrtimers}), which allow the kernel to schedule interrupts with nanosecond precision based on immediate needs rather than a fixed cadence. Despite the capabilities of high-resolution timers, the concept of a periodic tick is maintained within the kernel for performance reasons and architectural legacy, by simulating the tick with high precision framework.
+
+This hight precision framework has one major drawback - it can get slow for big number of events as it based on priority queue with O(logn) complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers O(1) complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
+
+\subsection{The Process and Thread Model}
+Unlike many other operating systems that distinguish strictly between processes (containers of resources) and threads (units of execution), Linux treats them almost identically. The core data structure is the \texttt{task\_struct} \cite{linux_task}.
+\begin{itemize}
+    \item A \textbf{Process} is a \texttt{task\_struct} with a unique memory map and file descriptor table.
+    \item A \textbf{Thread} is simply a \texttt{task\_struct} created via the \texttt{clone()} system call with flags such as \texttt{CLONE\_VM} and \texttt{CLONE\_FILES}, causing it to share the address space and resources with its parent.
+\end{itemize}
 
 \subsection{Scheduler}
-TODO
-\subsection{Timing}
-TODO
+
+Linux implements several scheduling policies \cite{linux_policies}\cite{linux_cfs} operating on task priorities. There are two major classes: \textbf{Real Time}, which operates on priorities 1-99, and \textbf{Fair}, which operates on priority 0. Tasks with higher priorities preempt those with lower priorities. Linux provides six policy classes:
+
+\begin{itemize}
+\item \texttt{SCHED\_DEADLINE} -- Takes precedence over any other policy and provides real-time capabilities.
+\item \texttt{SCHED\_FIFO} -- A real-time policy where a task runs until it yields control or is preempted by a higher-priority task.
+\item \texttt{SCHED\_RR} (Round Robin) -- A real-time policy where each task is assigned a time slice. Upon exhaustion, the task is moved to the end of the queue.
+\item \texttt{SCHED\_OTHER} -- The standard policy for the majority of non-real-time tasks.
+\item \texttt{SCHED\_BATCH} -- Designed for non-interactive tasks that run for longer periods without context switches, tolerating longer scheduling latencies.
+\item \texttt{SCHED\_IDLE} -- Used for very low priority tasks that run only when the system is otherwise idle.
+\end{itemize}
+
+From version 2.6.23 \cite{linux_cfs} up to 6.6 \cite{linux_eevdf}, the \texttt{CFS} (Completely Fair Scheduler) was the default scheduler for the \textbf{Fair} class. Starting with version 6.6, the \texttt{EEVDF} (Earliest Eligible Virtual Deadline First) scheduler began replacing CFS.
+
+\subsubsection{Completely Fair Scheduler}
+The Linux documentation summarizes the design of the \textbf{CFS} as follows:
+
+\begin{quote}
+80\% of CFS's design can be summed up in a single sentence: CFS basically models an “ideal, precise multi-tasking CPU” on real hardware.
+
+“Ideal multi-tasking CPU” is a (non-existent :-)) CPU that has 100\% physical power and which can run each task at precise equal speed, in parallel, each at 1/nr\_running speed. For example: if there are 2 tasks running, then it runs each at 50\% physical power --- i.e., actually in parallel.
+    
+On real hardware, we can run only a single task at once, so we have to introduce the concept of “virtual runtime.” The virtual runtime of a task specifies when its next timeslice would start execution on the ideal multi-tasking CPU described above. In practice, the virtual runtime of a task is its actual runtime normalized to the total number of running tasks.
+\cite{linux_cfs}
+\end{quote}
+
+The implementation uses a red-black tree sorted by virtual runtime, representing the execution timeline. The next task selected is the leftmost node in the tree (the task with the least spent execution time) and runs until next another taks becomes the leftmost + some granularity to prevent over-scheduling.
+
+\subsubsection{Earliest Eligible Virtual Deadline First Scheduler}
+
+This algorithm is becoming the new standard for Linux scheduling, addressing shortcomings of the previous \textbf{CFS} implementation. The new approach functions similarly to CFS but operates on deadlines rather than accumulated runtime \cite{linux_eevdf}. This modification allows for better prioritization of latency-sensitive tasks.
+
 \subsection{Memory Management}
-TODO
+\label{subsec:linux_mem}
+
+Linux features centralized memory management with various APIs, including \texttt{kmalloc}, \texttt{kzalloc}, \texttt{vmalloc}, and \texttt{kvmalloc} \cite{linux_mem_interfaces}.
+
+\subsubsection{Physical Memory}
+As an architecture-independent kernel, Linux abstracts hardware details. Physical memory is partitioned into zones, each serving a distinct purpose \cite{linux_mem_phys}:
+
+\begin{itemize}
+    \item \texttt{ZONE\_DMA} -- Memory suitable for DMA (Direct Memory Access) by devices that cannot access the full addressable range.
+    \item \texttt{ZONE\_NORMAL} -- Standard memory directly accessible by the kernel.
+    \item \texttt{ZONE\_MOVABLE} -- Similar to \texttt{ZONE\_NORMAL}, but the content of pages in this zone can be migrated to different physical frames (preserving virtual address).
+    \item \texttt{ZONE\_DEVICE} -- Memory reserved for specific hardware, such as GPUs, mapped to device drivers.
+    \item \texttt{ZONE\_HIGHMEM} -- Memory not covered by permanent kernel mappings, used only by some 32-bit architectures.
+\end{itemize}
+
+To enhance multi-core performance, Linux employs a two-step strategy \cite{linux_mem_phys}. It utilizes a global buddy allocator \cite{buddy_allocator} alongside Per-CPU Pagesets (PCP). Allocations are first attempted from the local PCP and if that fails, the system falls back to the global allocator with full synchronization.
+
+\subsubsection{Virtual Memory}
+
+Each process possesses its own Page Table, responsible for mapping virtual addresses to physical ones. Physical frames are acquired from the Physical Memory Manager \ref{subsec:linux_mem}. Virtual address space management for each process utilizes red-black trees to efficiently locate free areas. The kernel address space is mapped into every process. Additionally, Linux implements demand paging, a lazy allocation approach where physical pages are assigned only when the process actually accesses the memory, utilizing the page-fault mechanism.
+
 \subsection{System Interface}
-TODO
+
+Linux is a Unix-like operating system kernel. The primary interface for system communication is provided via system calls, wrapped by the GNU C Library (glibc).
+
+\subsubsection{Standards}
+
+Linux adheres to the \textbf{POSIX} standard, implementing functions such as \texttt{fork()} and \texttt{exec()}, as well as the concept of \texttt{pthread}.
+
+\subsubsection{Fork Mechanism}
+
+The \texttt{fork()} mechanism is rooted in historical design decisions. While copying the entire parent process state appears inefficient and can introduce performance issues, Linux implements various optimizations, such as Copy-On-Write (\texttt{COW}), to mitigate overhead. This is particularly relevant given that \texttt{exec()} is frequently called immediately after \texttt{fork()}, discarding the copied state. The advantages and disadvantages of this mechanism include:
+
+\noindent Advantages:
+\begin{itemize}
+    \item Simplified implementation of pipes and pipelining.
+    \item Automatic state propagation, eliminating the need to manually specify files or streams in function call.
+\end{itemize}
+
+\noindent Disadvantages:
+\begin{itemize}
+    \item Complex implementation requiring multiple optimizations to remain efficient.
+    \item Requires the duplication of process structures, which is inherently complex.
+    \item Potential performance bottlenecks in edge cases, such as with large page tables.
+    \item Requires careful resource management by the programmer to release resources before execution.
+    \item Conceptually difficult for beginners to grasp.
+    \item Not portable to architectures lacking an MMU.
+\end{itemize}
 
 \section{Minix 3}
 
@@ -740,7 +877,7 @@ Memory management in Minix 3 is primarily handled by the user-space Virtual Memo
 The VM server is responsible for memory region allocation, page table administration, and page fault handling. It implements a region-based memory model in which a process address space is divided into contiguous regions with defined access permissions (read, write, and execute). To efficiently manage free and allocated memory regions, the VM server uses \textbf{AVL trees} \cite{minix_vm}.
 
 \subsubsection{Allocation and Paging}
-Internal memory allocation for kernel data structures and VM metadata is performed using a slab allocator. Minix 3 supports demand paging: when a process attempts to access an unmapped virtual address, a page fault is raised. The kernel intercepts this exception and forwards the fault information to the VM server, which resolves it by mapping an appropriate physical frame or retrieving the required page from secondary storage \cite{shenoy_lecture}.
+Internal memory allocation for kernel data structures and VM metadata is performed using a slab allocator \cite{slab_allocation}. Minix 3 supports demand paging: when a process attempts to access an unmapped virtual address, a page fault is raised. The kernel intercepts this exception and forwards the fault information to the VM server, which resolves it by mapping an appropriate physical frame or retrieving the required page from secondary storage \cite{shenoy_lecture}.
 
 \subsubsection{Memory Grants}
 Due to the strict isolation of address spaces in the microkernel architecture, processes cannot directly access the memory of others. To facilitate the exchange of large data structures without violating protection boundaries, Minix 3 provides a capability-based mechanism known as \texttt{Memory Grants}, accessed via the \texttt{safecopy} API \cite{minix_safecopy}.
@@ -1822,13 +1959,12 @@ Describes the current status of the thread. This state tracking allows the kerne
 
 \begin{figure}[p]
     \centering
-    % Teraz mamy więcej miejsca, więc height może być większe
     \includesvg[height=0.95\textheight, width=\textwidth, keepaspectratio]{res/thread-states.svg}
     \caption{Thread State Transitions Graph}
     \label{fig:thread-states}
 \end{figure}
 
-\restoregeometry % Bardzo ważne: przywraca normalne marginesy dla reszty pracy
+\restoregeometry
 
 \subsubsection{Stacks}
 
@@ -2217,6 +2353,11 @@ TID & Thread IDentifier \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
 VFS & Virtual File System \\
+CFS & Completly Fair Scheduler \\
+EEVDF & Earliest Eligible Virtual Deadline First \\
+DMA & Direct Memory Access \\
+PCP & Per-CPU Pagessets \\
+COW & Copy On Write \\
 \end{tabular}
 \\
 \thispagestyle{empty}
