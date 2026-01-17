@@ -387,25 +387,43 @@ TODO KTOKOLWIEK
 
 \chapter{Creating an Operating System from Scratch}
 
-% Tutorial jak zrobic os krok po kroku tak zeby kazdy zrozumial pozdro
+Here we will briefly describe in proper sequence what are the most important parts of the kernel on which most of other code will highly depend on. This sequence is build on our experience and meterials we read during the development so it is not the ideal way of things, but our view we propose. Following the providing sequnece should be an easy path to follow instead of discovering everything again. We will focus only on monolithic-kernel design where every module resides in same address space - kernel address space.
 
-\section{Host Environment}
-TODO KTOKOLWIEK
+\section{Host Environment Preparation}
+
+Before proceeding to writing actual kernel code we must first do some preparation on our development tools and development environemnts. Below we can find brief description of needed things.
+
 \subsection{Cross-Compilation Toolchain}
 TODO KTOKOLWIEK
 \subsection{Building Machinery}
 TODO KTOKOLWIEK
 \subsection{Emulation}
 TODO KTOKOLWIEK
-\subsection{Rootfs}
-TODO ADAM
-\subsection{Compiling Userspace Programs}
-TODO ADAM
+
+\section{General Design Considerations}
+TODO KTOKOLWIEK
+
+\subsection{Intrusive Data Structures}
+TODO KTOKOLWIEK
+
+\subsection{Ref-counting}
+TODO KTOKOLWIEK
+
+\subsection{Archtiecture Abstraction}
+TODO KTOKOLWIEK
+
+\subsection{Directory Layout}
+TODO KTOKOLWIEK
+
+\subsection{Including Good Practices}
+TODO KTOKOLWIEK
 
 \section{Target Environment}
 TODO KTOKOLWIEK
+
 \subsection{Implementation of Libc and Libc++}
 TODO KTOKOLWIEK
+
 \subsection{Bootloader}
 \label{subsec:theory_bootloader}
 
@@ -640,8 +658,11 @@ Architecture-specific details must also be considered. for example, the AMD64 ar
 
 As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. This can be achieved by allocating a large circular buffer for messages, which is then asynchronously flushed to the output device by a dedicated, low-priority task. Furthermore, to facilitate effective debugging in a multi-threaded and multi-core environment, each log entry should automatically capture essential context metadata, specifically the high-precision timestamp, the current Core ID, and the Process ID.
 
+This goes about the general design, but during initial development system there is no need to have full tracing system, simple print with formatting is enough to proceed.
+
 \subsection{Testing framework}
-TODO: JAKUB
+
+Once we have two-way communication established with external system and some tracing capabilities enabled it probably good idea to implement some protocol allowing for precise testing implemented code inside the target system and validate the results by external one. Such framework might be utilized to implement regression tests and unit tests running each time we create an PR to trace failures. The test of the code (even data structures) must be condacted on target device as the code might work on some host machine operating with linux but fails locally, because of disabled futures, wrongly implemented system calls, inproper memory management or wrongly generated assembly code. The design should isolate the tests runs so that previous failed tests does not affect new ones. Ideally it could be done by rebooting the system into testing module after each test, but this might be costfull and take long time, but on the other hand false positives might create real loss of time for developers. So test framework must be designed to derive reliable and repeatable results.
 
 \subsection{Memory Management}
 \label{subsec:os_tutorial_mem}
@@ -653,12 +674,60 @@ TODO: KRYCZKA
 TODO: KRYCZKA
 \subsubsection{Virtual Address Space}
 TODO: KRYCZKA
+\subsubsection{Kernel Space Allocation API}
+TODO: KRYCZKA
 
 \subsection{Discovering External Devices and System Capabilities}
-TODO: JAKUB
+
+Finally when we have avaialbe fully memory management subsystem we can start discovering the external devices and implementing various subsystems to handle capabilities like storage devices, input devices or networking devices. We will not be focusing on all those as there is no need to support them all to get a minimal working kernel. We will cover only the absolute minimal list of devices we have to support to get working scheduler and userspace programs. 
+
+\subsubsection{Discovery and Abstraction (Drivers)}
+
+The discovery of devices differs between architectures and one must verify the solutions implemented on desired one. For example in most desktop amd64 archtiectures you need to use ACPI \cite{ACPI-spec} subsystem to enumarate some devices like (CPUs, apics, timers on non-pci devices) and afterwards PCI discovery \cite{osdev-pci} must be done to detect devices operating on PCI lines. Obviously this must be done by archtiecture code and the lower level must provide abstractions to the independent kernel code, which it properly understands. Example abstraction of device may look like this:
+
+\begin{lstlisting}[caption={Event Clock Driver Structure}, label={lst:eventClockDriver-tutorial}]
+    struct alignas(arch::kCacheLineSizeBytes) EventClockRegistryEntry : data_structures::RegistryEntry {
+        /* Clock numbers */
+        u64 min_next_event_time_ns;  // Minimum time for the next event in nanoseconds
+    
+        /* Clock specific data */
+        EventClockFlags flags;     // Features of the event clock, e.g., core-local
+        CoreMask supported_cores;  // Cores that support this event clock
+    
+        /* infra data */
+        u64 next_event_time_ns;  // Time for the next event in nanoseconds
+        EventClockState state;   // Current state of the clock
+    
+        /* Driver data */
+        void *own_data;  // Pointer to the clock's own data, used for callback
+    
+        /* callbacks */
+        struct callbacks {
+            // Callback to set next event time
+            u32 (*next_event)(EventClockRegistryEntry *, u64);  
+            // Callback to set clock state
+            u32 (*set_oneshot)(EventClockRegistryEntry *);
+            // Callback to set clock state
+            u32 (*set_periodic)(EventClockRegistryEntry *);     
+            void (*on_entry)(EventClockRegistryEntry *);        // optional
+            void (*on_exit)(EventClockRegistryEntry *);         // optional
+        } cbs;
+    };
+\end{lstlisting}
+
+It should define crucial operations for the device type and data describing functionality of the device, allowing to pick proper one by the user or automatically by some algorithms inside the kernel.
+
 \subsubsection{Clocks}
-TODO: JAKUB
+
+First type of device we will surely need to proceed further as simple clocks capable of counting how much time passed since the start of the system. We will later need them to place tasks somewhere on the timeline and based on that schedule interrupts for high-precision sleep operations. Without those capabilities we would have to each time we pick tasks to wake up iterate over all sleeping tasks and decrement sleep time left by last interrupt scheduled time. Such approach would have complexity of O(n), what is unacceptable solution for waking up tasks as interrupts must be as fast as possible and timeline is used to sort the tasks in some high performance priority queue data structure (red-black tree is a good choice as it support O(logn) removal in contrast to other implementations and guarantes high stability of the operations). For example on amd64 we can use TSC\cite{IntelManual-TSC} clock for reading how much time passed since the start of the system (sufficient for scheduler) and RTC clock to read real-world time displayed to the user. 
+
+
 \subsubsection{Event Clocks}
+TODO: JAKUB
+\subsubsection{Keyboard}
+TODO: JAKUB
+
+\subsection{Timing}
 TODO: JAKUB
 
 \subsection{File Systems}
@@ -681,7 +750,6 @@ TODO: JAKUB
 \subsubsection{Context Conversion}
 TODO: JAKUB
 
-
 \subsection{User Space}
 TODO: JAKUB
 
@@ -692,6 +760,12 @@ TODO: ADAM
 \subsubsection{Conversion to User Space}
 TODO: JAKUB
 
+\section{Host Environment -- Working OS}
+
+\subsection{Rootfs}
+TODO: ADAM
+\subsection{Compiling Userspace Programs}
+TODO: ADAM
 
 % ==================================================================
 
@@ -2085,24 +2159,24 @@ struct IntrusiveRbNode {
 
 The Thread data structure \ref{lst:threadStruct} demonstrates the usage of such nodes. This approach offers multiple benefits, including:
 \begin{itemize}
-\item No dynamic allocation or deallocation during insert or pop operations.
-\item Improved memory access patterns, the object is accessed directly rather than via a pointer from a separate node.
-\item Verification of whether an object belongs to a list in \textbf{O(1)} time, given only the object itself.
-\item Removal of the object from the list in \textbf{O(1)} time.
-\item Removal of the object from the list without requiring access to the list head structure.
+    \item No dynamic allocation or deallocation during insert or pop operations.
+    \item Improved memory access patterns, the object is accessed directly rather than via a pointer from a separate node.
+    \item Verification of whether an object belongs to a list in \textbf{O(1)} time, given only the object itself.
+    \item Removal of the object from the list in \textbf{O(1)} time.
+    \item Removal of the object from the list without requiring access to the list head structure.
 \end{itemize}
 
 \subsection{Meta-Scheduler}
 
 The scheduler architecture follows the \textbf{meta-scheduler} design pattern, which is common in modern operating systems. This approach relies on abstracting scheduling logic into Policies. Policies are primarily responsible for selecting the next task from the set of tasks they manage and reacting to thread behavior (e.g., punishing or rewarding threads with CPU time based on workload characteristics). The scheduler itself is responsible for all other operations, including:
 \begin{itemize}
-\item Managing thread states.
-\item Transitioning threads to sleep.
-\item Waking up threads.
-\item Managing idle time.
-\item Configuring next timing events via the timing infrastructure.
-\item Blocking threads on wait queues.
-\item Releasing threads from wait queues.
+    \item Managing thread states.
+    \item Transitioning threads to sleep.
+    \item Waking up threads.
+    \item Managing idle time.
+    \item Configuring next timing events via the timing infrastructure.
+    \item Blocking threads on wait queues.
+    \item Releasing threads from wait queues.
 \end{itemize}
 A hierarchy exists between policies, ensuring that threads from higher-priority policies are selected before threads from lower-priority ones.
 
@@ -2407,6 +2481,9 @@ DMA & Direct Memory Access \\
 PCP & Per-CPU Pagessets \\
 COW & Copy On Write \\
 SMP & Symmetric MultiProcessing \\
+ACPI & Advanced Configuration and Power Interface \\
+PCI & Peripheral Component Interconnect \\
+
 \end{tabular}
 \\
 \thispagestyle{empty}
