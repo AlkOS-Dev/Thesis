@@ -535,10 +535,12 @@ On modern "heavy" machines, such as x86-64 workstations, the initialization proc
     \item \textbf{Clock Stabilization:} Phase-Locked Loops (PLLs) must be tuned and stabilized to generate the gigahertz-range frequencies required by the cores.
     \item \textbf{DRAM Training:} Modern DDR4/DDR5 memory requires a complex calibration process to align signal timing before it becomes usable.
 \end{enumerate}
+\cite{Intel-Datasheet-Vol1}
 
 To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution.
 
 \subsubsection{The Chain of Trust and Abstraction}
+\label{subsubsec:chain_of_trust_and_abstraction}
 By the time a modern Operating System kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for defining the interface between the hardware and the OS is the \textbf{System Firmware} \cite{UEFI-Base-Spec, UEFI-PI-Spec}.
 
 The firmware's responsibility is to abstract the diverse implementations of different motherboards (e.g., how the disk controller is wired) and provide a mechanism to load an OS from a disk into RAM. However, relying solely on firmware is often insufficient for a portable operating system:
@@ -584,6 +586,237 @@ Even with a standardized bootloader, the kernel cannot assume full control immed
 
 Therefore, a robust operating system must implement its own initialization stage, effectively an \textbf{OS-Level Bootloader} or "Trampoline." This architecture-specific code is responsible for taking the machine from the normalized state provided by the external bootloader, enabling the specific CPU features required by the kernel, and establishing the runtime environment before passing control to the architecture-agnostic kernel main function.
 
+\section{Memory Preloading and Discovery}
+\label{sec:mem_discovery}
+One of the first and most critical responsibilities of a kernel during the bootstrap phase is to establish an authoritative map of the system's physical memory. Unlike user-space applications, which simply request memory from the operating system via system calls (e.g., \texttt{malloc} or \texttt{mmap}), the kernel is the manager responsible for fulfilling those requests. Upon entry, the kernel does not know how much RAM is available, where it is located, or which memory ranges are reserved for hardware mapped I/O (MMIO).
+
+This discovery process is not standardized. It is strictly coupled to the target architecture, the silicon vendor, and the residing firmware. Depending on the platform complexity, the kernel may acquire the memory map through one of three primary mechanisms: static definition, firmware interrogation, or hardware description structures.
+
+\subsection{Static Definition}
+
+On strictly embedded architectures (e.g., ARM Cortex-M or AVR), the physical memory layout is immutable. The location and size of SRAM banks, Flash storage, and peripheral registers are defined by the silicon vendor and do not change. In these environments, runtime discovery is redundant.
+
+The memory map is hardcoded directly into the kernel's source code or linker scripts, matching the specific System-on-Chip (SoC) datasheet \cite{ARM-CortexM4-Generic-User-Guide}. The developer explicitly defines the boundary between kernel code, stack, and heap. As illustrated in Figure \ref{fig:cortex_m4_memory}, the address space is rigid; the kernel assumes ownership of specific addresses immediately upon reset without querying external entities.
+
+In this context, the Operating System does not "discover" memory. The kernel code assumes these addresses are valid from the first instruction. For example, a Cortex-M4 kernel may be hardcoded to expect code at 0x00000000 and RAM at 0x20000000. If the software is flashed onto a different chip variant, it will simply fault; flexibility is sacrificed for minimizing initialization overhead.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    font=\sffamily\footnotesize,
+    % Main memory block style
+    memblock/.style={
+        rectangle, 
+        draw=black, 
+        thick,
+        minimum width=4.0cm, 
+        align=center, 
+        anchor=south,
+        outer sep=0pt
+    },
+    % Left-side exploded box style
+    sideblock/.style={
+        rectangle,
+        draw=black,
+        minimum width=3.8cm,
+        text width=3.5cm,
+        align=center,
+        font=\sffamily\scriptsize,
+        fill=white
+    },
+    % Address label style
+    addr/.style={
+        font=\ttfamily\scriptsize
+    }
+]
+
+% ==========================================
+% 1. DRAW MAIN MEMORY STACK
+% ==========================================
+
+% Code
+\node[memblock, minimum height=1.5cm] (code) at (0,0) {Code\\ \scriptsize 0.5GB};
+
+% SRAM
+\node[memblock, minimum height=1.5cm, above=0cm of code] (sram) {SRAM\\ \scriptsize 0.5GB};
+
+% Peripheral
+\node[memblock, minimum height=1.5cm, above=0cm of sram] (periph) {Peripheral\\ \scriptsize 0.5GB};
+
+% External RAM
+\node[memblock, minimum height=2.0cm, above=0cm of periph] (extram) {External RAM\\ \scriptsize 1.0GB};
+
+% External Device
+\node[memblock, minimum height=2.0cm, above=0cm of extram] (extdev) {External Device\\ \scriptsize 1.0GB};
+
+% PPB
+\node[memblock, minimum height=0.6cm, above=0cm of extdev] (ppb) {Private peripheral\\bus \scriptsize 1.0MB};
+
+% Vendor
+\node[memblock, minimum height=1.0cm, above=0cm of ppb] (vendor) {Vendor-specific\\memory \scriptsize 511MB};
+
+
+% ==========================================
+% 2. ADDRESS LABELS (RIGHT SIDE)
+% ==========================================
+\node[addr, anchor=south west] at (vendor.north east) {0xFFFFFFFF};
+\node[addr, anchor=south west] at (vendor.south east) {0xE0100000};
+\node[addr, anchor=south west] at (ppb.south east)    {0xE0000000};
+\node[addr, anchor=south west] at (extdev.south east) {0xA0000000};
+\node[addr, anchor=south west] at (extram.south east) {0x60000000};
+\node[addr, anchor=south west] at (periph.south east) {0x40000000};
+\node[addr, anchor=south west] at (sram.south east)   {0x20000000};
+\node[addr, anchor=south west] at (code.south east)   {0x00000000};
+
+
+% ==========================================
+% 3. LEFT SIDE BIT-BANDING (MANUAL PLACEMENT)
+% ==========================================
+
+% --- SRAM GROUP ---
+% Define the target point (Base of SRAM)
+\coordinate (sram_target) at (sram.south west);
+
+% 1MB Region Box (Level with SRAM base)
+\node[sideblock, anchor=east] (sram_region) at (-2.5, 1.2) {1MB Bit band region};
+% Address for 1MB Region
+\node[addr, anchor=east] at (sram_region.south west) {0x20000000};
+\node[addr, anchor=east] at (sram_region.north west) {0x200FFFFF};
+
+% Alias Box (Floated above)
+\node[sideblock, anchor=east, minimum height=0.8cm] (sram_alias) at (-2.5, 2.5) {32MB Bit band alias};
+% Address for Alias
+\node[addr, anchor=east] at (sram_alias.south west) {0x22000000};
+\node[addr, anchor=east] at (sram_alias.north west) {0x23FFFFFF};
+
+% Connect lines for SRAM
+\draw (sram_alias.north east) -- (sram_target);
+\draw (sram_alias.south east) -- (sram_target);
+\draw (sram_region.north east) -- (sram_target);
+\draw (sram_region.south east) -- (sram_target);
+
+
+% --- PERIPHERAL GROUP ---
+% Define the target point (Base of Peripheral)
+\coordinate (periph_target) at (periph.south west);
+
+% 1MB Region Box (Level with Peripheral base)
+\node[sideblock, anchor=east] (periph_region) at (-2.5, 4.2) {1MB Bit band region};
+% Address for 1MB Region
+\node[addr, anchor=east] at (periph_region.south west) {0x40000000};
+\node[addr, anchor=east] at (periph_region.north west) {0x400FFFFF};
+
+% Alias Box (Floated above)
+\node[sideblock, anchor=east, minimum height=0.8cm] (periph_alias) at (-2.5, 5.5) {32MB Bit band alias};
+% Address for Alias
+\node[addr, anchor=east] at (periph_alias.south west) {0x42000000};
+\node[addr, anchor=east] at (periph_alias.north west) {0x43FFFFFF};
+
+% Connect lines for Peripheral
+\draw (periph_alias.north east) -- (periph_target);
+\draw (periph_alias.south east) -- (periph_target);
+\draw (periph_region.north east) -- (periph_target);
+\draw (periph_region.south east) -- (periph_target);
+
+\end{tikzpicture}
+\caption{Cortex-M4 Memory Map with Bit-banding regions (Adapted from \cite{ARM-CortexM4-Generic-User-Guide})}
+\label{fig:cortex_m4_memory}
+\end{figure}
+
+\subsection{Flattened Device Tree (DTB)}
+
+To allow a single kernel binary to support multiple board configurations without hardcoding, architectures such as ARM64 and RISC-V utilize the \textbf{Flattened Device Tree}. The bootloader passes a pointer to a binary structure (the DTB Blob) which describes the hardware topology, including physical memory ranges and reserved regions.
+
+The DTB format encodes the device tree into a linear, pointerless data structure. It consists of a fixed-size header followed by three variable-sized blocks:
+\begin{enumerate}
+    \item \textbf{Memory Reservation Block}: Lists physical memory ranges that the kernel must not overwrite (e.g., firmware runtime data).
+    \item \textbf{Structure Block}: Describes the device nodes and properties in a linear tree format using token-based tags.
+    \item \textbf{Strings Block}: A pool of null-terminated property names referenced by offset.
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    font=\sffamily\footnotesize,
+    block/.style={
+        rectangle, 
+        draw=black, 
+        thick,
+        minimum width=5cm, 
+        minimum height=0.8cm, 
+        align=center, 
+        fill=white
+    },
+    arrow/.style={-Latex, thick, color=black!70}
+]
+
+\node[block, fill=gray!10] (header) {\textbf{Header}\\ \scriptsize (Magic, Totalsize, Offsets)};
+\node[block, below=0.1cm of header] (reserve) {Memory Reservation Block};
+\node[block, below=0.1cm of reserve] (struct) {Structure Block\\ \scriptsize (Nodes \& Properties)};
+\node[block, below=0.1cm of struct] (strings) {Strings Block\\ \scriptsize (Property Names)};
+
+% Pointers
+\draw[arrow] (header.east) -- ++(0.5,0) |- node[pos=0.7, right, font=\scriptsize] {off\_mem\_rsvmap} (reserve.east);
+\draw[arrow] (header.east) -- ++(0.8,0) |- node[pos=0.7, right, font=\scriptsize] {off\_dt\_struct} (struct.east);
+\draw[arrow] (header.east) -- ++(1.1,0) |- node[pos=0.7, right, font=\scriptsize] {off\_dt\_strings} (strings.east);
+
+\end{tikzpicture}
+\caption{Structure of a Flattened Device Tree Blob}
+\label{fig:dtb_structure}
+\end{figure}
+\todo[inline]{Probably delete this, unless it can be extended or modified to bring more value}
+
+The kernel parses this blob at boot to discover available RAM. Notably, the DTB standard mandates \textbf{Big-Endian} byte ordering. On Little-Endian architectures like x86-64, the kernel must perform byte-swapping when parsing these structures.
+
+\cite{Devicetree-Spec}
+
+\subsection{Firmware Interrogation}
+
+On general-purpose platforms (x86-64), the hardware is modular. The kernel cannot predict the amount of installed RAM or the physical address map. In this scenario, the kernel must query the system firmware directly. This introduces a dependency on the firmware interface:
+\begin{itemize}
+    \item \textbf{Legacy BIOS:} Requires invoking interrupt vectors (e.g., \texttt{INT 0x15, EAX=0xE820}) to retrieve a list of memory ranges.
+    \item \textbf{UEFI:} Requires calling specific boot services (\texttt{GetMemoryMap}) to retrieve descriptors of physical pages and their attributes.
+\end{itemize}
+
+\cite{UEFI-Base-Spec}
+
+\subsection{Hardware Abstraction}
+How does the kernel handle such diverse set of methods of querying the memory? This is a part of a bigger topic - namely Hardware / Architecture Abstraction - and wil be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
+
+\subsection{Discovering and Enabling CPU Features}
+\label{subsec:cpu_discovery}
+
+Modern Central Processing Units (CPUs) are not monolithic entities with a fixed feature set. Instead, they represent an accumulation of decades of architectural extensions. A generic x86-64 processor guarantees a baseline instruction set (User-level ISA), but specific capabilities regarding vectorization (AVX, AVX-512), cryptography (AES-NI), security (SMEP, SMAP), and performance (PCID, TSC-Deadline) vary significantly between processor generations and manufacturers.
+\cite{Intel-AVX}
+
+An operating system kernel cannot blindly execute advanced instructions. Doing so on hardware that lacks support results in an \textit{Invalid Opcode} exception, causing a kernel panic. Therefore, a robust kernel must perform a feature discovery handshake during the early initialization phase.
+
+\subsubsection{Feature Identification}
+On the x86 architecture, this discovery is performed via the \texttt{CPUID} instruction. This instruction acts as a query interface where the software loads a leaf index into the \texttt{EAX} register (and optionally a subleaf in \texttt{ECX}) and executes \texttt{CPUID}. The processor returns feature bitmaps and vendor information in the general-purpose registers (\texttt{EAX}, \texttt{EBX}, \texttt{ECX}, \texttt{EDX}).
+\cite{Intel-CPUID}
+
+While x86 relies on this dynamic instruction-based discovery, other architectures employ different strategies:
+\begin{itemize}
+    \item \textbf{ARM64 (AArch64)} utilizes special system registers (e.g., \texttt{ID\_AA64PFR0\_EL1}) that the kernel reads to determine support for floating-point units or cryptographic extensions.
+    \item \textbf{RISC-V} typically employs the Device Tree Blob (DTB) or the \texttt{misa} (Machine ISA) Control and Status Register to inform the kernel about supported standard extensions (e.g., Atomics, Floats).
+\end{itemize}
+\cite{ARM-Arch-Ref, RISCV-Priv-Spec}
+
+\subsubsection{Feature Enablement}
+Identifying that a feature exists is often insufficient; the kernel must explicitly enable it. To maintain backward compatibility and minimize power consumption, processors often boot with advanced features disabled.
+
+A prime example is the Floating Point Unit (FPU) and Vector Extensions (SSE/AVX). On x86-64, even if \texttt{CPUID} reports that AVX is supported, attempting to execute a \texttt{VMOVDQA} instruction will fault unless the kernel has:
+\begin{enumerate}
+    \item Enabled the FPU by clearing the Emulation bit in Control Register \texttt{CR0}.
+    \item Enabled SSE by setting the \texttt{OSFXSR} bit in \texttt{CR4}.
+    \item Enabled XSAVE/XRSTOR support by setting the \texttt{OSXSAVE} bit in \texttt{CR4}.
+    \item Explicitly enabled AVX state saving in the Extended Control Register (\texttt{XCR0}).
+\end{enumerate}
+\cite{Intel-ControlRegisters}
+
+This enabling phase is critical not only for allowing instruction execution but also for the scheduler. The operating system must know the size of the processor's register state (Context) to correctly save and restore threads during context switches. If AVX-512 is enabled, the context size increases significantly compared to standard SSE, impacting memory usage and context switch latency.
+
+\cite{Intel-XSAVE}
 
 \subsection{Establishment of Basic Communication}
 
@@ -597,9 +830,6 @@ One of the primary objectives when initializing code on a target architecture is
 \end{figure}
 
 As shown in Figure \ref{fig:qemu_comms}, alongside typical output to the screen and keyboard input, the kernel transmits text to the QEMU serial port, which is then streamed to the host shell. This approach enables host-side scripts to parse logs, detect bugs or failures, and allow manual inspection of the system state immediately preceding a crash.
-
-\subsection{Memory Preloading and Discovery}
-TODO: Kryczka opisz multiboot2 przykladowo i zbieranie informacji o zarezerowowanych przestrzeniach
 
 \subsection{Enabling Interrupts and Exceptions}
 \label{subsec:os-tutorial-interrupts}
