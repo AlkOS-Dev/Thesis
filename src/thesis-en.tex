@@ -151,6 +151,7 @@
 \usetikzlibrary{fit, backgrounds, shapes, arrows.meta, positioning, calc, chains}
 \usepackage[colorinlistoftodos]{todonotes}
 \usepackage{svg}
+\usepackage{graphicx}
 
 % --------------------------- CHAPTER HEADERS ---------------------
 
@@ -335,7 +336,7 @@ TODO
 \addcontentsline{toc}{chapter}{Introduction}
 
 \section{Theoretical Background} 
-TODO
+TODO KTOKOLWIEK
 
 \subsubsection{Interrupts}
 \subsubsection{Kernel Tick}
@@ -345,7 +346,7 @@ TODO
 \subsubsection{Context Switch}
 
 \section{Scope of the Thesis} 
-TODO
+TODO KTOKOLWIEK
 \section{Limitations and Assumptions}
 
 \subsection{Minimal requirements}
@@ -376,11 +377,11 @@ Functionalities:
 \end{itemize}
 
 \section{Achieved Functionalities} 
-TODO
+TODO KTOKOLWIEK
 \section{Work Division -- Code} 
-TODO
+TODO KTOKOLWIEK
 \section{Work Division -- Thesis}
-TODO
+TODO KTOKOLWIEK
 
 % ==================================================================
 
@@ -389,28 +390,24 @@ TODO
 % Tutorial jak zrobic os krok po kroku tak zeby kazdy zrozumial pozdro
 
 \section{Host Environment}
-TODO
+TODO KTOKOLWIEK
 \subsection{Cross-Compilation Toolchain}
-TODO
+TODO KTOKOLWIEK
 \subsection{Building Machinery}
-TODO
+TODO KTOKOLWIEK
 \subsection{Emulation}
-TODO
+TODO KTOKOLWIEK
 \subsection{Rootfs}
-TODO
+TODO ADAM
 \subsection{Compiling Userspace Programs}
-TODO
-\subsection{Testing}
-TODO
+TODO ADAM
 
 \section{Target Environment}
-TODO
+TODO KTOKOLWIEK
 \subsection{Implementation of Libc and Libc++}
-TODO
+TODO KTOKOLWIEK
 \subsection{Bootloader}
 \label{subsec:theory_bootloader}
-
-
 
 The process of bringing a computer from a powered-off state to a fully functional operating system is governed by a rigid chain of physical and logical constraints. At the hardware level, the Central Processing Unit (CPU) functions as a complex state machine. Upon the application of power or a reset signal, the CPU resets its internal registers to default values and sets the Instruction Pointer to a specific, hardcoded physical address known as the \textit{Reset Vector} \cite{IntelManual-Reset}.
 
@@ -569,59 +566,131 @@ Even with a standardized bootloader, the kernel cannot assume full control immed
 
 Therefore, a robust operating system must implement its own initialization stage, effectively an \textbf{OS-Level Bootloader} or "Trampoline." This architecture-specific code is responsible for taking the machine from the normalized state provided by the external bootloader, enabling the specific CPU features required by the kernel, and establishing the runtime environment before passing control to the architecture-agnostic kernel main function.
 
+
+\subsection{Establishment of Basic Communication}
+
+One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on AMD64 desktop platforms) or implement a basic network stack. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing and as development progresses, it is advisable to disable this communication and associated debug traces via compilation flags. It is crucial to strictly separate debug-only communication from standard output devices, as the former must be disabled in release builds to ensure performance and security.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\textwidth]{res/debug-output.png}
+    \caption{QEMU serial-port Communication}
+    \label{fig:qemu_comms}
+\end{figure}
+
+As shown in Figure \ref{fig:qemu_comms}, alongside typical output to the screen and keyboard input, the kernel transmits text to the QEMU serial port, which is then streamed to the host shell. This approach enables host-side scripts to parse logs, detect bugs or failures, and allow manual inspection of the system state immediately preceding a crash.
+
 \subsection{Memory Preloading and Discovery}
-TODO
-\subsection{Discovering and Enabling CPU Features}
-TODO
+TODO: Kryczka opisz multiboot2 przykladowo i zbieranie informacji o zarezerowowanych przestrzeniach
+
 \subsection{Enabling Interrupts and Exceptions}
-TODO
+\label{subsec:os-tutorial-interrupts}
+
+Prior to the implementation of memory management (Section \ref{subsec:os_tutorial_mem}), it is essential to establish a basic interrupt handling mechanism. On most platforms, the exception system relies entirely on interrupt mappings. Consequently, without a functional interrupts, the kernel is unable to display debug information on the designated communication device when an error occurs.
+
+Exception handlers should output a descriptive message detailing the failure. This message must include the CPU state, the source of the exception, the instruction pointer where the error occurred, and, if applicable, an error code explaining the cause. An example of a kernel dump following an exception is presented below:
+
+\begin{lstlisting}[caption={Example Kernel Panic on Exception}, label={lst:kernel_panic}]
+    [ KERNEL PANIC ] Received exception: 0 (Divide Error (#DE))
+    And error: 0
+    At instruction address: 0xffffffff8021b856
+    rip:                    0xffffffff8021b856
+    rflags:                 0x0000000000010246
+    rsp:                    0xffffffff8138dc20
+    rax:                    0x0000000000000009
+    rbx:                    0x000000000006f000
+    rcx:                    0x0000000000000000
+    rdx:                    0x0000000000000000
+    rsi:                    0xffffffff803648f3
+    rdi:                    0xffffffff80818c28
+    rbp:                    0xffffffff8138dc40
+    r8:                     0xffffffff80305d00
+    r9:                     0xffffffff80305d59
+    r10:                    0xffffffff8138df10
+    r11:                    0xffffffff802fdfaf
+    r12:                    0x0000000000000010
+    r13:                    0x0000000000180000
+    r14:                    0x0000000001a91000
+    r15:                    0x0000000000000800
+    
+    RFLAGS:                 0x0000000000010246
+\end{lstlisting}
+
+Before initializing Memory Management, exception handling is the primary function required from the interrupt system. At this stage, there is typically no use case for interrupt-driven devices, as the consumers (processes) have not yet been booted, and multicore operations (which require memory for bookkeeping structures) are not active. However, the design of the interrupt subsystem must account for future extensibility and requirements.
+
+\subsubsection{Design Considerations}
+
+It is important to note that low-level, hardware-compliant interrupt handlers differ significantly from standard compiled functions. They often require specific entry and exit instructions, making the runtime swapping of these functions difficult. A robust solution is to create a low-level assembly wrapper that efficiently performs all architecture-dependent operations before invoking a high-level function responsible for the kernel's logic. However, this approach has limitations. The high-level function is typically hardcoded into the low-level handler, preventing runtime reconfiguration.
+
+To address this, a hardware abstraction layer is required to serve as an intermediary between the architecture-specific wrapper and the high-level kernel logic. This abstraction should manage the low-level tables and facilitate the swapping of handlers at runtime. This can be implemented using an array of abstract handlers mapped to hardware interrupts. Furthermore, devices are mapped to hardware interrupts dynamically during runtime based on user configuration and hardware discovery, necessitating the ability to swap drivers and logic dynamically. Without this modularity, the system would require multiple stages of interrupt initialization, multiple architecture-specific handlers, or complex handlers that query the kernel state to determine valid operations (e.g., a page fault handler checking for virtualization support each time is invoked).
+
+It is also critical to design handlers to perform minimal work. This precludes operations such as waiting, sleeping, or extensive tracing. If device handling requires complex logic or a state change, the handler should invoke the scheduler to perform a context switch upon exiting the interrupt. Executing complex logic within the interrupt context blocks other interrupts and may lead to data loss. Consequently, the interrupt abstraction layer must also support task switching.
+
+When implementing this abstraction, three distinct classes of interrupts can be identified:
+
+\begin{itemize}
+    \item \textbf{Exceptions} -- Generated by the CPU to indicate specific conditions requiring immediate attention, such as Page Faults, Division by Zero, or invalid instruction operands.
+    \item \textbf{Hardware Interrupts} -- Generated by external devices (e.g., Timers, Keyboard, Disk Controller) to communicate efficiently with the kernel without the need for polling.
+    \item \textbf{Software Interrupts} -- Initiated by software instructions. For example, on the x86-64 architecture, the instruction \texttt{INT 0x80} triggers an interrupt with the vector number \texttt{0x80}.
+\end{itemize}
+
+Architecture-specific details must also be considered. for example, the AMD64 architecture utilizes the legacy PIC \cite{osdev-pic} and the improved, SMP-supporting APIC \cite{osdev-apic}. Finally, to enable Symmetric Multiprocessing (SMP) and utilize multiple cores, the interrupt mechanism serves as the primary method of inter-core communication.
+
+\subsection{Tracing System}
+
+As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. This can be achieved by allocating a large circular buffer for messages, which is then asynchronously flushed to the output device by a dedicated, low-priority task. Furthermore, to facilitate effective debugging in a multi-threaded and multi-core environment, each log entry should automatically capture essential context metadata, specifically the high-precision timestamp, the current Core ID, and the Process ID.
+
+\subsection{Testing framework}
+TODO: JAKUB
+
 \subsection{Memory Management}
-TODO
+\label{subsec:os_tutorial_mem}
+TODO: KRYCZKA
 
 \subsubsection{Physical Memory Management}
-TODO
+TODO: KRYCZKA
 \subsubsection{Virtual Memory Management}
-TODO
+TODO: KRYCZKA
 \subsubsection{Virtual Address Space}
-TODO
+TODO: KRYCZKA
 
 \subsection{Discovering External Devices and System Capabilities}
-TODO
-
+TODO: JAKUB
 \subsubsection{Clocks}
-TODO
+TODO: JAKUB
 \subsubsection{Event Clocks}
-TODO
+TODO: JAKUB
 
 \subsection{File Systems}
-TODO
+TODO: ADAM
 \subsection{Screen Drawing}
-TODO
+TODO: KRYCZKA
 \subsection{Scheduling}
-TODO
+TODO: JAKUB
 
 \subsubsection{Process}
-TODO
+TODO: JAKUB
 \subsubsection{Thread}
-TODO
+TODO: JAKUB
 \subsubsection{Meta-Scheduler}
-TODO
+TODO: JAKUB
 \subsubsection{Policies}
-TODO
+TODO: JAKUB
 \subsubsection{Context Switch}
-TODO
+TODO: JAKUB
 \subsubsection{Context Conversion}
-TODO
+TODO: JAKUB
+
 
 \subsection{User Space}
-TODO
+TODO: JAKUB
 
 \subsubsection{Syscalls}
-TODO
+TODO: ADAM
 \subsubsection{Libc System Headers}
-TODO
+TODO: ADAM
 \subsubsection{Conversion to User Space}
-TODO
+TODO: JAKUB
 
 
 % ==================================================================
@@ -919,23 +988,23 @@ The kernel acts solely as a transport mechanism and remains agnostic to the sema
 % ==================================================================
 
 \chapter{Supporting Multiple Hardware Platforms} 
-TODO
+TODO KTOKOLWIEK
 
 \section{HAL -- Hardware Abstraction Layer} 
-TODO
+TODO KTOKOLWIEK
 
 \section{x86-64 Support} 
-TODO
+TODO KTOKOLWIEK
 \subsection{Technical Debt}
-TODO
+TODO KTOKOLWIEK
 \subsection{Common Pitfalls}
-TODO
+TODO KTOKOLWIEK
 
 
 % ==================================================================
 
 \chapter{Our Implementation} 
-TODO
+TODO KTOKOLWIEK
 
 \section{Bootloader}
 \todo[inline]{Loader32 and Loader64 are very simplified here. This is very much in progress. Don't read it}
@@ -988,26 +1057,14 @@ Before calling the main kernel function, Loader64 performs the final cleanup:
 
 Finally, Loader64 parses the Multiboot2 tags to extract the memory map and framebuffer information, converts them into AlkOS-internal structures, and calls \texttt{kernel\_main}.
 
-\section{Assumptions}
-TODO
 \section{Memory Management}
 \label{sec:memory}
-TODO
+TODO KRYCZKA
 
 \section{Interrupts}
 \label{sec:interrupts}
 
 Interrupt handling is a critical component of any operating system. Without interrupts, the system would rely on manually polling devices or checking states, which is inefficient and wasteful of resources. Furthermore, interrupts enable the system to be significantly more responsive. For example, when a keyboard key is pressed, the operating system may need to immediately switch execution to the thread responsible for consuming the input, rather than waiting for the current task to finish. More broadly, the OS utilizes the interrupt mechanism to perform context switches. If a task exceeds its allocated execution time, timing devices such as the LAPIC Timer trigger an interrupt, allowing the scheduler to preempt the current task and grant CPU time to others.
-
-\subsection{Interrupt Types}
-
-On most platforms, interrupts fall into three general classes:
-
-\begin{itemize}
-\item \textbf{Exceptions} -- Generated by the CPU to inform the kernel about specific conditions requiring immediate attention, such as Page Faults, Division by Zero, or invalid instruction operands.
-\item \textbf{Hardware Interrupts} -- Generated by external devices (e.g., Timers, Keyboard, Disk Controller) to efficiently communicate with the kernel without the need for polling.
-\item \textbf{Software Interrupts} -- Initiated by software instructions. For example, on the x86-64 architecture, the instruction \texttt{INT 0x80} triggers an interrupt with the vector number \texttt{0x80}.
-\end{itemize}
 
 \subsection{x86-64 Interrupts}
 
@@ -2122,7 +2179,7 @@ To provide high-precision sleeping, the system relies on one-shot, precise timin
 % ==================================================================
 
 \chapter{Results}
-TODO
+TODO KTOKOLWIEK
 
 \section{User's Manual}
 
@@ -2294,31 +2351,22 @@ The available system calls are grouped into logical categories:
 
 
 \section{Example Programs}
-TODO 
+TODO ADAM
 
-\section{Performance Analysis}
-TODO
+% TODO: extension
+% \section{Performance Analysis}
+% \subsection{KMalloc Performance}
+% \subsection{KFree Performance}
+% \subsection{Context Switch Performance}
+% \subsection{Syscall Performance}
+% \subsection{Scheduler Tests}
 
-\subsection{KMalloc Performance}
-TODO
-
-\subsection{KFree Performance}
-TODO
-
-\subsection{Context Switch Performance}
-TODO
-
-\subsection{Syscall Performance}
-TODO
-
-\subsection{Scheduler Tests}
-TODO
 
 \chapter{Future Work}
-TODO
+TODO KTOKOLWIEK
 
 \chapter{Conclusion}
-TODO
+TODO KTOKOLWIEK
 
 % ------------------------------- BIBLIOGRAPHY ---------------------------
 
@@ -2358,6 +2406,7 @@ EEVDF & Earliest Eligible Virtual Deadline First \\
 DMA & Direct Memory Access \\
 PCP & Per-CPU Pagessets \\
 COW & Copy On Write \\
+SMP & Symmetric MultiProcessing \\
 \end{tabular}
 \\
 \thispagestyle{empty}
