@@ -1237,55 +1237,501 @@ TODO KTOKOLWIEK
 TODO KTOKOLWIEK
 
 \section{Bootloader}
-\todo[inline]{Loader32 and Loader64 are very simplified here. This is very much in progress. Don't read it}
 
 Before the architecture-agnostic kernel can commence execution, the underlying hardware must be brought to a known, deterministic state. As discussed in Section \ref{subsec:theory_bootloader}, the initialization protocols differ significantly depending on the specific hardware architecture and the firmware interface.
 
-For the AlkOS kernel on the x86-64 architecture, we rely on the \textbf{Multiboot2} specification. This allows us to utilize a battle-tested external bootloader, such as GRUB, to handle the intricacies of storage drivers, filesystem parsing, and memory map retrieval. GRUB loads our kernel binary into memory and transfers control to our entry point.
+For the AlkOS kernel on the x86-64 architecture, we rely on the \textbf{Multiboot2} specification \cite{Multiboot2-Spec}. This allows us to utilize a battle-tested external bootloader, such as GRUB, to handle the intricacies of storage drivers, filesystem parsing, and memory map retrieval. GRUB loads our kernel binary into memory and transfers control to our entry point.
 
-However, the state provided by Multiboot2 is insufficient for the immediate execution of our C++ kernel. Upon entry, the system is in \textbf{32-bit Protected Mode}, paging is disabled, interrupts are disabled, and the stack pointer is undefined. Furthermore, the kernel is loaded at a low physical address, whereas AlkOS is designed as a higher-half kernel.
+However, the state provided by Multiboot2 is insufficient for the immediate execution of our C++ kernel. Upon entry, the system is in \textbf{32-bit Protected Mode}, paging is disabled, interrupts are disabled, and the stack pointer is undefined. Furthermore, the kernel is loaded at a low physical address, whereas AlkOS is designed as a \textbf{higher-half kernel}: its code and data are linked to virtual addresses in the upper portion of the 64-bit address space (\texttt{0xFFFFFFFE00000000}).
 
-To bridge this gap, we implemented a two-stage internal bootloader: \textbf{Loader32} and \textbf{Loader64}.
+To bridge this gap, we implemented a two-stage internal bootloader: \textbf{Loader32} and \textbf{Loader64}. Each stage exists as a separate binary with distinct compilation requirements, as illustrated in Figure \ref{fig:boot_flow}.
 
-\subsection{Multiboot2 Entry and Loader32}
+\begin{figure}[htbp]
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        node distance=1.8cm,
+        stage/.style={draw, fill=gray!15, rounded corners=4pt, minimum width=3.2cm, minimum height=1.2cm, font=\small\bfseries, align=center},
+        arrow/.style={-Latex, thick},
+        note/.style={font=\scriptsize, align=center, text width=3cm}
+    ]
+    
+    % Stages
+    \node[stage] (grub) {GRUB\\Bootloader};
+    \node[stage, right=of grub] (loader32) {Loader32\\(32-bit ELF)};
+    \node[stage, right=of loader32] (loader64) {Loader64\\(64-bit PIE)};
+    \node[stage, right=of loader64] (kernel) {AlkOS Kernel\\(Higher-Half)};
+    
+    % Arrows with labels
+    \draw[arrow] (grub) -- (loader32) node[midway, above, font=\scriptsize] {Protected Mode};
+    \draw[arrow] (loader32) -- (loader64) node[midway, above, font=\scriptsize] {Long Mode};
+    \draw[arrow] (loader64) -- (kernel) node[midway, above, font=\scriptsize] {Virtual Memory};
+    
+    % Notes below
+    \node[note, below=0.6cm of grub] {Multiboot2\\entry point};
+    \node[note, below=0.6cm of loader32] {32-bit instructions\\Enable Long Mode};
+    \node[note, below=0.6cm of loader64] {Position-independent\\Load kernel to higher-half};
+    \node[note, below=0.6cm of kernel] {Linked at\\0xFFFFFFFE00000000};
+    
+    \end{tikzpicture}
+    }
+    \caption{AlkOS Boot Flow: Three-Stage Transition from GRUB to Higher-Half Kernel}
+    \label{fig:boot_flow}
+\end{figure}
 
-The entry point of the OS is defined in assembly language within the \texttt{Loader32} section. The primary responsibility of this stage is to transition the CPU from the 32-bit legacy environment into 64-bit Long Mode.
+\subsection{Why Two Internal Loaders?}
 
-The sequence of operations is as follows:
+The separation into Loader32 and Loader64 is not arbitrary, it stems from fundamental constraints of the x86-64 architecture and our kernel design:
+
 \begin{enumerate}
-    \item \textbf{Stack Setup:} A temporary stack is established to allow C-like operations and basic function calls.
-    \item \textbf{Multiboot Validation:} The code verifies the Magic Number in the \texttt{EAX} register to ensure the kernel was loaded by a compliant bootloader. The pointer to the Multiboot information structure (stored in \texttt{EBX}) is saved for later processing.
-    \item \textbf{Paging Initialization:} Long Mode requires paging to be enabled. Loader32 constructs a temporary \textbf{Page Global Directory (PML4)}. To allow the code to continue executing seamlessly after enabling paging, we employ \textit{identity mapping} for the lower megabytes of memory (where the loader resides) and simultaneously map the higher-half virtual addresses to the same physical location.
-    \item \textbf{Long Mode Enablement:} The transition is performed by setting the \texttt{PAE} (Physical Address Extension) bit in control register \texttt{CR4}, setting the \texttt{LME} (Long Mode Enable) bit in the \texttt{EFER} Model Specific Register (MSR), loading the address of the PML4 into \texttt{CR3}, and finally enabling paging via \texttt{CR0}.
-    \item \textbf{GDT Update:} A temporary 64-bit Global Descriptor Table is loaded to define the code segments required for 64-bit execution.
+    \item \textbf{Loader32 contains 32-bit instructions}: The transition from Protected Mode to Long Mode requires executing 32-bit code. Instructions such as setting control register bits, loading the GDT, and performing the mode switch \textit{cannot} be encoded in 64-bit instruction format. Thus, Loader32 is compiled as a 32-bit ELF binary (\texttt{elf32-i386}).
+    
+    \item \textbf{Loader64 is Position-Independent Code (PIC)}: The kernel is linked at a fixed higher-half virtual address (\texttt{0xFFFFFFFE00000000}). However, Loader64 must execute \textit{before} virtual memory is fully configured. GRUB loads Loader64 elf as a Multiboot2 module. This elf must still be loaded in the first place in memory that is big enought to hold it, meaning at an \textit{unknown physical address}. To function correctly regardless of where it is loaded, Loader64 is compiled as a Position-Independent Executable (PIE) using \texttt{-fPIE -pie} flags, employing RIP-relative addressing for all memory accesses.
+    
+    \item \textbf{The kernel ignores its physical location}: Once virtual memory is established with the higher-half mapping, the kernel code executes using virtual addresses. It is unaware of, and unaffected by, its underlying physical memory location.
 \end{enumerate}
 
-Once these steps are complete, the code performs a long jump to the 64-bit entry point, effectively flushing the CPU pipeline and entering Long Mode.
+\subsection{Loader32: 32-bit to 64-bit Transition}
 
-\subsection{Loader64}
+Loader32 is the true entry point of AlkOS, receiving control directly from GRUB. Its primary responsibility is to transition the CPU from 32-bit Protected Mode to 64-bit Long Mode, enabling the 4-level paging required by the x86-64 architecture \cite{Intel-ControlRegisters}.
 
-At this stage, the CPU is operating in 64-bit mode, but the environment is still bare. The \texttt{Loader64} is responsible for enabling specific CPU features that the C++ kernel and standard library rely on.
+\subsubsection{Entry Point}
 
-\subsubsection{Feature Discovery and Enablement}
-Modern compilers and C++ standard libraries frequently utilize SIMD instructions (SSE/AVX) for optimization, even in non-mathematical code (e.g., \texttt{memcpy} or string operations). However, these features are disabled by default upon boot. Attempting to execute an SSE instruction before enabling the unit results in an \textit{Invalid Opcode} exception.
+The Multiboot2 specification defines the machine state upon entry: \texttt{EAX} contains the magic number \texttt{0x36d76289}, and \texttt{EBX} points to the Multiboot information structure. The entry point establishes a stack and delegates to C++ code:
 
-Loader64 performs the following:
-\begin{itemize}
-    \item Checks for CPUID availability and verifies supported features.
-    \item Enables the \textbf{FPU} (Floating Point Unit) via the \texttt{CR0} register.
-    \item Enables \textbf{SSE} (Streaming SIMD Extensions) by setting the OSFXSR bit in \texttt{CR4}.
-    \item If supported, enables \textbf{AVX} (Advanced Vector Extensions) by manipulating the XCR0 extended control register.
-\end{itemize}
+\begin{lstlisting}[style=nasmstyle, caption={Loader32 Entry Point (entry.nasm)}, label={lst:loader32_entry}]
+bits 32
+; GRUB leaves us in 32-bit Protected Mode
+; EAX = Magic number, EBX = Multiboot info pointer
 
-\subsubsection{Runtime Environment Setup}
-Before calling the main kernel function, Loader64 performs the final cleanup:
-\begin{itemize}
-    \item \textbf{High-Memory Stack:} The stack pointer (\texttt{RSP}) is moved to the virtual higher-half address space, unmapping the identity-mapped low memory to catch null-pointer dereferences early.
-    \item \textbf{BSS Initialization:} The \texttt{.bss} section (containing uninitialized static variables) is zeroed out, as the bootloader does not guarantee this operation.
-    \item \textbf{Global Constructors:} The loader iterates through the \texttt{.init\_array} section to execute C++ global constructors.
-\end{itemize}
+section .text
+global Entry
+Entry:
+    mov esp, stack_top      ; Establish stack
+    mov ebp, esp
+    and esp, 0xFFFFFFF0     ; Align to 16 bytes (System V ABI)
+    
+    push ebx                ; Arg2: Multiboot info pointer
+    push eax                ; Arg1: Magic number
+    call MainLoader32       ; Delegate to C++ code
+\end{lstlisting}
 
-Finally, Loader64 parses the Multiboot2 tags to extract the memory map and framebuffer information, converts them into AlkOS-internal structures, and calls \texttt{kernel\_main}.
+\subsubsection{CPU Feature Detection}
+
+Before attempting the Long Mode transition, Loader32 verifies that the CPU supports the required features. This is accomplished through the CPUID instruction \cite{Intel-CPUID}:
+
+\begin{lstlisting}[style=nasmstyle, caption={Long Mode Detection (checks.nasm)}, label={lst:check_longmode}]
+EXTENDED_FUNCTIONS_THRESHOLD equ 0x80000000
+LONG_MODE_BIT equ 1 << 29
+
+CheckLongMode:
+    ; Check if extended CPUID functions are available
+    mov eax, EXTENDED_FUNCTIONS_THRESHOLD
+    cpuid
+    cmp eax, EXTENDED_FUNCTIONS_THRESHOLD + 1
+    jl .no_long_mode
+    
+    ; Query extended processor features (EAX=80000001h)
+    mov eax, EXTENDED_FUNCTIONS_THRESHOLD + 1
+    cpuid
+    test edx, LONG_MODE_BIT   ; Check EDX bit 29
+    jz .no_long_mode
+    
+    mov eax, 0                ; Success
+    ret
+.no_long_mode:
+    mov eax, 1                ; Failure
+    ret
+\end{lstlisting}
+
+\subsubsection{Memory Management Initialization}
+
+Before enabling paging, Loader32 initializes a temporary bootstrap Physical Memory Manager (PMM) and Virtual Memory Manager (VMM). The memory map obtained from the Multiboot2 information structure is parsed to identify available physical memory regions. Loader32 then creates an \textbf{identity mapping} of the first 10 gigabytes of physical memory using 1GB pages:
+
+\begin{lstlisting}[caption={Identity Mapping Setup (main.cpp)}, label={lst:loader32_mmap}]
+MemoryManagers SetupMemoryManagement(MultibootInfo &multiboot_info) {
+    auto mmap_tag = multiboot_info.FindTag<TagMmap>();
+    const MemoryMap mmap(*mmap_tag);
+    
+    // Create Physical Memory Manager from Multiboot memory map
+    auto pmm = PhysicalMemoryManager::Create(mmap, lowest_safe_addr, ...);
+    auto vmm = new VirtualMemoryManager(*pmm);
+    
+    // Identity map first 10GB using 1GB page granularity
+    vmm.Map<PageSizeTag::k1Gb>(
+        0,                                   // Virtual address
+        0,                                   // Physical address  
+        10 * PageSize<PageSizeTag::k1Gb>(),  // 10GB
+        kPresentBit | kWriteBit | kGlobalBit
+    );
+    
+    return {*pmm, *vmm};
+}
+\end{lstlisting}
+
+The identity mapping ensures that code continues to execute correctly after paging is enabled, the instruction pointer remains valid because virtual addresses 0--10GB map directly to the same physical addresses.
+
+\subsubsection{Long Mode Enablement}
+
+The transition to Long Mode follows the sequence defined in the Intel Software Developer's Manual \cite{Intel-ControlRegisters}:
+
+\begin{lstlisting}[style=nasmstyle, caption={Enabling Long Mode and Paging (enables.nasm)}, label={lst:enable_longmode}]
+LONG_MODE_BIT equ 1 << 8
+EFER_MSR      equ 0xC0000080
+PAGING_BIT    equ 1 << 31
+PAE_BIT       equ 1 << 5
+
+EnableLongMode:
+    ; Set LME (Long Mode Enable) in EFER MSR
+    mov ecx, EFER_MSR
+    rdmsr
+    or eax, LONG_MODE_BIT
+    wrmsr
+    ret
+
+EnablePaging:
+    ; Enable PAE (Physical Address Extension) in CR4
+    mov eax, cr4
+    or eax, PAE_BIT
+    mov cr4, eax
+    
+    ; Load PML4 table address into CR3
+    mov eax, [ebp + 8]    ; pml4_table parameter
+    mov cr3, eax
+    
+    ; Enable paging in CR0
+    mov eax, cr0
+    or eax, PAGING_BIT
+    mov cr0, eax
+    ret
+\end{lstlisting}
+
+\subsubsection{Loading Loader64 as an ELF Module}
+
+A critical responsibility of Loader32 is loading the next stage. Loader64 is provided to GRUB as a separate Multiboot2 module. Loader32 locates this module, parses it as an ELF64 executable, allocates memory for its segments, and performs dynamic relocation:
+
+\begin{lstlisting}[caption={Loading Loader64 Module (main.cpp)}, label={lst:load_loader64}]
+static u64 LoadNextStageModule(MultibootInfo &multiboot_info, 
+                               MemoryManagers mem_managers) {
+    auto &pmm = mem_managers.pmm;
+    
+    // Find the loader64 module by command line string
+    auto next_module = multiboot_info.FindTag<TagModule>([](TagModule *tag) {
+        return strcmp(tag->cmdline, "loader64") == 0;
+    });
+    
+    // Parse ELF and determine required memory
+    auto elf = PhysicalPtr<byte>(next_module->mod_start);
+    u64 virt_start, virt_end;
+    Elf64::GetProgramBounds(elf.ValuePtr(), virt_start, virt_end);
+    
+    // Allocate contiguous physical memory for the module
+    u64 module_size = virt_end - virt_start;
+    auto module_dest = pmm.AllocContiguous32(module_size);
+    
+    // Load and relocate the PIE executable
+    auto entry_point = Elf64::Load(elf.ValuePtr(), module_dest);
+    Elf64::Relocate(elf.ValuePtr(), module_dest);
+    
+    return entry_point;
+}
+\end{lstlisting}
+
+\subsubsection{64-bit GDT and Mode Transition}
+
+Before jumping to 64-bit code, a 64-bit Global Descriptor Table must be loaded. The GDT defines the code and data segments for Long Mode:
+
+\begin{lstlisting}[style=nasmstyle, caption={64-bit GDT Definition (gdt.nasm)}, label={lst:gdt64}]
+section .data
+align 16
+GDT64:
+    .Null: dq 0
+    .Code: equ $ - GDT64
+        dw 0x0000         ; Limit (unused in 64-bit)
+        dw 0x0000         ; Base (unused in 64-bit)
+        db 0x00
+        db 0x9A           ; Access: Present, Code, Readable
+        db 0x20           ; Flags: Long mode
+        db 0x00
+    .Data: equ $ - GDT64
+        dw 0x0000
+        dw 0x0000
+        db 0x00
+        db 0x92           ; Access: Present, Data, Writable
+        db 0x00
+        db 0x00
+.End:
+    .Pointer:
+        dw .End - GDT64 - 1
+        dq GDT64
+\end{lstlisting}
+
+The final transition performs a far jump to flush the CPU pipeline and begin executing 64-bit code:
+
+\begin{lstlisting}[style=nasmstyle, caption={Transition to 64-bit Mode (transition\_64.nasm)}, label={lst:transition64}]
+    ; Save kernel entry address and loader data pointer
+    mov eax, [ebp+8]            ; entry_high
+    mov [k_ptr+4], eax
+    mov eax, [ebp+12]           ; entry_low  
+    mov [k_ptr], eax
+    mov eax, [ebp+16]           ; loader_data
+    mov [loader_data_ptr], eax
+    
+    ; Load 64-bit GDT
+    lgdt [GDT64.Pointer]
+    
+    ; Set data segments
+    mov ax, GDT64.Data
+    mov ss, ax
+    mov ds, ax
+    mov es, ax
+    
+    ; Far jump to 64-bit code segment
+    jmp GDT64.Code:jmp_elf
+
+[bits 64]
+jmp_elf:
+    ; Now executing in 64-bit Long Mode
+    mov rdi, [loader_data_ptr]  ; Pass transition data
+    mov rax, [k_ptr]
+    jmp rax                     ; Jump to Loader64
+\end{lstlisting}
+
+\subsection{Loader64: Position-Independent Higher-Half Setup}
+
+Loader64 executes in 64-bit Long Mode but faces a unique challenge: it is loaded at an unknown physical address by GRUB, yet must set up virtual memory and load the kernel at a fixed higher-half address.
+
+\subsubsection{Position-Independent Compilation}
+
+Loader64 is compiled as a Position-Independent Executable (PIE). The CMake configuration specifies:
+
+\begin{lstlisting}[language=cmake, caption={Loader64 CMake Configuration}, label={lst:loader64_cmake}]
+set_target_properties(alkos.boot.loader.64 PROPERTIES 
+    POSITION_INDEPENDENT_CODE ON
+)
+target_link_options(alkos.boot.loader.64 PRIVATE
+    -fPIE -pie
+    "LINKER:-z,norelro"
+)
+\end{lstlisting}
+
+This ensures all code uses RIP-relative addressing. The entry point demonstrates this:
+
+\begin{lstlisting}[style=nasmstyle, caption={Loader64 Entry Point with RIP-Relative Addressing (entry.nasm)}, label={lst:loader64_entry}]
+section .text
+bits 64
+Entry:
+    ; RIP-relative addressing for position independence
+    lea rsp, [rel stack_top]    ; Load stack using RIP-relative
+    mov rbp, rsp
+    
+    mov r10d, edi               ; Save transition data pointer
+    
+    ; Load GDT using RIP-relative address
+    lea rax, [rel GDT64.Pointer]
+    lgdt [rax]
+    
+    ; Set up data segments
+    mov ax, [rel GDT64_DATA_SELECTOR]
+    mov ss, ax
+    mov ds, ax
+    mov es, ax
+    
+    mov edi, r10d
+    call MainLoader64
+\end{lstlisting}
+
+\subsubsection{State Restoration from Loader32}
+
+Loader32 passes its PMM and VMM state to Loader64 via a \texttt{TransitionData} structure. Loader64 deserializes this state to continue memory management:
+
+\begin{lstlisting}[caption={TransitionData Deserialization (main.cpp)}, label={lst:transition_data}]
+static auto InitializeLoaderEnvironment(const TransitionData *transition_data) {
+    // Reconstruct PMM from serialized state
+    PhysicalMemoryManager *pmm = 
+        new PhysicalMemoryManager(transition_data->pmm_state);
+    
+    // Reconstruct VMM with existing page tables
+    VirtualMemoryManager *vmm = 
+        new VirtualMemoryManager(*pmm, transition_data->vmm_state);
+    
+    // Reconstruct Multiboot info accessor
+    MultibootInfo mb_info(transition_data->multiboot_info_addr);
+    
+    return {MemoryManagers{*pmm, *vmm}, mb_info};
+}
+\end{lstlisting}
+
+\subsubsection{Kernel Loading at Higher-Half Address}
+
+The kernel ELF is linked to execute at virtual address \texttt{0xFFFFFFFE00000000}. Loader64 allocates virtual memory at this address and loads the kernel segments:
+
+\begin{lstlisting}[caption={Higher-Half Kernel Loading (main.cpp)}, label={lst:kernel_load}]
+// Kernel virtual address (upper 33 bits set)
+static constexpr u64 kKernelVirtualAddressStart = 0xFFFFFFFE00000000ULL;
+
+static u64 LoadKernelIntoMemory(MultibootInfo &multiboot_info,
+                                const KernelModuleInfo &kernel_info,
+                                MemoryManagers mem_managers) {
+    auto &vmm = mem_managers.vmm;
+    
+    // Allocate virtual memory at the higher-half address
+    vmm.Alloc(kKernelVirtualAddressStart, 
+              kernel_info.size,
+              kPresentBit | kWriteBit | kGlobalBit);
+    
+    // Load ELF segments into the allocated virtual memory
+    byte *module_start = reinterpret_cast<byte *>(kernel_info.tag->mod_start);
+    auto entry_point = Elf64::Load(module_start);
+    
+    return entry_point;
+}
+\end{lstlisting}
+
+\subsubsection{Direct Memory Mapping}
+
+To allow the kernel to access physical memory directly, Loader64 creates a \textbf{direct memory mapping}, a large region of virtual address space that maps linearly to physical memory:
+
+\begin{lstlisting}[caption={Direct Memory Mapping Setup (main.cpp)}, label={lst:direct_map}]
+static constexpr u64 kDirectMemMapAddrStart = 0xFFFF800000000000ULL;
+static constexpr u64 kDirectMemMapSizeGb = 512;
+
+static void EstablishDirectMemMapping(MemoryManagers &mms) {
+    auto &vmm = mms.vmm;
+    
+    // Map 512GB of physical memory to higher-half virtual addresses
+    vmm.Map<PageSizeTag::k1Gb>(
+        kDirectMemMapAddrStart,                        // Virtual base
+        0,                                             // Physical base
+        kDirectMemMapSizeGb * PageSize<PageSizeTag::k1Gb>(),
+        kPresentBit | kWriteBit | kGlobalBit
+    );
+}
+\end{lstlisting}
+
+This mapping allows the kernel to convert any physical address \texttt{P} to the virtual address \texttt{0xFFFF800000000000 + P}.
+
+\subsubsection{Kernel Arguments Preparation}
+
+Before transferring control to the kernel, Loader64 collects essential system information into a \texttt{KernelArguments} structure:
+
+\begin{lstlisting}[caption={Kernel Arguments Preparation (main.cpp)}, label={lst:kernel_args}]
+struct PACK alignas(64) KernelArguments {
+    /// Kernel Mem Layout
+    u64 kernel_start_addr;
+    u64 kernel_end_addr;
+
+    /// VMem
+    u64 pml_4_table_phys_addr;
+
+    /// Memory Bitmap
+    u64 mem_info_bitmap_addr;
+    u64 mem_info_total_pages;
+
+    /// Framebuffer
+    u64 fb_addr;
+    u32 fb_width;
+    u32 fb_height;
+    u32 fb_pitch;
+    u32 fb_bpp;  // Bits per pixel
+
+    // RGB Format
+    u8 fb_red_pos;
+    u8 fb_red_mask;
+    u8 fb_green_pos;
+    u8 fb_green_mask;
+    u8 fb_blue_pos;
+    u8 fb_blue_mask;
+
+    /// Ramdisk
+    u64 ramdisk_start;
+    u64 ramdisk_end;
+
+    /// ACPI
+    u64 acpi_rsdp_phys_addr;
+
+    /// Multiboot
+    u64 multiboot_info_addr;
+    u64 multiboot_header_start_addr;
+    u64 multiboot_header_end_addr;
+};
+}
+\end{lstlisting}
+
+The final transition to the kernel is a simple jump:
+
+\begin{lstlisting}[style=nasmstyle, caption={Kernel Entry (transition.nasm)}, label={lst:enter_kernel}]
+; void EnterKernel(u64 kernel_entry, KernelArguments *args)
+;                  [rdi]            [rsi]
+EnterKernel:
+    xchg rdi, rsi       ; Swap: RDI = args, RSI = entry
+    jmp rsi             ; Jump to kernel entry point
+\end{lstlisting}
+
+\subsection{Memory Layout}
+
+Figure \ref{fig:memory_layout} illustrates the virtual memory layout established by the bootloader before kernel execution begins.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        memblock/.style={draw, minimum width=8cm, minimum height=0.9cm, font=\small\ttfamily},
+        addrblock/.style={font=\tiny\ttfamily, anchor=east},
+        scale=0.95
+    ]
+    
+    % Virtual address space
+    \node[font=\bfseries] at (2, 6.5) {Virtual Address Space};
+    
+    % Memory regions
+    \node[memblock, fill=red!20] (kernel) at (2, 5.5) {Kernel Code \& Data};
+    \node[addrblock] at (-2.3, 5.5) {0xFFFFFFFE00000000};
+    
+    \node[memblock, fill=blue!20] (direct) at (2, 4.3) {Direct Physical Memory Mapping (512GB)};
+    \node[addrblock] at (-2.3, 4.3) {0xFFFF800000000000};
+    
+    \node[memblock, fill=gray!10, minimum height=2cm] (unused) at (2, 2.6) {Unused Virtual Address Space};
+    
+    \node[memblock, fill=green!20] (identity) at (2, 0.9) {Identity Mapped (10GB)};
+    \node[addrblock] at (-2.3, 0.9) {0x0000000000000000};
+    
+    % Arrows to physical memory
+    \node[font=\bfseries] at (9, 6.5) {Physical Memory};
+    
+    \node[memblock, fill=yellow!20, minimum width=4cm] (phys) at (10, 3) {Physical RAM};
+    
+    % Mapping arrows
+    \draw[-Latex, thick, dashed] (kernel.east) -- ++(1,0) |- (phys.west);
+    \draw[-Latex, thick] (direct.east) -- ++(0.5,0) |- (phys.170);
+    \draw[-Latex, thick] (identity.east) -- ++(0.5,0) |- (phys.190);
+    
+    \end{tikzpicture}
+    \caption{Virtual Memory Layout After Bootloader Initialization}
+    \label{fig:memory_layout}
+\end{figure}
+
+\subsection{Architecture Initialization}
+
+After the kernel receives control, the first architecture-specific function executed is \texttt{arch::ArchInit}. This function enables additional CPU features that were not safe to enable during the bootloader phase:
+
+\begin{lstlisting}[caption={Architecture Initialization (init.cpp)}, label={lst:arch_init}]
+namespace arch {
+void ArchInit(const RawBootArguments &) {
+    BlockHardwareInterrupts();
+    
+    ...
+    
+    // Enable CPU features (sequence is important)
+    EnableOSXSave();    // Enable XSAVE/XRSTOR for context switching
+    EnableSSE();        // Enable SSE extensions
+    EnableAVX();        // Enable AVX if supported
+    EnableNXE();        // Enable No-Execute bit for security
+    
+    ...
+}
+}
+\end{lstlisting}
+
 
 \section{Memory Management}
 \label{sec:memory}
