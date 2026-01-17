@@ -148,7 +148,7 @@
 % --------------------------- DRAWING ---------------------
 
 \usepackage{tikz}
-\usetikzlibrary{shapes, arrows.meta, positioning, calc, chains}
+\usetikzlibrary{fit, backgrounds, shapes, arrows.meta, positioning, calc, chains}
 \usepackage[colorinlistoftodos]{todonotes}
 \usepackage{svg}
 
@@ -408,7 +408,167 @@ TODO
 \subsection{Implementation of Libc and Libc++}
 TODO
 \subsection{Bootloader}
-TODO
+\label{subsec:theory_bootloader}
+
+
+
+The process of bringing a computer from a powered-off state to a fully functional operating system is governed by a rigid chain of physical and logical constraints. At the hardware level, the Central Processing Unit (CPU) functions as a complex state machine. Upon the application of power or a reset signal, the CPU resets its internal registers to default values and sets the Instruction Pointer to a specific, hardcoded physical address known as the \textit{Reset Vector} \cite{IntelManual-Reset}.
+
+\subsubsection{The Memory Paradox and Storage}
+A fundamental challenge in this sequence is the source of the initial instructions. The standard Random Access Memory (RAM), which serves as the primary workspace for modern operating systems, is volatile. It requires active electrical flow to maintain its state. When the system is powered off, the state is lost; upon power-up, the memory cells contain random garbage data. Consequently, the CPU cannot fetch valid instructions from standard RAM immediately after a reset.
+
+To resolve this, hardware architects map the Reset Vector address to a non-volatile memory region, typically Flash Memory or Read-Only Memory (ROM), which retains data without power.
+
+\subsubsection{Embedded vs. Complex Architectures}
+In simple embedded architectures (e.g., microcontrollers used in automotive braking systems or household appliances), the entire application code is often stored in this non-volatile memory. The memory controller maps this storage directly into the CPU's addressable space. This technique, known as \textbf{Execute In Place (XIP)}, allows the CPU to fetch and execute the developer's code from the very first clock cycle \cite{ARM-CortexM4-Generic-User-Guide}. The developer "owns" the machine from the first nanosecond.
+
+In contrast, more complex architectures (such as ARM-based smartphones or single-board computers like the Raspberry Pi) often store the main operating system on external, complex storage media like SD cards or eMMC chips. The CPU cannot simply memory-map an SD card; it requires a sophisticated software driver to communicate with the storage controller. To bridge this gap, manufacturers embed a tiny, immutable piece of software called the \textbf{BootROM} directly into the silicon. This code initializes the minimal required hardware (often internal SRAM) and loads a secondary bootloader from the external storage into that SRAM, which in turn loads the main software.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    % Standard block style
+    block/.style={
+        rectangle, 
+        draw=black!70, 
+        rounded corners=3pt, 
+        minimum width=2.2cm, 
+        minimum height=1cm, 
+        align=center, 
+        fill=white,
+        font=\small
+    },
+    % Style for the "Silicon" container
+    soc/.style={
+        rectangle,
+        draw=black!40,
+        dashed,
+        fill=gray!5,
+        rounded corners=5pt,
+        inner sep=0.5cm
+    },
+    % Arrow styles
+    arrow/.style={-Latex, thick, color=black!80},
+    data/.style={-Latex, thick, dashed, color=black!80},
+    % Label style for arrows
+    lbl/.style={
+        font=\footnotesize\bfseries, 
+        fill=white, 
+        inner sep=1pt,
+        text=black!80
+    }
+]
+
+% =========================================================
+% LEFT SIDE: SIMPLE XIP
+% =========================================================
+
+\node (cpu1) [block, fill=blue!10] {CPU};
+\node (flash) [block, below=1.5cm of cpu1, fill=orange!10] {NOR Flash\\(Memory Mapped)};
+\node (label1) [above=0.1cm of cpu1, font=\bfseries] {Simple (XIP)};
+
+% Arrow
+\draw[arrow] (cpu1) -- node[midway, right, font=\footnotesize] {Direct Fetch} (flash);
+
+
+% =========================================================
+% RIGHT SIDE: COMPLEX BOOT
+% =========================================================
+
+% We place CPU2 to the right
+\node (cpu2) [block, right=6cm of cpu1, fill=blue!10] {CPU};
+
+% Define relative positions for BootROM and SRAM relative to CPU2
+\node (bootrom) [block, below left=1.2cm and -0.5cm of cpu2, fill=gray!20] {BootROM\\(Immutable)};
+\node (sram) [block, below right=1.2cm and -0.5cm of cpu2, fill=green!10] {Internal\\SRAM};
+
+% Draw the SoC Boundary around them
+\begin{scope}[on background layer]
+    \node (soc_box) [soc, fit=(cpu2) (bootrom) (sram), label={[anchor=south west, inner sep=5pt]north west:\tiny System on Chip (SoC)}] {};
+\end{scope}
+
+% External Storage below the SoC
+\node (sdcard) [block, below=1.0cm of soc_box, fill=orange!10] {SD Card / Disk\\(External)};
+\node (label2) [above=0.5cm of soc_box, font=\bfseries] {Complex (Bootload)};
+
+
+% =========================================================
+% ARROWS & FLOW (Complex)
+% =========================================================
+
+% 1. Power On -> BootROM
+\draw[arrow] (cpu2) -- node[lbl, pos=0.6] {1. Init} (bootrom);
+
+% 2. BootROM -> External
+\draw[arrow] (bootrom) -- node[lbl, pos=0.4] {2. Load} (sdcard);
+
+% 3. External -> SRAM (Data copy)
+\draw[data] (sdcard) -- node[lbl, pos=0.4] {3. Copy} (sram);
+
+% 4. CPU -> SRAM (Execution)
+\draw[arrow] (cpu2) -- node[lbl, pos=0.6] {4. Jump} (sram);
+
+\end{tikzpicture}
+\caption{Comparison of Boot Architectures}
+\label{fig:boot_methods}
+\end{figure}
+
+On modern "heavy" machines, such as x86-64 workstations, the initialization process is exponentially more complex. The main CPU is fragile and dependent on a specific environment to function. Before the main cores can execute a single instruction, the hardware requires:
+\begin{enumerate}
+    \item \textbf{Power Sequencing:} Multiple voltage rails (Vcore, VccSA, VccIO) must be brought up in a specific order with millisecond-precision timing.
+    \item \textbf{Clock Stabilization:} Phase-Locked Loops (PLLs) must be tuned and stabilized to generate the gigahertz-range frequencies required by the cores.
+    \item \textbf{DRAM Training:} Modern DDR4/DDR5 memory requires a complex calibration process to align signal timing before it becomes usable.
+\end{enumerate}
+
+To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution.
+
+\subsubsection{The Chain of Trust and Abstraction}
+By the time a modern Operating System kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for defining the interface between the hardware and the OS is the \textbf{System Firmware} \cite{UEFI-Base-Spec, UEFI-PI-Spec}.
+
+The firmware's responsibility is to abstract the diverse implementations of different motherboards (e.g., how the disk controller is wired) and provide a mechanism to load an OS from a disk into RAM. However, relying solely on firmware is often insufficient for a portable operating system:
+\begin{itemize}
+    \item \textbf{Inconsistent State:} Different firmware implementations may leave the CPU in varying states (e.g., different interrupt configurations or privilege modes).
+    \item \textbf{Feature Limitations:} Firmware is designed to be simple and compatible, often leaving the CPU in a conservative, low-feature mode with caches or advanced vector units disabled.
+    \item \textbf{Interface Variance:} The method used to retrieve a memory map or video configuration can vary wildly between hardware generations.
+\end{itemize}
+
+To solve this, a \textbf{Third-Party Bootloader} is often utilized. This program acts as a "Normalizer" \cite{Limine-Spec}. It knows how to talk to various firmware types and storage devices. Its job is to abstract away the firmware differences, load the kernel file into memory, and pass control to the OS in a unified, predictable manner.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1cm,
+    stage/.style={rectangle, draw, fill=white, text width=4cm, align=center, minimum height=1cm},
+    arrow/.style={-Latex, thick}
+]
+
+\node (power) [stage, fill=gray!10] {\textbf{Hardware Power-On}\\(Reset Vector)};
+\node (firmware) [stage, below=of power] {\textbf{System Firmware}\\(BIOS / UEFI)};
+\node (loader) [stage, below=of firmware] {\textbf{Bootloader}\\(GRUB / Limine)};
+\node (trampoline) [stage, below=of loader] {\textbf{OS Trampoline}\\(Arch Specific)};
+\node (kernel) [stage, below=of trampoline, fill=gray!30] {\textbf{Kernel Main}\\(Arch Agnostic)};
+
+\draw[arrow] (power) -- node[right, font=\footnotesize] {Init Platform} (firmware);
+\draw[arrow] (firmware) -- node[right, font=\footnotesize] {Load from Disk} (loader);
+\draw[arrow] (loader) -- node[right, font=\footnotesize] {Normalize State} (trampoline);
+\draw[arrow] (trampoline) -- node[right, font=\footnotesize] {Enable Features (AVX, Paging)} (kernel);
+
+\end{tikzpicture}
+\caption{Typical Boot Chain for x86\_64}
+\label{fig:boot_chain}
+\end{figure}
+
+\subsubsection{The OS-Level Trampoline}
+Even with a standardized bootloader, the kernel cannot assume full control immediately. A generic bootloader cannot know the specific internal requirements of the OS. For instance:
+\begin{itemize}
+    \item The kernel may typically require memory to be mapped to a specific virtual address range (e.g., the higher half).
+    \item Specific hardware features (like Floating Point Units or Virtualization Extensions) are often disabled by default to save power and must be explicitly enabled.
+    \item The OS must define its own memory protection structures to enforce its specific security model.
+\end{itemize}
+
+Therefore, a robust operating system must implement its own initialization stage, effectively an \textbf{OS-Level Bootloader} or "Trampoline." This architecture-specific code is responsible for taking the machine from the normalized state provided by the external bootloader, enabling the specific CPU features required by the kernel, and establishing the runtime environment before passing control to the architecture-agnostic kernel main function.
+
 \subsection{Memory Preloading and Discovery}
 TODO
 \subsection{Discovering and Enabling CPU Features}
@@ -522,22 +682,86 @@ To add some extensibility and prevent kernel recompilation to add drivers or mod
 \end{figure}
 
 \subsection{Timing}
-Linux in older versions utilized periodic tick, that means the kernel was setting the timing devices to run the interrupt periodically in constant frequency e.g 1000hz. Such solution is very easy to implement and think about as we dont have to manage the event timeline at all. But it has some longstanding consequences. For example the constant frequency defines the granularity of sleep. As the solution is far from ideal linux introduced dynamic ticks utilizing high precision devices. That means the interrupts are scheduled based on the kernel needs and \texttt{hrtimer.h} infrastructure is utilized for that purpose \cite{linux_highres}\cite{linux_highres_code}. Such approach allows the cpu to be much more efficient or event disable the cores if there are no tasks to execute for them. But there is still some concept of \textbf{tick} mainly for performance matters, that means (not always in \texttt{CONFIG\_NO\_HZ} mode for single task there will be no interrupts) in most scenarios the time between the interrupts is capped to min(next\_event\_ns, tick\_ns). In other words hight resolution timer simulates periodic tick \cite{linux_highres}. When some does not need high precision (\texttt{nanosleep}) or quickly read the timer (without syscall, simply readonly mapped variable) this approach is ideal. Based on the kernel \textbf{tick} the \texttt{jiffies} variable is incremented \cite{linux_jiffies}. This is for example used for tcp connection timeouts to allows handling thousands of such connection, bookkeeping all of such event with high precision would be a real pain and waste of resources. For example \texttt{msleep} is working based on jiffies counter.
+Linux in older versions utilized periodic tick, that means the kernel was setting the timing devices to run the interrupt periodically in constant frequency e.g 1000hz. Such solution is very easy to implement and think about as we dont have to manage the event timeline at all. But it has some longstanding consequences. For example the constant frequency defines the granularity of sleep. As the solution is far from ideal linux introduced dynamic ticks utilizing high precision devices. That means the interrupts are scheduled based on the kernel needs and \texttt{hrtimer.h} infrastructure is utilized for that purpose \cite{linux_highres}\cite{linux_highres_code}. Such approach allows the cpu to be much more efficient or event disable the cores if there are no tasks to execute for them. But there is still some concept of \textbf{tick} mainly for performance and compatiblity matters, that means (not always in \texttt{CONFIG\_NO\_HZ} mode for single task there will be no interrupts) in most scenarios the time between the interrupts is capped to min(next\_event\_ns, tick\_ns). In other words hight resolution timer simulates periodic tick \cite{linux_highres}. When some does not need high precision (\texttt{nanosleep}) or quickly read the timer (without syscall, simply readonly mapped variable) this approach is ideal. Based on the kernel \textbf{tick} the \texttt{jiffies} variable is incremented \cite{linux_jiffies}. This is for example used for tcp connection timeouts to allows handling thousands of such connection, bookkeeping all of such event with high precision would be a real pain and waste of resources. For example \texttt{msleep} is working based on jiffies counter.
 
 \subsection{Scheduler}
-TODO
+Linux introduces several scheduling policies \cite{linux_policies}\cite{linux_cfs} which operates based on priorities assigned to tasks. We have two major classes \textbf{Real Time} and \textbf{Fair}. Real time policies operates on priorities in range 1-99 and \textbf{Fair} tasks which operates only on 0 priority. Tasks with higher priorities are always scheduled before tasks with lower priorities. Linux provides 6 policy clasesses:
+
+\begin{itemize}
+    \item \texttt{SCHED\_DEADLINE} -- more important than any other policy and provides real time capabilities
+    \item \texttt{SCHED\_FIFO} -- in given priority task has unlimited time and must leave the queue by himself - give the control back
+    \item \texttt{SCHED\_RR} -- in given priority each task has constant time slice and after preempting is attachted to the end of queue
+    \item \texttt{SCHED\_OTHER} -- 99\% of tasks, most of usual tasks resides here, managed by main algorithm
+    \item \texttt{SCHED\_BATCH} -- less interactive tasks, runs longer without context switches, thus need to wait longer before being executed again
+    \item \texttt{SCHED\_IDLE} -- the most important tasks runs only when there is nothing else to do
+\end{itemize}
+
+Starting from versions 2.6.23 Linux \cite{linux_cfs} up to 6.6 \cite{linux_eevdf} the \texttt{CFS} (Completly Fair Scheduler)  was the architecture of linux scheduling. Starting from 6.6 the \texttt{EEVDF} (Earliest Eligible Virtual Deadline First) started to replace the CFS architecture. Those algorithms are used for \textbf{Fair} tasks class. We will briefly describe both of those.
 
 \subsubsection{Completly Fair Scheduler}
-TODO
+Linux documentation describes \textbf{CFS} quite accuratly:
+\begin{quote}
+80\% of CFS's design can be summed up in a single sentence: CFS basically models an “ideal, precise multi-tasking CPU” on real hardware.
+
+“Ideal multi-tasking CPU” is a (non-existent :-)) CPU that has 100\% physical power and which can run each task at precise equal speed, in parallel, each at 1/nr\_running speed. For example: if there are 2 tasks running, then it runs each at 50\% physical power --- i.e., actually in parallel.
+    
+On real hardware, we can run only a single task at once, so we have to introduce the concept of “virtual runtime.” The virtual runtime of a task specifies when its next timeslice would start execution on the ideal multi-tasking CPU described above. In practice, the virtual runtime of a task is its actual runtime normalized to the total number of running tasks.
+\cite{linux_cfs}
+\end{quote}
+
+The implementation uses red-black tree sorted by the virtual runtime representing the execution timeline. The next task is picked as a leftmost tasks from the tree (less time on CPU spent) and runs until the second leftmost task becomes the actual min task with some minimal granularity to prevent over-scheduling.
 
 \subsubsection{Earliest Eligible Virtual Deadline First Scheduler}
-TODO 
+This is becoming the new version of linux scheduling and is addressing issues of previous \textbf{CFS} implementation. New approach works similarly as \textbf{CFS} but operates on deadlines instead of runtime \cite{linux_eevdf}. That allows latency-sensitive tasks to be prioritized.
 
 \subsection{Memory Management}
-TODO
+\label{subsec:linux_mem}
+Linux has centralized memory management with various APIs available: \texttt{kmalloc}, \texttt{kzalloc}, \texttt{vmalloc}, \texttt{kvmalloc} and many more \cite{linux_mem_interfaces}. 
+
+\subsubsection{Physical Memory}
+As linux is architecture independant kernel it abstracts the architecture detail. The physical memory is partitioned into zones each of them with different purpose \cite{linux_mem_phys}:
+
+\begin{itemize}
+    \item \texttt{ZOME\_DMA} -- represents memory suitable for DMA (Direct Memory Access) by devices that cannot access all addressable memory.
+    \item \texttt{ZONE\_NORMAL} -- normal memory accessible by the kernel all the time
+    \item \texttt{ZONE\_MOVABLE} -- normal accessible memory as \texttt{ZONE\_NORMAL} but their content may be moved between physical pages while not changing the virtual address
+    \item \texttt{ZONE\_DEVICE} -- memory reserved for devices such as GPUs and maps to device drivers
+    \item \texttt{ZONE\_HIGHMEM} -- not covered by permanent mappings. Not used frequently mostly available on 32-bit architectures. 
+\end{itemize}
+
+To enchance the performance of multi core system linux takes two-step strategy \cite{linux_mem_phys}. There is one global buddy allocator \ref{buddy_allocator} operting with locks and full synchronization and \texttt{PCP} (Per-CPU Pagessets) with stores free ares assigned to specific core. First we allocate from local PCP and afterwards we fallback to global allocator.
+
+\subsubsection{Virtual Memory}
+
+Each process has own Page Table which is responsible for mapping the virtual address to physical one. The physical space is acquired from Physical Memory managmenet \ref{subsec:linux_mem}. Then managing the virtual addresses is done per each process utilizing red-black trees for fast lookup for free areas. The kernel address space is mapped to each process. Additionally linux implement on demand paging, that is lazy approach alloation physical pages only when the process actually needs them utilizing page-fault mechanism.
 
 \subsection{System Interface}
-TODO
+
+Linux is a kernel from family of unix-like operating systems. The main communication with system goes through system calls and glibc which provides wrappers around those calls. 
+
+\subsubsection{Standards}
+
+Linux implements \textbf{POSIX} standard which includes functions like \texttt{fork()}, \texttt{exec()} or concept of \texttt{pthread}.
+
+\subsubsection{Fork mechanism}
+
+\texttt{fork()} mechanism comes from historical decisions. The idea to copy everything from parrent process sounds like terrible idea and in reality may introduce performans issues. That makes this approach quie hard to implement as it must be extremely efficient in real world scenarios. Especcialy considering that 99.9\% cases after \texttt{fork()} the \texttt{exec()} function is called immidiently erasing mostly everything from previous process. Because of that Linux implemented various optimizations to not make it into a bottleneck, including \texttt{COW} mechanism. To sum up fork has some advantages and disadvantages:
+
+\noindent Pros of implementing fork mechanism:
+\begin{itemize}
+    \item Simple implementation of pipes and pipelining
+    \item Easier state propagation, no need to specify files or streams manually
+\end{itemize}
+
+\noindent Disadvantages:
+\begin{itemize}
+    \item Hard to implement efficiently - requires multiple optimizations
+    \item Hard to implement overall as requires copying every structure 
+    \item Still might be slow in some edge cases - big page tables
+    \item Over-copying and puts some pressure on programmer to release the resources before exec
+    \item Concept hard to understand for begginers
+    \item Not portable to archtiectures without MMU
+\end{itemize}
 
 \section{Minix 3}
 
@@ -642,7 +866,7 @@ Memory management in Minix 3 is primarily handled by the user-space Virtual Memo
 The VM server is responsible for memory region allocation, page table administration, and page fault handling. It implements a region-based memory model in which a process address space is divided into contiguous regions with defined access permissions (read, write, and execute). To efficiently manage free and allocated memory regions, the VM server uses \textbf{AVL trees} \cite{minix_vm}.
 
 \subsubsection{Allocation and Paging}
-Internal memory allocation for kernel data structures and VM metadata is performed using a slab allocator. Minix 3 supports demand paging: when a process attempts to access an unmapped virtual address, a page fault is raised. The kernel intercepts this exception and forwards the fault information to the VM server, which resolves it by mapping an appropriate physical frame or retrieving the required page from secondary storage \cite{shenoy_lecture}.
+Internal memory allocation for kernel data structures and VM metadata is performed using a slab allocator \cite{slab_allocation}. Minix 3 supports demand paging: when a process attempts to access an unmapped virtual address, a page fault is raised. The kernel intercepts this exception and forwards the fault information to the VM server, which resolves it by mapping an appropriate physical frame or retrieving the required page from secondary storage \cite{shenoy_lecture}.
 
 \subsubsection{Memory Grants}
 Due to the strict isolation of address spaces in the microkernel architecture, processes cannot directly access the memory of others. To facilitate the exchange of large data structures without violating protection boundaries, Minix 3 provides a capability-based mechanism known as \texttt{Memory Grants}, accessed via the \texttt{safecopy} API \cite{minix_safecopy}.
@@ -703,52 +927,55 @@ TODO
 TODO
 
 \section{Bootloader}
+\todo[inline]{Loader32 and Loader64 are very simplified here. This is very much in progress. Don't read it}
 
-Before the kernel can commence execution, the underlying hardware must be brought to a known, deterministic state. Unifying this process is non-trivial, as initialization protocols differ significantly depending on the specific hardware architecture and the firmware interface (Legacy BIOS vs. UEFI). To mitigate this complexity, the operating system expects the bootloading mechanism to load the final kernel image into memory and establish a well-defined machine state, abstracting the underlying firmware details.
+Before the architecture-agnostic kernel can commence execution, the underlying hardware must be brought to a known, deterministic state. As discussed in Section \ref{subsec:theory_bootloader}, the initialization protocols differ significantly depending on the specific hardware architecture and the firmware interface.
 
-\subsection{x86-64 Bootloading Sequence}
+For the AlkOS kernel on the x86-64 architecture, we rely on the \textbf{Multiboot2} specification. This allows us to utilize a battle-tested external bootloader, such as GRUB, to handle the intricacies of storage drivers, filesystem parsing, and memory map retrieval. GRUB loads our kernel binary into memory and transfers control to our entry point.
 
-Upon power-up or a hardware reset, every processor on the system bus executes a hardware reset sequence. In modern multi-core architectures, the processors engage in the Multi-Processor (MP) Initialization Protocol. This negotiation designates one core as the Bootstrap Processor (BSP), which immediately begins executing firmware code. All remaining cores, known as Application Processors (APs), enter a halt state and await a specific Startup Inter-Processor Interrupt (SIPI) to begin execution.
+However, the state provided by Multiboot2 is insufficient for the immediate execution of our C++ kernel. Upon entry, the system is in \textbf{32-bit Protected Mode}, paging is disabled, interrupts are disabled, and the stack pointer is undefined. Furthermore, the kernel is loaded at a low physical address, whereas AlkOS is designed as a higher-half kernel.
 
-Once the BSP is active, its registers are hardwired to specific architecture-defined values. The CPU may optionally perform a Built-In Self-Test (BIST). Subsequently, it fetches and executes the instruction located at the physical address \texttt{0xFFFFFFF0} (the Reset Vector). This address is memory-mapped to the non-volatile system firmware.
+To bridge this gap, we implemented a two-stage internal bootloader: \textbf{Loader32} and \textbf{Loader64}.
 
-For further details, see \cite{IntelManual-Reset}.
+\subsection{Multiboot2 Entry and Loader32}
 
-\subsubsection{Firmware Interfaces}
+The entry point of the OS is defined in assembly language within the \texttt{Loader32} section. The primary responsibility of this stage is to transition the CPU from the 32-bit legacy environment into 64-bit Long Mode.
 
-The initialization path diverges depending on the firmware implementation:
+The sequence of operations is as follows:
+\begin{enumerate}
+    \item \textbf{Stack Setup:} A temporary stack is established to allow C-like operations and basic function calls.
+    \item \textbf{Multiboot Validation:} The code verifies the Magic Number in the \texttt{EAX} register to ensure the kernel was loaded by a compliant bootloader. The pointer to the Multiboot information structure (stored in \texttt{EBX}) is saved for later processing.
+    \item \textbf{Paging Initialization:} Long Mode requires paging to be enabled. Loader32 constructs a temporary \textbf{Page Global Directory (PML4)}. To allow the code to continue executing seamlessly after enabling paging, we employ \textit{identity mapping} for the lower megabytes of memory (where the loader resides) and simultaneously map the higher-half virtual addresses to the same physical location.
+    \item \textbf{Long Mode Enablement:} The transition is performed by setting the \texttt{PAE} (Physical Address Extension) bit in control register \texttt{CR4}, setting the \texttt{LME} (Long Mode Enable) bit in the \texttt{EFER} Model Specific Register (MSR), loading the address of the PML4 into \texttt{CR3}, and finally enabling paging via \texttt{CR0}.
+    \item \textbf{GDT Update:} A temporary 64-bit Global Descriptor Table is loaded to define the code segments required for 64-bit execution.
+\end{enumerate}
 
-\textbf{Legacy BIOS (Basic Input/Output System)} \
-Under BIOS, the CPU initializes in 16-bit Real Mode, limiting addressable memory to the first 1 MB (
-$2^20$
- bytes) via segmented addressing. The BIOS executes the Power-On Self-Test (POST) and iterates through the configured boot priority list (e.g., CD-ROM, HDD, USB). It reads the first 512-byte sector of the boot device. If the last two bytes of this sector contain the boot signature \texttt{0x55AA}, the BIOS copies the sector to physical RAM address \texttt{0x7C00} and transfers execution to it.
+Once these steps are complete, the code performs a long jump to the 64-bit entry point, effectively flushing the CPU pipeline and entering Long Mode.
 
-\textbf{UEFI (Unified Extensible Firmware Interface)} \
-UEFI provides a significantly more sophisticated environment. Unlike BIOS, which operates on raw disk sectors, UEFI possesses file system awareness (specifically FAT32). It searches for a specific EFI application file on the EFI System Partition (ESP), loads the executable into RAM, and executes it. Notably, UEFI transitions the processor out of 16-bit Real Mode, typically handing over control in 32-bit or 64-bit Protected Mode.
+\subsection{Loader64}
 
-For the complete specification, refer to \cite{UEFI-Spec, UEFI-BootManager}.
+At this stage, the CPU is operating in 64-bit mode, but the environment is still bare. The \texttt{Loader64} is responsible for enabling specific CPU features that the C++ kernel and standard library rely on.
 
-\subsubsection{Multiboot2 Specification}
+\subsubsection{Feature Discovery and Enablement}
+Modern compilers and C++ standard libraries frequently utilize SIMD instructions (SSE/AVX) for optimization, even in non-mathematical code (e.g., \texttt{memcpy} or string operations). However, these features are disabled by default upon boot. Attempting to execute an SSE instruction before enabling the unit results in an \textit{Invalid Opcode} exception.
 
-Regardless of whether the system utilizes BIOS or UEFI, the boot process ultimately invokes a dedicated bootloader. AlkOS utilizes a Multiboot2-compliant bootloader (such as GRUB) to normalize the execution environment. This abstraction layer ensures that the kernel remains agnostic to the underlying firmware type.
-
-The bootloader leverages firmware services to query essential hardware configuration data, including the physical memory map and framebuffer parameters. This information is standardized into the Multiboot2 Information Structure. The bootloader loads the kernel binary and any associated modules (such as the initial ramdisk) into memory and transfers control to the kernel entry point.
-
-At this stage, the machine state is defined as follows:
+Loader64 performs the following:
 \begin{itemize}
-\item \textbf{CPU Mode:} 32-bit Protected Mode.
-\item \textbf{Paging:} Disabled.
-\item \textbf{Interrupts:} Disabled.
-\item \textbf{Registers:} \texttt{EAX} contains the Multiboot2 magic number (\texttt{0x36d76289}), and \texttt{EBX} contains the physical address of the Multiboot2 information structure.
+    \item Checks for CPUID availability and verifies supported features.
+    \item Enables the \textbf{FPU} (Floating Point Unit) via the \texttt{CR0} register.
+    \item Enables \textbf{SSE} (Streaming SIMD Extensions) by setting the OSFXSR bit in \texttt{CR4}.
+    \item If supported, enables \textbf{AVX} (Advanced Vector Extensions) by manipulating the XCR0 extended control register.
 \end{itemize}
 
-See \cite{Multiboot2-Spec} for the full specification.
+\subsubsection{Runtime Environment Setup}
+Before calling the main kernel function, Loader64 performs the final cleanup:
+\begin{itemize}
+    \item \textbf{High-Memory Stack:} The stack pointer (\texttt{RSP}) is moved to the virtual higher-half address space, unmapping the identity-mapped low memory to catch null-pointer dereferences early.
+    \item \textbf{BSS Initialization:} The \texttt{.bss} section (containing uninitialized static variables) is zeroed out, as the bootloader does not guarantee this operation.
+    \item \textbf{Global Constructors:} The loader iterates through the \texttt{.init\_array} section to execute C++ global constructors.
+\end{itemize}
 
-While standardized, this state is insufficient for the immediate execution of the AlkOS kernel. The kernel requires a 64-bit Long Mode environment, access to the higher-half of the virtual memory space via paging, and a valid stack for C++ execution. Furthermore, advanced CPU features (such as floating-point units or AVX) remain disabled. Consequently, the boot process requires intermediate initialization stages - \textbf{Loader32} and \textbf{Loader64} - to bridge the gap between the Multiboot2 state and the kernel's requirements. \todo[inline]{Split this between Our Solution and How to implement os (generic)}
-\subsubsection{Loader32}
-TODO
-\subsubsection{Loader64}
-TODO
+Finally, Loader64 parses the Multiboot2 tags to extract the memory map and framebuffer information, converts them into AlkOS-internal structures, and calls \texttt{kernel\_main}.
 
 \section{Assumptions}
 TODO
@@ -2115,6 +2342,11 @@ TID & Thread IDentifier \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
 VFS & Virtual File System \\
+CFS & Completly Fair Scheduler \\
+EEVDF & Earliest Eligible Virtual Deadline First \\
+DMA & Direct Memory Access \\
+PCP & Per-CPU Pagessets \\
+COW & Copy On Write \\
 \end{tabular}
 \\
 \thispagestyle{empty}
