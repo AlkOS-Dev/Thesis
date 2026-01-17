@@ -160,6 +160,81 @@ title   = {Crit-bit Trees},
 url     = {https://github.com/agl/critbit/blob/4bb69901a9813de05331bd3afc5085e00050f701/critbit.pdf},
 }
 
+% ----------------------------------------------------------------------
+% Memory Preloading / CPU Initialization
+% ----------------------------------------------------------------------
+
+% INTEL DATASHEETS (Power Sequencing)
+@manual{Intel-Datasheet-Vol1,
+  author  = {Intel Corporation},
+  title   = {Intel Core Processor Family Datasheet, Volume 1},
+  year    = {2020},
+  url     = {https://www.intel.com/content/www/us/en/products/docs/processors/core/core-technical-resources.html},
+  note    = {See sections on Power Sequencing Signals (Processor Power Good, PM Sync) and Voltage Regulator Interface (VID).},
+}
+
+% DEVICETREE
+@manual{Devicetree-Spec,
+  author  = {Devicetree.org},
+  title   = {Devicetree Specification},
+  version = {v0.4},
+  year    = {2023},
+  url     = {https://www.devicetree.org/specifications/},
+  note    = {Defines the flattened device tree format, structure block, and memory reservation block.},
+}
+
+% ARM ARCHITECTURE
+@manual{ARM-Arch-Ref,
+  author  = {ARM Holdings},
+  title   = {Arm Architecture Reference Manual for A-profile architecture},
+  year    = {2022},
+  url     = {https://developer.arm.com/documentation/ddi0487/latest/},
+  note    = {See System Registers section describing ID\_AA64PFR0\_EL1 for feature discovery.},
+}
+
+% RISC-V PRIVILEGED
+@manual{RISCV-Priv-Spec,
+  author  = {RISC-V International},
+  title   = {The RISC-V Instruction Set Manual, Volume II: Privileged Architecture},
+  version = {20211203},
+  year    = {2021},
+  url     = {https://riscv.org/technical/specifications/},
+  note    = {See Chapter 'Machine-Level ISA', specifically the Machine ISA Register (misa) for extension discovery.},
+}
+
+% INTEL SDM SPECIFIC FEATURES
+@manual{Intel-CPUID,
+  author  = {Intel Corporation},
+  title   = {Intel 64 and IA-32 Architectures Software Developer's Manual},
+  volume  = {2A},
+  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  note    = {See Instruction Set Reference (A-L) for CPUID instruction details and return values.},
+}
+
+@manual{Intel-AVX,
+  author  = {Intel Corporation},
+  title   = {Intel 64 and IA-32 Architectures Software Developer's Manual},
+  volume  = {1},
+  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  note    = {See Chapter 14 'Programming with AVX, FMA, and AVX2' for detection and usage guidelines.},
+}
+
+@manual{Intel-XSAVE,
+  author  = {Intel Corporation},
+  title   = {Intel 64 and IA-32 Architectures Software Developer's Manual},
+  volume  = {1},
+  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  note    = {See Chapter 13 'Managing State Using the XSAVE Feature Set' for XCR0 and context size determination.},
+}
+
+@manual{Intel-ControlRegisters,
+  author  = {Intel Corporation},
+  title   = {Intel 64 and IA-32 Architectures Software Developer's Manual},
+  volume  = {3A},
+  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  note    = {See Chapter 2 for Control Registers (CR0, CR4) and their bit distinctions (PE, PG, OSFXSR, OSXSAVE).},
+}
+
 % FAT SPEC
 
 @techreport{fat-spec,
