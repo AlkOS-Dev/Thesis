@@ -336,7 +336,7 @@ TODO
 \addcontentsline{toc}{chapter}{Introduction}
 
 \section{Theoretical Background} 
-TODO
+TODO KTOKOLWIEK
 
 \subsubsection{Interrupts}
 \subsubsection{Kernel Tick}
@@ -346,7 +346,7 @@ TODO
 \subsubsection{Context Switch}
 
 \section{Scope of the Thesis} 
-TODO
+TODO KTOKOLWIEK
 \section{Limitations and Assumptions}
 
 \subsection{Minimal requirements}
@@ -377,11 +377,11 @@ Functionalities:
 \end{itemize}
 
 \section{Achieved Functionalities} 
-TODO
+TODO KTOKOLWIEK
 \section{Work Division -- Code} 
-TODO
+TODO KTOKOLWIEK
 \section{Work Division -- Thesis}
-TODO
+TODO KTOKOLWIEK
 
 % ==================================================================
 
@@ -390,28 +390,24 @@ TODO
 % Tutorial jak zrobic os krok po kroku tak zeby kazdy zrozumial pozdro
 
 \section{Host Environment}
-TODO
+TODO KTOKOLWIEK
 \subsection{Cross-Compilation Toolchain}
-TODO
+TODO KTOKOLWIEK
 \subsection{Building Machinery}
-TODO
+TODO KTOKOLWIEK
 \subsection{Emulation}
-TODO
+TODO KTOKOLWIEK
 \subsection{Rootfs}
-TODO
+TODO ADAM
 \subsection{Compiling Userspace Programs}
-TODO
-\subsection{Testing}
-TODO
+TODO ADAM
 
 \section{Target Environment}
-TODO
+TODO KTOKOLWIEK
 \subsection{Implementation of Libc and Libc++}
-TODO
+TODO KTOKOLWIEK
 \subsection{Bootloader}
 \label{subsec:theory_bootloader}
-
-
 
 The process of bringing a computer from a powered-off state to a fully functional operating system is governed by a rigid chain of physical and logical constraints. At the hardware level, the Central Processing Unit (CPU) functions as a complex state machine. Upon the application of power or a reset signal, the CPU resets its internal registers to default values and sets the Instruction Pointer to a specific, hardcoded physical address known as the \textit{Reset Vector} \cite{IntelManual-Reset}.
 
@@ -645,55 +641,56 @@ Architecture-specific details must also be considered. for example, the AMD64 ar
 As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. This can be achieved by allocating a large circular buffer for messages, which is then asynchronously flushed to the output device by a dedicated, low-priority task. Furthermore, to facilitate effective debugging in a multi-threaded and multi-core environment, each log entry should automatically capture essential context metadata, specifically the high-precision timestamp, the current Core ID, and the Process ID.
 
 \subsection{Testing framework}
-TODO
+TODO: JAKUB
 
 \subsection{Memory Management}
 \label{subsec:os_tutorial_mem}
-TODO
+TODO: KRYCZKA
 
 \subsubsection{Physical Memory Management}
-TODO
+TODO: KRYCZKA
 \subsubsection{Virtual Memory Management}
-TODO
+TODO: KRYCZKA
 \subsubsection{Virtual Address Space}
-TODO
+TODO: KRYCZKA
 
 \subsection{Discovering External Devices and System Capabilities}
-TODO
+TODO: JAKUB
 \subsubsection{Clocks}
-TODO
+TODO: JAKUB
 \subsubsection{Event Clocks}
-TODO
+TODO: JAKUB
 
 \subsection{File Systems}
-TODO
+TODO: ADAM
 \subsection{Screen Drawing}
-TODO
+TODO: KRYCZKA
 \subsection{Scheduling}
-TODO
+TODO: JAKUB
 
 \subsubsection{Process}
-TODO
+TODO: JAKUB
 \subsubsection{Thread}
-TODO
+TODO: JAKUB
 \subsubsection{Meta-Scheduler}
-TODO
+TODO: JAKUB
 \subsubsection{Policies}
-TODO
+TODO: JAKUB
 \subsubsection{Context Switch}
-TODO
+TODO: JAKUB
 \subsubsection{Context Conversion}
-TODO
+TODO: JAKUB
+
 
 \subsection{User Space}
-TODO
+TODO: JAKUB
 
 \subsubsection{Syscalls}
-TODO
+TODO: ADAM
 \subsubsection{Libc System Headers}
-TODO
+TODO: ADAM
 \subsubsection{Conversion to User Space}
-TODO
+TODO: JAKUB
 
 
 % ==================================================================
@@ -991,23 +988,23 @@ The kernel acts solely as a transport mechanism and remains agnostic to the sema
 % ==================================================================
 
 \chapter{Supporting Multiple Hardware Platforms} 
-TODO
+TODO KTOKOLWIEK
 
 \section{HAL -- Hardware Abstraction Layer} 
-TODO
+TODO KTOKOLWIEK
 
 \section{x86-64 Support} 
-TODO
+TODO KTOKOLWIEK
 \subsection{Technical Debt}
-TODO
+TODO KTOKOLWIEK
 \subsection{Common Pitfalls}
-TODO
+TODO KTOKOLWIEK
 
 
 % ==================================================================
 
 \chapter{Our Implementation} 
-TODO
+TODO KTOKOLWIEK
 
 \section{Bootloader}
 \todo[inline]{Loader32 and Loader64 are very simplified here. This is very much in progress. Don't read it}
@@ -1060,11 +1057,9 @@ Before calling the main kernel function, Loader64 performs the final cleanup:
 
 Finally, Loader64 parses the Multiboot2 tags to extract the memory map and framebuffer information, converts them into AlkOS-internal structures, and calls \texttt{kernel\_main}.
 
-\section{Assumptions}
-TODO
 \section{Memory Management}
 \label{sec:memory}
-TODO
+TODO KRYCZKA
 
 \section{Interrupts}
 \label{sec:interrupts}
@@ -2184,7 +2179,7 @@ To provide high-precision sleeping, the system relies on one-shot, precise timin
 % ==================================================================
 
 \chapter{Results}
-TODO
+TODO KTOKOLWIEK
 
 \section{User's Manual}
 
@@ -2356,31 +2351,22 @@ The available system calls are grouped into logical categories:
 
 
 \section{Example Programs}
-TODO 
+TODO ADAM
 
-\section{Performance Analysis}
-TODO
+% TODO: extension
+% \section{Performance Analysis}
+% \subsection{KMalloc Performance}
+% \subsection{KFree Performance}
+% \subsection{Context Switch Performance}
+% \subsection{Syscall Performance}
+% \subsection{Scheduler Tests}
 
-\subsection{KMalloc Performance}
-TODO
-
-\subsection{KFree Performance}
-TODO
-
-\subsection{Context Switch Performance}
-TODO
-
-\subsection{Syscall Performance}
-TODO
-
-\subsection{Scheduler Tests}
-TODO
 
 \chapter{Future Work}
-TODO
+TODO KTOKOLWIEK
 
 \chapter{Conclusion}
-TODO
+TODO KTOKOLWIEK
 
 % ------------------------------- BIBLIOGRAPHY ---------------------------
 
