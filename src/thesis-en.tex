@@ -520,6 +520,7 @@ On modern "heavy" machines, such as x86-64 workstations, the initialization proc
     \item \textbf{Clock Stabilization:} Phase-Locked Loops (PLLs) must be tuned and stabilized to generate the gigahertz-range frequencies required by the cores.
     \item \textbf{DRAM Training:} Modern DDR4/DDR5 memory requires a complex calibration process to align signal timing before it becomes usable.
 \end{enumerate}
+\todo[inline]{Cite appropiate sources here for each of the enumerated items}
 
 To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution.
 
@@ -748,6 +749,7 @@ The DTB format encodes the device tree into a linear, pointerless data structure
 \caption{Structure of a Flattened Device Tree Blob}
 \label{fig:dtb_structure}
 \end{figure}
+\todo[inline]{Probably delete this, unless it can be extended or modified to bring more value}
 
 The kernel parses this blob at boot to discover available RAM. Notably, the DTB standard mandates \textbf{Big-Endian} byte ordering. On Little-Endian architectures like x86-64, the kernel must perform byte-swapping when parsing these structures.
 
@@ -770,17 +772,20 @@ How does the kernel handle such diverse set of methods of querying the memory? T
 \label{subsec:cpu_discovery}
 
 Modern Central Processing Units (CPUs) are not monolithic entities with a fixed feature set. Instead, they represent an accumulation of decades of architectural extensions. A generic x86-64 processor guarantees a baseline instruction set (User-level ISA), but specific capabilities regarding vectorization (AVX, AVX-512), cryptography (AES-NI), security (SMEP, SMAP), and performance (PCID, TSC-Deadline) vary significantly between processor generations and manufacturers.
+\todo[inline]{Citations to intel manual for all the mentioned features}
 
 An operating system kernel cannot blindly execute advanced instructions. Doing so on hardware that lacks support results in an \textit{Invalid Opcode} exception, causing a kernel panic. Therefore, a robust kernel must perform a feature discovery handshake during the early initialization phase.
 
 \subsubsection{Feature Identification}
 On the x86 architecture, this discovery is performed via the \texttt{CPUID} instruction. This instruction acts as a query interface where the software loads a leaf index into the \texttt{EAX} register (and optionally a subleaf in \texttt{ECX}) and executes \texttt{CPUID}. The processor returns feature bitmaps and vendor information in the general-purpose registers (\texttt{EAX}, \texttt{EBX}, \texttt{ECX}, \texttt{EDX}).
+\todo[inline]{Cite intel manual}
 
 While x86 relies on this dynamic instruction-based discovery, other architectures employ different strategies:
 \begin{itemize}
     \item \textbf{ARM64 (AArch64)} utilizes special system registers (e.g., \texttt{ID\_AA64PFR0\_EL1}) that the kernel reads to determine support for floating-point units or cryptographic extensions.
     \item \textbf{RISC-V} typically employs the Device Tree Blob (DTB) or the \texttt{misa} (Machine ISA) Control and Status Register to inform the kernel about supported standard extensions (e.g., Atomics, Floats).
 \end{itemize}
+\todo[inline]{Cite some reliable source that would confirm this}
 
 \subsubsection{Feature Enablement}
 Identifying that a feature exists is often insufficient; the kernel must explicitly enable it. To maintain backward compatibility and minimize power consumption, processors often boot with advanced features disabled.
@@ -792,10 +797,11 @@ A prime example is the Floating Point Unit (FPU) and Vector Extensions (SSE/AVX)
     \item Enabled XSAVE/XRSTOR support by setting the \texttt{OSXSAVE} bit in \texttt{CR4}.
     \item Explicitly enabled AVX state saving in the Extended Control Register (\texttt{XCR0}).
 \end{enumerate}
+\todo[inline]{Cite intel manual}
 
 This enabling phase is critical not only for allowing instruction execution but also for the scheduler. The operating system must know the size of the processor's register state (Context) to correctly save and restore threads during context switches. If AVX-512 is enabled, the context size increases significantly compared to standard SSE, impacting memory usage and context switch latency.
 
-\todo[inline]{find references and fact check this}
+\todo[inline]{find references and fact check this all}
 
 \subsection{Enabling Interrupts and Exceptions}
 TODO
