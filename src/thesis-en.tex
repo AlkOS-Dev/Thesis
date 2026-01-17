@@ -682,11 +682,18 @@ To enhance extensibility and avoid the need for recompilation when adding driver
 
 Historically, Linux utilized a strictly periodic tick (defined by hardware), configuring hardware timers to generate interrupts at a fixed frequency (e.g., 100 Hz or 1000 Hz). While this design was straightforward, it imposed limitations on sleep granularity and power efficiency. To address these issues, Linux introduced High Resolution Timers (\texttt{hrtimers}), which allow the kernel to schedule interrupts with nanosecond precision based on immediate needs rather than a fixed cadence. Despite the capabilities of high-resolution timers, the concept of a periodic tick is maintained within the kernel for performance reasons and architectural legacy, by simulating the tick with high precision framework.
 
-This hight precision framework has one major drawback - it can get slow for big number of events as it based on priority queue with O(logn) complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers O(q) complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
+This hight precision framework has one major drawback - it can get slow for big number of events as it based on priority queue with O(logn) complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers O(1) complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
+
+\subsection{The Process and Thread Model}
+Unlike many other operating systems that distinguish strictly between processes (containers of resources) and threads (units of execution), Linux treats them almost identically. The core data structure is the \texttt{task\_struct} \cite{linux_task}.
+\begin{itemize}
+    \item A \textbf{Process} is a \texttt{task\_struct} with a unique memory map and file descriptor table.
+    \item A \textbf{Thread} is simply a \texttt{task\_struct} created via the \texttt{clone()} system call with flags such as \texttt{CLONE\_VM} and \texttt{CLONE\_FILES}, causing it to share the address space and resources with its parent.
+\end{itemize}
 
 \subsection{Scheduler}
 
-Linux implements several scheduling policies \cite{linux_policies}\cite{linux_cfs} operating on task priorities. There are two major classes: \textbf{Real Time}, which operates on priorities 1--99, and \textbf{Fair}, which operates on priority 0. Tasks with higher priorities preempt those with lower priorities. Linux provides six policy classes:
+Linux implements several scheduling policies \cite{linux_policies}\cite{linux_cfs} operating on task priorities. There are two major classes: \textbf{Real Time}, which operates on priorities 1-99, and \textbf{Fair}, which operates on priority 0. Tasks with higher priorities preempt those with lower priorities. Linux provides six policy classes:
 
 \begin{itemize}
 \item \texttt{SCHED\_DEADLINE} -- Takes precedence over any other policy and provides real-time capabilities.
@@ -726,14 +733,14 @@ Linux features centralized memory management with various APIs, including \textt
 As an architecture-independent kernel, Linux abstracts hardware details. Physical memory is partitioned into zones, each serving a distinct purpose \cite{linux_mem_phys}:
 
 \begin{itemize}
-    \item \texttt{ZONE_DMA} -- Memory suitable for DMA (Direct Memory Access) by devices that cannot access the full addressable range.
-    \item \texttt{ZONE_NORMAL} -- Standard memory directly accessible by the kernel.
-    \item \texttt{ZONE_MOVABLE} -- Similar to \texttt{ZONE_NORMAL}, but the content of pages in this zone can be migrated to different physical frames (preserving virtual address).
-    \item \texttt{ZONE_DEVICE} -- Memory reserved for specific hardware, such as GPUs, mapped to device drivers.
-    \item \texttt{ZONE_HIGHMEM} -- Memory not covered by permanent kernel mappings, used only by some 32-bit architectures.
+    \item \texttt{ZONE\_DMA} -- Memory suitable for DMA (Direct Memory Access) by devices that cannot access the full addressable range.
+    \item \texttt{ZONE\_NORMAL} -- Standard memory directly accessible by the kernel.
+    \item \texttt{ZONE\_MOVABLE} -- Similar to \texttt{ZONE\_NORMAL}, but the content of pages in this zone can be migrated to different physical frames (preserving virtual address).
+    \item \texttt{ZONE\_DEVICE} -- Memory reserved for specific hardware, such as GPUs, mapped to device drivers.
+    \item \texttt{ZONE\_HIGHMEM} -- Memory not covered by permanent kernel mappings, used only by some 32-bit architectures.
 \end{itemize}
 
-To enhance multi-core performance, Linux employs a two-step strategy \cite{linux_mem_phys}. It utilizes a global buddy allocator \ref{buddy_allocator} alongside Per-CPU Pagesets (PCP). Allocations are first attempted from the local PCP and if that fails, the system falls back to the global allocator with full synchronization.
+To enhance multi-core performance, Linux employs a two-step strategy \cite{linux_mem_phys}. It utilizes a global buddy allocator \cite{buddy_allocator} alongside Per-CPU Pagesets (PCP). Allocations are first attempted from the local PCP and if that fails, the system falls back to the global allocator with full synchronization.
 
 \subsubsection{Virtual Memory}
 
