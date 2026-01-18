@@ -1000,21 +1000,18 @@ TODO: KRYCZKA
 
 \subsection{Scheduling}
 
-Finally when we have other components done we can proceed to the last major component which is needed - scheduler. It will be responsible for managing, distributing cpu time between runing tasks and blocking tasks if there is a need to wait on some specific event.
-
-\subsubsection{Process}
-
-First element we will have to implement to have some runnable tasks is structure and management of processes. This object will represent execution space of threads working inside of it. That means it must contain all resources shared between the threads. That will surely include:
+The fundamental unit for resource management is the process. This object represents the execution environment for the threads operating within it. Consequently, it must act as a container for all resources shared between these threads. At a minimum, a process structure must manage:
 
 \begin{itemize}
-    \item Paging tables -- archtiecture defined structure describing mapping between virtual and physical addresses
-    \item Mapping metadata -- strutures allowing to find and allocate virtual addresses
-    \item File Descriptor Table -- descriptors allowing to access the files
+    \item \textbf{Page Tables} -- Architecture-specific structures describing the mapping between virtual and physical addresses.
+    \item \textbf{Mapping Metadata} -- Structures enabling the tracking and allocation of virtual address ranges.
+    \item \textbf{File Descriptor Table} -- Descriptors facilitating access to files and I/O streams.
 \end{itemize}
 
-All other resources added to the process are some cosmetics allowuing to implement various features like IPC, pipes or synchronization. Those 3 are bare minimum essential for the process concept. The straightforward solution is to implement separate struct for Thread and Prcoess objects, but there exists solution merging both of them to single task struct \ref{subsec:linux-task}. At this moment it is good to prepare some data strcutures allowing for fast quierying for processes for operations such killing, jojning or IPC. It is important to note that creation and destruction of processes as it needs to build the page tables map the kernel address space takes, and allocate the memory for all relevant structures takes a lot of time (similarly destruction). Some work might be defferred to external kernel tasks to not spend so much time in kernel space and return earlier to the thread creating or destruction the process.
+While additional resources may be required to implement features such as Inter-Process Communication (IPC), pipes, or synchronization primitives, the three elements listed above constitute the bare minimum for the process concept. A straightforward implementation involves defining separate structures for \texttt{Thread} and \texttt{Process} objects, although some designs merge these into a single task structure (as discussed in Section \ref{subsec:linux-task}).
+At this stage, it is prudent to prepare data structures that allow for efficient querying of processes, facilitating operations such as termination, joining, or IPC. It is important to note that the creation and destruction of processes are computationally expensive operations. They require building page tables, mapping the kernel address space, and allocating memory for bookkeeping structures. To mitigate latency, some of this workload, particularly during destruction, can be deferred to dedicated kernel worker threads, allowing the system to return control to the caller more rapidly.
 
-The minimal stuct may look like this:
+\noindent The minimal stuct may look like this:
 \begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
     struct Process {
         /* Process resources */
@@ -1024,13 +1021,15 @@ The minimal stuct may look like this:
     };
 \end{lstlisting}
 
-Obviously in reality this struct would contain much more data used for management like synchronization, statistics, configuration flags or state enum for lifecycle management mentioned before.
+In a production environment, this structure would naturally include additional fields for management purposes, such as synchronization primitives, statistics, configuration flags, and a state enumeration for lifecycle management.
 
 \subsubsection{Thread}
 
-Second big block of scheduling is thread. It represents the unit of execution, some actual code which will actually use the CPU time and utilize the resources from its process (environment it operates inside). What we need to restore, startup and switch execution? Firstly the thread's stack and after that all state associated with that is all registers, address of next instruction and all archtiecture defined registers (flags, thread local storage etc). All of that compresses simply to one filed - thread's stack. This solution simplyfies life a lot and also performs well - as stack's memory is usually cached (it is used all the time) and we don't have to allocate additional memory for bookkeeping resources. That means we will Unify all operations to use stack as storage for threads state, we will dump the registers on top of it when saving the context or artificially fill up the stack with bootup values.
+The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution - the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer.
 
-\noindent We can start with such simple stuct:
+This approach simplifies the architecture significantly and enhances performance. Since the stack is heavily utilized, it is typically cached, eliminating the need to allocate separate memory regions for saving context. Consequently, all context-switching operations are unified to use the stack as the storage medium for the thread's state. When saving context, registers are pushed onto the stack. When initializing a thread, the stack is artificially populated with boot-up values.
+
+\noindent A concise initial structure can be defined as follows:
 \begin{lstlisting}[caption={Thread Structure First Iteration}, label={lst:os-tutorial-thread-v0}]
 struct Thread {
     Process* owner;
@@ -1040,10 +1039,9 @@ struct Thread {
 };
 \end{lstlisting}
 
-Another important field and enum, which we have to define is Thread's state. Based on that field we will be recognizing the action we have to take perform some operations. For example if we will have to kill some thread, based on the state we will do different things. For waiting thread we will have to remove it from scheduler for blocked threads we will have to remove the from wait queue its waiting on. 
+To manage the thread lifecycle, it is necessary to introduce a state enumeration. This field allows the scheduler to determine the appropriate action for a given thread. For instance, a waiting thread must be removed from the run queue, while a blocked thread must be removed from the specific wait queue it is blocked on.
 
-
-\noindent We can now update our structure:
+\noindent The structure is updated to reflect these requirements:
 \begin{lstlisting}[caption={Thread Structure Second Iteration}, label={lst:os-tutorial-thread-v1}]
 enum class ThreadState : u64 {
     kReady = 0,
@@ -1061,9 +1059,9 @@ struct Thread {
 };
 \end{lstlisting}
 
-Other important things to consider now is that what happens if we will want to save the state on context switch on users stack? Doing is ultimately unsecure, malicious program can replace stack pointer with some address on imporatnt kernel structures and affect the behaviour or after going back to program we can leave some secret data like cryptographic keys or kernels state unintentionally. What can lead to further escalation as a consequence. Additionally we want to allow kernel code to preempt or block (that is make a context switch inside of kernel code), to do so we need to preserve the kernel state that is save the registers similarly as described before together with kernel stack. The consequence is we must have separate stack for the kernel per thread, having single stack per core is practically impossbile.
+A critical design consideration regarding context switching is the location where the state is saved. Saving the execution state directly onto the user stack is inherently insecure. A malicious program could manipulate the stack pointer to overwrite critical kernel structures, or the kernel could unintentionally leak sensitive data (such as cryptographic keys) onto the user stack during a switch. Furthermore, to allow kernel code to be preempted or to block (i.e., perform a context switch while inside the kernel), the kernel state must be preserved. This necessitates a separate, protected kernel stack for each thread. Relying on a single kernel stack per core is insufficient for a preemptible kernel.
 
-\noindent Final minimal stucture will look like this:
+\noindent The final minimal structure is presented below:
 \begin{lstlisting}[caption={Thread Structure Third Iteration}, label={lst:os-tutorial-thread-v2}]
 enum class ThreadState : u64 {
     kReady = 0,
@@ -1086,25 +1084,24 @@ struct Thread {
 \subsubsection{Context Creation}
 \label{subsec:context-init}
 
-At this point we already know what our context is, but next important question is how to create the context. To initialize the context we have to create function, which will fill the context frame on the stack accoridngly to some scheme we will have to define. Such scheme will have to create a layout for registers and cpu flags discussed before. To create a context we will simply fill the values for all the registers (zeros for general purpose registers or function arguments, depends on used ABI), address of function we want to execute as a next address and flags as some architecture defined defaults.
+With the context storage mechanism defined, the next step is context initialization. This requires a function responsible for fabricating a context frame on the thread's stack, adhering to a predefined schema. This schema must mirror the layout of registers and CPU flags expected by the context restoration logic. To create a new context, the stack is populated with initial values: zeros for general-purpose registers (or specific function arguments, depending on the ABI), the address of the entry point function, and architecture-specific default flags.
 
 \subsubsection{Context Conversion}
 
-Before talking about switching a context we have to first create a first context we will have to switch afterwards. That means we have to create our first process and prepare all structures described before together with context initialization \ref{subsec:context-init}. We have multiple solutions here. For example we can create some first user space program which will bootup other programs or kernel space process perofrming further initialization.
+Before a context switch can occur, an initial context must exist. This implies the creation of the first process and the preparation of all associated structures described previously, utilizing the context initialization logic \ref{subsec:context-init}. Several approaches exist to achieve this; for example, the kernel may spawn an initial user-space program (init) responsible for booting other programs, or it may create a kernel-space process to perform further system initialization.
 
 \subsubsection{Context Switch}
 
-When we have first couple of tasks available we may talk about switchin the context. Assuming that whole state resides on the stack the operation of context switch is pretty straightforward we will have to perform this operations in sequnce to change the context:
+Once multiple tasks are established, the system can perform context switching. Assuming the entire execution state resides on the stack, the context switch operation is relatively straightforward. The sequence of operations is as follows:
 
 \begin{itemize}
-    \item Push current thread context to its stack
-    \item Do all additional actions needed
-    \item Change the stack to next threads stack
-    \item Restore the state from the stack
+    \item Push the current thread's context (registers and flags) onto its stack.
+    \item Perform any necessary bookkeeping or state updates.
+    \item Switch the stack pointer to the target thread's stack.
+    \item Restore the state (registers and flags) from the new stack.
 \end{itemize}
 
-Based on amd64 assembly it might look like this:
-
+\noindent Based on AMD64 assembly, the implementation resembles the following:
 \begin{lstlisting}[style=nasmstyle, caption={Assembly ISR wrapper}, label={lst:isr_asm}]
 ; c_decl
 ; void ContextSwitch(Thread* thread)
