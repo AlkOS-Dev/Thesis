@@ -1278,8 +1278,6 @@ The allocators described above handle the fundamental problem of page frame allo
 
 A slab is a contiguous region of memory (typically one or more pages) pre-divided into fixed-size object slots. When an object is freed, it is returned to its slab \textit{without destruction}-the mutex remains initialized, the reference count at zero. On the next allocation, the object is returned immediately, avoiding constructor overhead. Measurements on SunOS showed allocation dropping from 33~microseconds to 5.7~microseconds-an 83\% reduction, mostly from avoiding reconstruction~\cite{bonwick1994slab}.
 
-The slab allocator also exploits \textbf{cache coloring}. Hardware caches are indexed by address, so objects at the same offset within different slabs contend for the same cache lines. By offsetting object start addresses within slabs (varying the ``color''), the allocator spreads objects across more cache lines, reducing conflict misses and improving bus utilization.
-
 \textbf{Multiprocessor Scalability: Per-CPU Caches and Hoard.} On SMP systems, a single allocator lock becomes a contention bottleneck. Two solutions dominate:
 \begin{itemize}
     \item \textbf{Per-CPU Caches:} Each CPU maintains a small local cache of free objects. Allocations are satisfied from the local cache without locking; only when the cache empties does the CPU acquire a global lock to refill. This amortizes lock overhead across many allocations.
