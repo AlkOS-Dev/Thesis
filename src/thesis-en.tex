@@ -329,7 +329,7 @@ TODO
 \pagestyle{fancy}
 \pagenumbering{arabic}
 \setcounter{page}{11}
-
+TODO: JAKUB
 
 \chapter{Introduction}
 \markboth{}{Introduction}
@@ -387,7 +387,7 @@ TODO KTOKOLWIEK
 
 \chapter{Creating an Operating System from Scratch}
 
-This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the monolithic kernel design, where every module resides within the same address space - the kernel address space.
+This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the monolithic kernel design with memory virtualization, where every module resides within the same address space - the kernel address space.
 
 \section{Host Environment Preparation}
 
@@ -991,26 +991,116 @@ An example of device availability schemes by architecture is as follows:
 Most modern architectures support both local and high-precision timers. For example, on AMD64 with SMP, the presence of local LAPIC Timers \cite{IntelManual-APIC} (high precision, one-shot) is guaranteed, significantly simplifying the implementation.
 
 \subsubsection{Keyboard}
-TODO: JAKUB
+
+Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21}\cite{osdev-ps22} if are available on our device. Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec}\cite{osdev-usb}.
 
 \subsection{File Systems}
 TODO: ADAM
+
 \subsection{Screen Drawing}
 TODO: KRYCZKA
+
 \subsection{Scheduling}
-TODO: JAKUB
+
+Finally when we have other components done we can proceed to the last major component which is needed - scheduler. It will be responsible for managing, distributing cpu time between runing tasks and blocking tasks if there is a need to wait on some specific event.
 
 \subsubsection{Process}
-TODO: JAKUB
+
+First element we will have to implement to have some runnable tasks is structure and management of processes. This object will represent execution space of threads working inside of it. That means it must contain all resources shared between the threads. That will surely include:
+
+\begin{itemize}
+    \item Paging tables -- archtiecture defined structure describing mapping between virtual and physical addresses
+    \item Mapping metadata -- strutures allowing to find and allocate virtual addresses
+    \item File Descriptor Table -- descriptors allowing to access the files
+\end{itemize}
+
+All other resources added to the process are some cosmetics allowuing to implement various features like IPC, pipes or synchronization. Those 3 are bare minimum essential for the process concept. The straightforward solution is to implement separate struct for Thread and Prcoess objects, but there exists solution merging both of them to single task struct \ref{subsec:linux-task}. At this moment it is good to prepare some data strcutures allowing for fast quierying for processes for operations such killing, jojning or IPC. It is important to note that creation and destruction of processes as it needs to build the page tables map the kernel address space takes, and allocate the memory for all relevant structures takes a lot of time (similarly destruction). Some work might be defferred to external kernel tasks to not spend so much time in kernel space and return earlier to the thread creating or destruction the process.
+
+The minimal stuct may look like this:
+\begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
+    struct Process {
+        /* Process resources */
+        data_structures::DoubleLinkedList<VMemArea *> area_list;
+        PPtr<void> page_table_root;
+        Mem::VPtr<Fs::FdTable> fd_table;
+    };
+\end{lstlisting}
+
+Obviously in reality this struct would contain much more data used for management like synchronization, statistics, configuration flags or state enum for lifecycle management mentioned before.
+
 \subsubsection{Thread}
-TODO: JAKUB
-\subsubsection{Meta-Scheduler}
-TODO: JAKUB
-\subsubsection{Policies}
-TODO: JAKUB
+
+Second big block of scheduling is thread. It represents the unit of execution, some actual code which will actually use the CPU time and utilize the resources from its process (environment it operates inside). What we need to restore, startup and switch execution? Firstly the thread's stack and after that all state associated with that is all registers, address of next instruction and all archtiecture defined registers (flags, thread local storage etc). All of that compresses simply to one filed - thread's stack. This solution simplyfies life a lot and also performs well - as stack's memory is usually cached (it is used all the time) and we don't have to allocate additional memory for bookkeeping resources. That means we will Unify all operations to use stack as storage for threads state, we will dump the registers on top of it when saving the context or artificially fill up the stack with bootup values.
+
+\noindent We can start with such simple stuct:
+\begin{lstlisting}[caption={Thread Structure First Iteration}, label={lst:os-tutorial-thread-v0}]
+struct Thread {
+    Process* owner;
+
+    void *user_stack;
+    void *user_stack_bottom;
+};
+\end{lstlisting}
+
+Another important field and enum, which we have to define is Thread's state. Based on that field we will be recognizing the action we have to take perform some operations. For example if we will have to kill some thread, based on the state we will do different things. For waiting thread we will have to remove it from scheduler for blocked threads we will have to remove the from wait queue its waiting on. 
+
+
+\noindent We can now update our structure:
+\begin{lstlisting}[caption={Thread Structure Second Iteration}, label={lst:os-tutorial-thread-v1}]
+enum class ThreadState : u64 {
+    kReady = 0,
+    kRunning,
+    kBlocked,
+    kTerminated,
+};
+
+struct Thread {
+    Process* owner;
+    ThreadState state;
+
+    void *user_stack;
+    void *user_stack_bottom;
+};
+\end{lstlisting}
+
+Other important things to consider now is that what happens if we will want to save the state on context switch on users stack? Doing is ultimately unsecure, malicious program can replace stack pointer with some address on imporatnt kernel structures and affect the behaviour or after going back to program we can leave some secret data like cryptographic keys or kernels state unintentionally. What can lead to further escalation as a consequence. Additionally we want to allow kernel code to preempt or block (that is make a context switch inside of kernel code), to do so we need to preserve the kernel state that is save the registers similarly as described before together with kernel stack. The consequence is we must have separate stack for the kernel per thread, having single stack per core is practically impossbile.
+
+\noindent Final minimal stucture will look like this:
+\begin{lstlisting}[caption={Thread Structure Third Iteration}, label={lst:os-tutorial-thread-v2}]
+enum class ThreadState : u64 {
+    kReady = 0,
+    kRunning,
+    kBlocked,
+    kTerminated,
+};
+
+struct Thread {
+    Process* owner;
+    ThreadState state;
+
+    void *kernel_stack;
+    void *kernel_stack_bottom;
+    void *user_stack;
+    void *user_stack_bottom;
+};
+\end{lstlisting}
+
 \subsubsection{Context Switch}
 TODO: JAKUB
+
 \subsubsection{Context Conversion}
+TODO: JAKUB
+
+\subsubsection{Meta-Scheduler}
+TODO: JAKUB
+
+\subsubsection{Policies}
+TODO: JAKUB
+
+\subsubsection{Sleep}
+TODO: JAKUB
+
+\subsubsection{Blocking - Wait Queues}
 TODO: JAKUB
 
 \subsection{User Space}
@@ -1094,6 +1184,8 @@ Historically, Linux utilized a strictly periodic tick (defined by hardware), con
 This hight precision framework has one major drawback - it can get slow for big number of events as it based on priority queue with $O(\log n)$complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers $O(1)$ complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
 
 \subsection{The Process and Thread Model}
+\label{subsec:linux-task}
+
 Unlike many other operating systems that distinguish strictly between processes (containers of resources) and threads (units of execution), Linux treats them almost identically. The core data structure is the \texttt{task\_struct} \cite{linux_task}.
 \begin{itemize}
     \item A \textbf{Process} is a \texttt{task\_struct} with a unique memory map and file descriptor table.
@@ -3195,6 +3287,8 @@ COW & Copy On Write \\
 SMP & Symmetric MultiProcessing \\
 ACPI & Advanced Configuration and Power Interface \\
 PCI & Peripheral Component Interconnect \\
+USB & Universal Serial Bus \\
+IPC & Inter Process Communication \\
 
 \end{tabular}
 \\
