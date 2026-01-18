@@ -329,8 +329,6 @@ TODO
 \pagestyle{fancy}
 \pagenumbering{arabic}
 \setcounter{page}{11}
-
-
 \chapter{Introduction}
 \markboth{}{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
@@ -387,7 +385,7 @@ TODO KTOKOLWIEK
 
 \chapter{Creating an Operating System from Scratch}
 
-This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the monolithic kernel design, where every module resides within the same address space - the kernel address space.
+This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the monolithic kernel design with memory virtualization, where every module resides within the same address space - the kernel address space.
 
 \section{Host Environment Preparation}
 
@@ -991,26 +989,143 @@ An example of device availability schemes by architecture is as follows:
 Most modern architectures support both local and high-precision timers. For example, on AMD64 with SMP, the presence of local LAPIC Timers \cite{IntelManual-APIC} (high precision, one-shot) is guaranteed, significantly simplifying the implementation.
 
 \subsubsection{Keyboard}
-TODO: JAKUB
+
+Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21}\cite{osdev-ps22} if are available on our device. Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec}\cite{osdev-usb}.
 
 \subsection{File Systems}
 TODO: ADAM
+
 \subsection{Screen Drawing}
 TODO: KRYCZKA
+
 \subsection{Scheduling}
+
+The fundamental unit for resource management is the process. This object represents the execution environment for the threads operating within it. Consequently, it must act as a container for all resources shared between these threads. At a minimum, a process structure must manage:
+
+\begin{itemize}
+    \item \textbf{Page Tables} -- Architecture-specific structures describing the mapping between virtual and physical addresses.
+    \item \textbf{Mapping Metadata} -- Structures enabling the tracking and allocation of virtual address ranges.
+    \item \textbf{File Descriptor Table} -- Descriptors facilitating access to files and I/O streams.
+\end{itemize}
+
+While additional resources may be required to implement features such as Inter-Process Communication (IPC), pipes, or synchronization primitives, the three elements listed above constitute the bare minimum for the process concept. A straightforward implementation involves defining separate structures for \texttt{Thread} and \texttt{Process} objects, although some designs merge these into a single task structure (as discussed in Section \ref{subsec:linux-task}).
+At this stage, it is prudent to prepare data structures that allow for efficient querying of processes, facilitating operations such as termination, joining, or IPC. It is important to note that the creation and destruction of processes are computationally expensive operations. They require building page tables, mapping the kernel address space, and allocating memory for bookkeeping structures. To mitigate latency, some of this workload, particularly during destruction, can be deferred to dedicated kernel worker threads, allowing the system to return control to the caller more rapidly.
+
+\noindent The minimal stuct may look like this:
+\begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
+    struct Process {
+        /* Process resources */
+        data_structures::DoubleLinkedList<VMemArea *> area_list;
+        PPtr<void> page_table_root;
+        Mem::VPtr<Fs::FdTable> fd_table;
+    };
+\end{lstlisting}
+
+In a production environment, this structure would naturally include additional fields for management purposes, such as synchronization primitives, statistics, configuration flags, and a state enumeration for lifecycle management.
+
+\subsubsection{Thread}
+
+The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution - the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer.
+
+This approach simplifies the architecture significantly and enhances performance. Since the stack is heavily utilized, it is typically cached, eliminating the need to allocate separate memory regions for saving context. Consequently, all context-switching operations are unified to use the stack as the storage medium for the thread's state. When saving context, registers are pushed onto the stack. When initializing a thread, the stack is artificially populated with boot-up values.
+
+\noindent A concise initial structure can be defined as follows:
+\begin{lstlisting}[caption={Thread Structure First Iteration}, label={lst:os-tutorial-thread-v0}]
+struct Thread {
+    Process* owner;
+
+    void *user_stack;
+    void *user_stack_bottom;
+};
+\end{lstlisting}
+
+To manage the thread lifecycle, it is necessary to introduce a state enumeration. This field allows the scheduler to determine the appropriate action for a given thread. For instance, a waiting thread must be removed from the run queue, while a blocked thread must be removed from the specific wait queue it is blocked on.
+
+\noindent The structure is updated to reflect these requirements:
+\begin{lstlisting}[caption={Thread Structure Second Iteration}, label={lst:os-tutorial-thread-v1}]
+enum class ThreadState : u64 {
+    kReady = 0,
+    kRunning,
+    kBlocked,
+    kTerminated,
+};
+
+struct Thread {
+    Process* owner;
+    ThreadState state;
+
+    void *user_stack;
+    void *user_stack_bottom;
+};
+\end{lstlisting}
+
+A critical design consideration regarding context switching is the location where the state is saved. Saving the execution state directly onto the user stack is inherently insecure. A malicious program could manipulate the stack pointer to overwrite critical kernel structures, or the kernel could unintentionally leak sensitive data (such as cryptographic keys) onto the user stack during a switch. Furthermore, to allow kernel code to be preempted or to block (i.e., perform a context switch while inside the kernel), the kernel state must be preserved. This necessitates a separate, protected kernel stack for each thread. Relying on a single kernel stack per core is insufficient for a preemptible kernel.
+
+\noindent The final minimal structure is presented below:
+\begin{lstlisting}[caption={Thread Structure Third Iteration}, label={lst:os-tutorial-thread-v2}]
+enum class ThreadState : u64 {
+    kReady = 0,
+    kRunning,
+    kBlocked,
+    kTerminated,
+};
+
+struct Thread {
+    Process* owner;
+    ThreadState state;
+
+    void *kernel_stack;
+    void *kernel_stack_bottom;
+    void *user_stack;
+    void *user_stack_bottom;
+};
+\end{lstlisting}
+
+\subsubsection{Context Creation}
+\label{subsec:context-init}
+
+With the context storage mechanism defined, the next step is context initialization. This requires a function responsible for fabricating a context frame on the thread's stack, adhering to a predefined schema. This schema must mirror the layout of registers and CPU flags expected by the context restoration logic. To create a new context, the stack is populated with initial values: zeros for general-purpose registers (or specific function arguments, depending on the ABI), the address of the entry point function, and architecture-specific default flags.
+
+\subsubsection{Context Conversion}
+
+Before a context switch can occur, an initial context must exist. This implies the creation of the first process and the preparation of all associated structures described previously, utilizing the context initialization logic \ref{subsec:context-init}. Several approaches exist to achieve this; for example, the kernel may spawn an initial user-space program (init) responsible for booting other programs, or it may create a kernel-space process to perform further system initialization.
+
+\subsubsection{Context Switch}
+
+Once multiple tasks are established, the system can perform context switching. Assuming the entire execution state resides on the stack, the context switch operation is relatively straightforward. The sequence of operations is as follows:
+
+\begin{itemize}
+    \item Push the current thread's context (registers and flags) onto its stack.
+    \item Perform any necessary bookkeeping or state updates.
+    \item Switch the stack pointer to the target thread's stack.
+    \item Restore the state (registers and flags) from the new stack.
+\end{itemize}
+
+\noindent Based on AMD64 assembly, the implementation resembles the following:
+\begin{lstlisting}[style=nasmstyle, caption={Assembly ISR wrapper}, label={lst:isr_asm}]
+; c_decl
+; void ContextSwitch(Thread* thread)
+;   RDI = thread
+ContextSwitch:
+    sub rsp, _context_switch_stack_space_ext     ; Allocate space for saving registers.
+    push_all_regs                                ; Save the state
+
+    ; ... Some other booking, state changes -> depends on supported features
+.done:
+    mov rsp, [rdi+Thread.kernel_stack]   ; Change the stack
+
+    pop_all_regs            ; Restore registers of NEW thread's stack
+    add rsp, _all_reg_size  ; Deallocate register save space.
+    iretq                   ; Load next thread's RIP from its stack
+\end{lstlisting}
+
+\subsubsection{Scheduler}
 TODO: JAKUB
 
-\subsubsection{Process}
+\subsubsection{Sleep}
 TODO: JAKUB
-\subsubsection{Thread}
-TODO: JAKUB
-\subsubsection{Meta-Scheduler}
-TODO: JAKUB
-\subsubsection{Policies}
-TODO: JAKUB
-\subsubsection{Context Switch}
-TODO: JAKUB
-\subsubsection{Context Conversion}
+
+\subsubsection{Blocking - Wait Queues}
 TODO: JAKUB
 
 \subsection{User Space}
@@ -1094,6 +1209,8 @@ Historically, Linux utilized a strictly periodic tick (defined by hardware), con
 This hight precision framework has one major drawback - it can get slow for big number of events as it based on priority queue with $O(\log n)$complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers $O(1)$ complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
 
 \subsection{The Process and Thread Model}
+\label{subsec:linux-task}
+
 Unlike many other operating systems that distinguish strictly between processes (containers of resources) and threads (units of execution), Linux treats them almost identically. The core data structure is the \texttt{task\_struct} \cite{linux_task}.
 \begin{itemize}
     \item A \textbf{Process} is a \texttt{task\_struct} with a unique memory map and file descriptor table.
@@ -3195,6 +3312,8 @@ COW & Copy On Write \\
 SMP & Symmetric MultiProcessing \\
 ACPI & Advanced Configuration and Power Interface \\
 PCI & Peripheral Component Interconnect \\
+USB & Universal Serial Bus \\
+IPC & Inter Process Communication \\
 
 \end{tabular}
 \\
