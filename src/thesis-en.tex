@@ -947,17 +947,50 @@ The discovery of devices differs between architectures and one must verify the s
 
 It should define crucial operations for the device type and data describing functionality of the device, allowing to pick proper one by the user or automatically by some algorithms inside the kernel.
 
+\subsubsection{Core Local Storage}
+
+If we are implementing a SMP kernel it will be very handy to prepare infrastructure to acces data local to the core we running as soon as possible to prevent big refactorings in the future. Note that it must be done after initializing the memory and discvoering the CPU topology as we have to allocate the structure for each core individually. In future there will be many structure allocated per-core as to prevent locking and boost performance critical sections and obviously we will have some data that strictly correlated with the core like currently running thread and more so it is not only an optimisation but required step to implement the scheduler. Archtiecture must provide us some mechanism to proceed further for example core unique indexes accessed by some instruction.
+
+\begin{lstlisting}[caption={Example Core Local Usage}, label={lst:core-local}]
+    void cdecl_UpdateTcbOnSyscallEntry()
+    {
+        const auto thread = hardware::GetCoreLocalTcb();
+        const u64 t       = TimingModule::Get().GetSystemTime().ReadLifeTimeNs();
+        thread->user_time_ns += t - thread->timestamp;
+        thread->timestamp = t;
+        thread->num_syscalls++;
+    };
+\end{lstlisting}
+
+\subsubsection{Timing Design}
+
+Before talking about timing devices one must decide what type of kernel you want to implement we have to choose wheter the architure is \texttt{tickless} or \texttt{ticking}. Ticking kernels have some global constant denoting how frequently timing interrupts are scheduled those values are in granularity of milliseconds as more frequent would render the device unusable. On the other hand we have Tickless kernels which does not define periodic interrupts and schedules next timing event based on the needs (sleeping schedule and time slice of current running process). Note that ticking kernels also need to run timing interrupts with bigger granularity if support for nanosleep is needed \ref{subsec:linux-timing}.
+
 \subsubsection{Clocks}
 
-First type of device we will surely need to proceed further as simple clocks capable of counting how much time passed since the start of the system. We will later need them to place tasks somewhere on the timeline and based on that schedule interrupts for high-precision sleep operations. Without those capabilities we would have to each time we pick tasks to wake up iterate over all sleeping tasks and decrement sleep time left by last interrupt scheduled time. Such approach would have complexity of O(n), what is unacceptable solution for waking up tasks as interrupts must be as fast as possible and timeline is used to sort the tasks in some high performance priority queue data structure (red-black tree is a good choice as it support O(logn) removal in contrast to other implementations and guarantes high stability of the operations). For example on amd64 we can use TSC\cite{IntelManual-TSC} clock for reading how much time passed since the start of the system (sufficient for scheduler) and RTC clock to read real-world time displayed to the user. 
-
+First type of device we will surely need to proceed further as simple clocks capable of counting how much time passed since the start of the system, mainly to measure statistics and keep track of time. For example to support nanosleep we will later need them to place tasks somewhere on the timeline and based on that schedule interrupts for high-precision sleep operations. Without those capabilities we would have to each time we pick tasks to wake up iterate over all sleeping tasks and decrement sleep time left by last interrupt scheduled time. Such approach would have complexity of O(n), what is unacceptable solution for waking up tasks as interrupts must be as fast as possible and timeline is used to sort the tasks in some high performance priority queue data structure (red-black tree is a good choice as it support O(logn) removal in contrast to other implementations and guarantes high stability of the operations). For example on amd64 we can use TSC\cite{IntelManual-TSC} clock for reading how much time passed since the start of the system (sufficient for scheduler) and RTC clock to read real-world time displayed to the user. If multiple timers will be available the kernel should pick the one with best performance-accuracy ratio.
 
 \subsubsection{Event Clocks}
-TODO: JAKUB
-\subsubsection{Keyboard}
-TODO: JAKUB
 
-\subsection{Timing}
+At this stage we should decide about approach we wanna take on designing the timing events logic. This decision depends on architecture we wanna support and capabilities we want to expose to the users.
+
+First question we have to answer is that what granularity of sleep mechanisms you want to support. First simple answer will be that the maximal precision of sleep is around milliseconds (1e-3 of second). Possibly every architecture available on the market will allow to imeplemnt such mechanism, as periodic interrupts with minimal granularity (e.g. each 1ms interrupt fired) are enough and most device will allow that. Otherwise to implement high precision ns/us level sleep we will need timer devices supporting fast reprogramable oneshot interrupt (e.g. LAPIC Timer on amd64) as it is not possible at all to handle periodic interrupt each us. We must be precise and schedule interrupts as needed.
+
+Another important factor we have to take in account is that do you want to support multiple cores? If yes it is preferable to pick timing devices that resides locally on the cores and allows to run independently from other cores allowing to maximize the performance. And on most architectures such devices will be available (e.g. LAPIC Timer on amd64), only some older SMP architectures or exotic embedded ones will be lacking those. In that case the kernel must use some workaround as global timer and use interrupt driven inter core communication to simulate local interrupts.
+
+Based on that we will have to pick a proper timing device to use. If you want to implement only single archtiecture you can pick suitable option and stick with it. In reality if you want to support multiple ones, you will probably end up implementing each of them and adjust the usage based on compiled archtiecture and device capabilities.
+
+Example devices availability scheme by architecture may look like: 
+\begin{itemize}
+\item SMP fast local one-shot timer -> core local interrupt system + nanosleep mechanism available
+\item SMP local periodic only timer -> core local interrupt system + low precision msleep only available
+\item SMP non local one-shot timer  -> owner core of timer interrupts propagates the interrupt to target cores + nanosleep
+\item SMP non local periodic only timer -> owner core of timer interrupts propagates the interrupt to target cores + low precision msleep only available
+\end{itemize}
+
+Most newer arhcitectures will support both local and high precision timers. For example nn amd64 if we work with SMP we have guaranted to have local LAPIC Timers\cite{IntelManual-APIC} (high precision, one shot), what simplifies life a lot.
+
+\subsubsection{Keyboard}
 TODO: JAKUB
 
 \subsection{File Systems}
@@ -1053,6 +1086,9 @@ To enhance extensibility and avoid the need for recompilation when adding driver
     \label{fig:linux_lkm}
 \end{figure}
 
+\subsection{Timing}
+\label{subsec:linux-timing}
+
 Historically, Linux utilized a strictly periodic tick (defined by hardware), configuring hardware timers to generate interrupts at a fixed frequency (e.g., 100 Hz or 1000 Hz). While this design was straightforward, it imposed limitations on sleep granularity and power efficiency. To address these issues, Linux introduced High Resolution Timers (\texttt{hrtimers}), which allow the kernel to schedule interrupts with nanosecond precision based on immediate needs rather than a fixed cadence. Despite the capabilities of high-resolution timers, the concept of a periodic tick is maintained within the kernel for performance reasons and architectural legacy, by simulating the tick with high precision framework.
 
 This hight precision framework has one major drawback - it can get slow for big number of events as it based on priority queue with O(logn) complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers O(1) complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
@@ -1069,12 +1105,12 @@ Unlike many other operating systems that distinguish strictly between processes 
 Linux implements several scheduling policies \cite{linux_policies}\cite{linux_cfs} operating on task priorities. There are two major classes: \textbf{Real Time}, which operates on priorities 1-99, and \textbf{Fair}, which operates on priority 0. Tasks with higher priorities preempt those with lower priorities. Linux provides six policy classes:
 
 \begin{itemize}
-\item \texttt{SCHED\_DEADLINE} -- Takes precedence over any other policy and provides real-time capabilities.
-\item \texttt{SCHED\_FIFO} -- A real-time policy where a task runs until it yields control or is preempted by a higher-priority task.
-\item \texttt{SCHED\_RR} (Round Robin) -- A real-time policy where each task is assigned a time slice. Upon exhaustion, the task is moved to the end of the queue.
-\item \texttt{SCHED\_OTHER} -- The standard policy for the majority of non-real-time tasks.
-\item \texttt{SCHED\_BATCH} -- Designed for non-interactive tasks that run for longer periods without context switches, tolerating longer scheduling latencies.
-\item \texttt{SCHED\_IDLE} -- Used for very low priority tasks that run only when the system is otherwise idle.
+    \item \texttt{SCHED\_DEADLINE} -- Takes precedence over any other policy and provides real-time capabilities.
+    \item \texttt{SCHED\_FIFO} -- A real-time policy where a task runs until it yields control or is preempted by a higher-priority task.
+    \item \texttt{SCHED\_RR} (Round Robin) -- A real-time policy where each task is assigned a time slice. Upon exhaustion, the task is moved to the end of the queue.
+    \item \texttt{SCHED\_OTHER} -- The standard policy for the majority of non-real-time tasks.
+    \item \texttt{SCHED\_BATCH} -- Designed for non-interactive tasks that run for longer periods without context switches, tolerating longer scheduling latencies.
+    \item \texttt{SCHED\_IDLE} -- Used for very low priority tasks that run only when the system is otherwise idle.
 \end{itemize}
 
 From version 2.6.23 \cite{linux_cfs} up to 6.6 \cite{linux_eevdf}, the \texttt{CFS} (Completely Fair Scheduler) was the default scheduler for the \textbf{Fair} class. Starting with version 6.6, the \texttt{EEVDF} (Earliest Eligible Virtual Deadline First) scheduler began replacing CFS.
