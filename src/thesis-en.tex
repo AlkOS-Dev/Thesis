@@ -890,9 +890,31 @@ A PMM must balance three competing objectives:
     \item \textbf{Hardware Compliance:} Respect physical addressing constraints imposed by devices (e.g., legacy ISA DMA requiring addresses below 16~MiB).
 \end{enumerate}
 
-The choice of allocation algorithm fundamentally shapes the PMM's performance profile. Before examining specific algorithms, it is useful to understand the core problem: \textbf{fragmentation}---the accumulation of scattered, unusable holes in memory. When blocks are allocated and freed in varying sizes and orders, the remaining free space may become fragmented into pieces too small to satisfy future requests, even if total free memory is abundant. Operating system developers must distinguish between \textit{internal fragmentation} (wasted space within allocated blocks due to size rounding) and \textit{external fragmentation} (unusable gaps between allocated blocks). A thorough understanding of fragmentation causes and mitigations is essential for informed allocator selection~\cite{wilson1995survey}.
+The choice of allocation algorithm fundamentally shapes the PMM's performance profile. Before examining specific algorithms, it is essential to deeply understand the core problem: \textbf{fragmentation}---the inability to reuse memory that is free. This occurs when free blocks exist but are too small or poorly positioned to satisfy requests.
 
-Allocator design involves three levels of abstraction: a \textbf{strategy} that attempts to exploit regularities in program behavior, a \textbf{policy} that determines exactly where to place blocks, and a \textbf{mechanism} that implements the policy efficiently. Most real programs exhibit characteristic memory usage patterns---gradual accumulation (ramps), bursty peaks, or stable plateaus---rather than the random behavior assumed by many theoretical analyses. Allocators that exploit these patterns (e.g., placing temporally adjacent allocations in contiguous memory) can significantly reduce fragmentation~\cite{wilson1995survey}. The following subsections examine the dominant algorithmic approaches.
+\textbf{Internal vs.\ External Fragmentation.} Operating system developers must distinguish between two forms. \textit{Internal fragmentation} arises when allocated blocks are larger than requested due to size-class rounding (e.g., a 50-byte request rounded to 64 bytes wastes 14 bytes inside the block). \textit{External fragmentation} occurs when free memory is scattered into many small holes, none large enough to satisfy a request, even though total free memory exceeds the request size. The lower bound on worst-case external fragmentation for any allocator is $O(M \cdot \log n)$, where $M$ is live data and $n$ is the ratio between largest and smallest block sizes~\cite{wilson1995survey}.
+
+\textbf{The Root Cause: Isolated Deaths.} Fragmentation fundamentally arises from \textit{isolated deaths}---when an object is freed but its neighbors remain allocated, creating an unusable hole. If adjacent objects always died together, their combined space would be reclaimed as one contiguous block. The allocator's core challenge is predicting which objects will die at similar times and placing them contiguously. Since the allocator cannot know future behavior, it must rely on heuristics that exploit regularities in program behavior~\cite{wilson1995survey}.
+
+\textbf{Program Behavior Patterns.} Most real programs do not behave randomly. Studies of allocation traces reveal three dominant patterns~\cite{wilson1995survey}:
+\begin{itemize}
+    \item \textbf{Ramps:} Monotonic accumulation of long-lived data (e.g., building a parse tree).
+    \item \textbf{Peaks:} Bursty allocation of temporary structures that are collectively discarded after a phase (e.g., processing one request).
+    \item \textbf{Plateaus:} Rapid initial allocation followed by stable long-term usage.
+\end{itemize}
+These patterns are exploitable: objects allocated together often die together. Address-ordered allocation (using low addresses first) tends to cluster temporally-related objects, and when a phase ends, contiguous regions become free simultaneously.
+
+\textbf{Placement Policies.} Allocators implement placement policies that determine where to allocate requested blocks:
+\begin{itemize}
+    \item \textbf{First Fit:} Use the first sufficiently large free block (address-ordered). Fast, and tends to pack one end of memory.
+    \item \textbf{Best Fit:} Use the smallest block that is large enough. Minimizes wasted remainder but may accumulate unusable ``splinters.''
+    \item \textbf{Next Fit:} Resume searching from where the last allocation stopped. Scatters allocations and often performs poorly.
+\end{itemize}
+Empirical studies show that best fit and address-ordered first fit perform similarly well, both significantly outperforming next fit for real workloads~\cite{wilson1995survey}.
+
+\textbf{Splitting and Coalescing.} Two subsidiary mechanisms support placement policies. \textit{Splitting} divides a large block to satisfy a smaller request, leaving the remainder as a new free block. \textit{Coalescing} merges adjacent free blocks into a larger one. General coalescing requires knowing neighbor boundaries---this is supported by \textit{boundary tags}~\cite{knuth1973art}: each block stores its size in both a header and a footer, enabling $O(1)$ lookup of neighbors. A space optimization avoids footers on allocated blocks by stealing a bit from the next block's header to indicate whether the previous block is free.
+
+Allocator design involves three levels of abstraction: a \textbf{strategy} that attempts to exploit regularities in program behavior, a \textbf{policy} that determines exactly where to place blocks, and a \textbf{mechanism} that implements the policy efficiently. The following subsections examine the dominant mechanisms and their trade-offs.
 
 \paragraph{Bitmap Allocation}
 
@@ -945,7 +967,9 @@ The bitmap allocator is the most straightforward approach. The entire physical a
 
 To allocate $n$ contiguous pages, the allocator must scan for $n$ consecutive zero bits. This results in $O(N)$ worst-case complexity, where $N$ is the total number of physical pages. For a 16~GiB system with 4~KiB pages, this means scanning over 4 million bits in the worst case---introducing significant latency and non-determinism.
 
-Optimizations include processing entire machine words (64 bits at once using intrinsic instructions like \texttt{\_\_builtin\_ffsll}) and maintaining a ``roaming pointer'' to skip permanently allocated regions at the start of memory. The space overhead is minimal: a 4~GiB address space requires only 128~KiB of bitmap data.
+Optimizations include processing entire machine words (64 bits at once using intrinsic instructions like \texttt{\_\_builtin\_ffsll}) and maintaining a ``roaming pointer'' to skip permanently allocated regions at the start of memory. The space overhead is minimal: a 4~GiB address space requires only 128~KiB of bitmap data---a 3\% overhead for average object sizes around 10 words~\cite{wilson1995survey}.
+
+Bitmaps have a subtle advantage for allocation policy: they naturally support \textit{address-ordered search}. Scanning from low addresses finds the first physically lowest block, which tends to pack allocations at one end of memory and cluster temporally-related objects. This implements an address-ordered first fit policy implicitly. Additionally, bitmaps are stored ``off to the side''---separate from the data they describe---which can improve cache locality during the search phase compared to traversing linked structures embedded within memory blocks.
 
 \paragraph{Stack-Based (Free List) Allocation}
 
@@ -977,11 +1001,19 @@ The stack allocator maintains a Last-In-First-Out (LIFO) stack of free page addr
 \label{fig:stack_allocator}
 \end{figure}
 
-This approach offers strict $O(1)$ performance for single-page operations. Additionally, the LIFO behavior creates cache locality: recently freed pages (likely still in CPU cache) are reallocated first. However, the stack cannot efficiently satisfy requests for contiguous multi-page allocations, as the order of pages on the stack reflects deallocation history, not physical adjacency.
+This approach offers strict $O(1)$ performance for single-page operations---no searching is required. The key policy decision is whether to use a LIFO (stack) or FIFO (queue) ordering:
+\begin{itemize}
+    \item \textbf{LIFO (Last-In-First-Out):} Recently freed pages are reused immediately. This maximizes CPU cache locality---the page data likely remains in cache. However, it mixes allocations from different program phases, potentially scattering objects that should be grouped.
+    \item \textbf{FIFO (First-In-First-Out):} Pages ``age'' before reuse, giving the system time to reclaim them efficiently (e.g., for write-back). Recent studies suggest FIFO ordering can reduce fragmentation compared to pure LIFO, performing nearly as well as address ordering~\cite{wilson1995survey}.
+\end{itemize}
+
+When all pages are the same size (as in page frame allocation), this structure implements \textit{simple segregated storage}: all blocks in a page-sized ``size class'' are on one list. This eliminates internal fragmentation entirely---every returned page is exactly the requested size. However, the stack cannot efficiently satisfy requests for \textit{contiguous} multi-page allocations (e.g., for large DMA buffers), as the order of pages reflects deallocation history, not physical adjacency.
 
 \paragraph{The Buddy System}
 
-The Buddy System bridges the gap between the contiguity support of bitmaps and the speed of free lists. It is the standard algorithm in general-purpose kernels~\cite{knuth1973art}.
+The Buddy System bridges the gap between the contiguity support of bitmaps and the speed of free lists. It is the standard algorithm in general-purpose kernels~\cite{knuth1973art}, though it comes with significant trade-offs that must be understood.
+
+The Buddy System is fundamentally a \textit{segregated free list} scheme with a constrained splitting and coalescing discipline. Unlike general segregated fits that can coalesce any adjacent blocks using boundary tags, the Buddy System restricts coalescing to ``buddy pairs''---blocks that together form a power-of-two aligned parent. This restriction enables an elegant $O(1)$ buddy lookup (via XOR) but limits flexibility: adjacent free blocks that are not buddies \textit{cannot be merged}, even if they are physically contiguous~\cite{wilson1995survey}.
 
 Memory is organized into blocks sized as powers of two ($2^k$ pages). The allocator maintains an array of free lists, one per ``order'' $k$:
 \begin{itemize}
@@ -1085,7 +1117,11 @@ This property enables $O(1)$ buddy lookup during coalescing. When a block is fre
 
 When a request arrives, it is rounded up to the nearest power of two. If no block of that order is available, a larger block is recursively split into two ``buddies.'' On deallocation, if a block's unique buddy is also free, they are merged (coalesced) back into a larger block. This achieves $O(\log k)$ complexity where $k$ is the maximum order---effectively constant time in practice.
 
-The primary drawback is \textbf{internal fragmentation}: a request for 33~KiB requires a 64~KiB block, wasting approximately 48\% of the allocation.
+\textbf{Internal Fragmentation: The Primary Drawback.} The power-of-two size restriction causes substantial internal fragmentation. A request for 33~KiB requires a 64~KiB block, wasting approximately 48\% of the allocation. Statistical analysis shows \textit{expected} internal fragmentation is approximately 28\%, though this varies with the request size distribution~\cite{wilson1995survey}. In contrast, general segregated fits schemes with finer size classes (e.g., 10--20\% spacing) can reduce internal fragmentation to just a few percent.
+
+\textbf{External Fragmentation: The Coalescing Limitation.} The buddy restriction on coalescing can also cause external fragmentation. Consider two adjacent free blocks that are \textit{not} buddies---they cannot merge, leaving unusable gaps. Studies using both real and synthetic traces show that buddy systems generally exhibit \textit{more} fragmentation than segregated fits with boundary tags, where any adjacent blocks can coalesce~\cite{wilson1995survey}.
+
+Despite these drawbacks, the Buddy System remains popular because: (1) it is conceptually simple; (2) the XOR-based buddy lookup is extremely fast; and (3) for page-frame allocation where the atomic unit is 4~KiB, internal fragmentation only matters for multi-page allocations.
 
 \paragraph{Two-Level Segregated Fit (TLSF)}
 
@@ -1192,6 +1228,10 @@ For real-time systems where deterministic latency is critical, the TLSF allocato
 
 TLSF achieves ``good fit'' allocation (blocks closely matching request size) without power-of-two rounding. Measured fragmentation is typically under 15\%, compared to up to 50\% for the Buddy System. The strict $O(1)$ bounds and low fragmentation make TLSF the standard choice for embedded and real-time kernels~\cite{masmano2004tlsf}.
 
+\textbf{Why Segregated Fits Work Well.} TLSF exemplifies segregated fit allocators, whose effectiveness is often underappreciated. By partitioning blocks into size classes, segregated fits \textit{implicitly} implement a good-fit policy: searching the list for size $s$ excludes blocks vastly larger or smaller, making most candidates reasonable fits. This policy emerges from the indexing structure rather than explicit search---a crucial insight for achieving both speed and low fragmentation~\cite{wilson1995survey}.
+
+\textbf{Deferred Coalescing.} TLSF performs immediate coalescing, but many allocators \textit{defer} coalescing for performance. The rationale: if a block of size $s$ is freed and then size $s$ is requested again, immediate coalescing would have merged it into a larger block, requiring the larger block to be re-split. Deferred systems maintain ``quick lists'' of recently freed blocks by size class, only coalescing during memory pressure. This trades slightly higher peak memory usage for significantly faster allocation in bursty workloads~\cite{wilson1995survey}.
+
 \paragraph{Comparative Summary}
 
 \begin{table}[htbp]
@@ -1224,15 +1264,21 @@ A common solution is to partition the physical address space into disjoint \text
 
 \paragraph{Advanced Topics and Further Reading}
 
-The allocators described above handle the fundamental problem of page frame allocation. Real-world kernels typically layer additional mechanisms on top of the PMM for efficiency and scalability:
+The allocators described above handle the fundamental problem of page frame allocation. Real-world kernels typically layer additional mechanisms on top of the PMM for efficiency and scalability.
 
+\textbf{Object Caching: The Slab Allocator.} For kernel objects of fixed type (inodes, task structures, network buffers), the cost of \textit{constructing} an object often exceeds the cost of allocating memory for it. Construction includes initializing mutexes, condition variables, and reference counts. The \textit{slab allocator}~\cite{bonwick1994slab} addresses this by caching \textit{constructed} objects.
+
+A slab is a contiguous region of memory (typically one or more pages) pre-divided into fixed-size object slots. When an object is freed, it is returned to its slab \textit{without destruction}---the mutex remains initialized, the reference count at zero. On the next allocation, the object is returned immediately, avoiding constructor overhead. Measurements on SunOS showed allocation dropping from 33~microseconds to 5.7~microseconds---an 83\% reduction, mostly from avoiding reconstruction~\cite{bonwick1994slab}.
+
+The slab allocator also exploits \textbf{cache coloring}. Hardware caches are indexed by address, so objects at the same offset within different slabs contend for the same cache lines. By offsetting object start addresses within slabs (varying the ``color''), the allocator spreads objects across more cache lines, reducing conflict misses and improving bus utilization.
+
+\textbf{Multiprocessor Scalability: Per-CPU Caches and Hoard.} On SMP systems, a single allocator lock becomes a contention bottleneck. Two solutions dominate:
 \begin{itemize}
-    \item \textbf{Object Caching (Slab Allocator):} For frequently allocated objects of fixed size (e.g., inodes, task structures), repeatedly invoking the PMM and initializing objects is wasteful. The \textit{slab allocator} pre-allocates slabs of objects and caches them, retaining constructor state between allocations. This dramatically reduces allocation latency for hot paths~\cite{bonwick1994slab}.
-    
-    \item \textbf{Multiprocessor Scalability:} On SMP systems, a single allocator lock becomes a contention bottleneck. Solutions include per-CPU caches, per-CPU free lists, and architectures like Hoard that use per-processor heaps with global heap fallback~\cite{berger2000hoard}. AlkOS can achieve basic scalability by maintaining per-CPU quick lists for common allocation sizes.
-    
-    \item \textbf{Deferred Coalescing:} Aggressively merging freed blocks only to split them again wastes CPU cycles. Many allocators defer coalescing, keeping recently-freed blocks on fast ``quick lists'' and only merging them during memory pressure or periodic sweeps~\cite{wilson1995survey}.
+    \item \textbf{Per-CPU Caches:} Each CPU maintains a small local cache of free objects. Allocations are satisfied from the local cache without locking; only when the cache empties does the CPU acquire a global lock to refill. This amortizes lock overhead across many allocations.
+    \item \textbf{Hoard Architecture:} Hoard~\cite{berger2000hoard} uses per-processor heaps with a global heap fallback. Memory is organized into \textit{superblocks} (contiguous chunks of same-sized objects). When a per-processor heap is empty, it requests a superblock from the global heap; when a superblock becomes mostly empty, it is returned to the global heap for rebalancing. A key invariant bounds \textit{blowup}: memory consumption is at most a constant factor times the maximum live data across all processors, preventing runaway fragmentation from producer-consumer patterns where one thread allocates and another frees.
 \end{itemize}
+
+For AlkOS, a straightforward first step is per-CPU quick lists for single-page allocations, progressing to full slab caching for high-traffic object types.
 
 For an in-depth treatment of allocation algorithms, fragmentation theory, and experimental methodology, the comprehensive survey by Wilson et al.~\cite{wilson1995survey} remains an essential reference.
 \subsubsection{Virtual Memory Management}
