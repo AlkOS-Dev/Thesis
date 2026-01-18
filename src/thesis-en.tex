@@ -21,9 +21,6 @@
 
 \usepackage[hidelinks]{hyperref}
 
-\usepackage[inkscapepath=../output/svg/]{svg}
-
-
 % ---------------- MARGINS, INDENTATION, LINESPREAD ------------------
 
 \usepackage[inner=20mm, outer=20mm, bindingoffset=10mm, top=25mm, bottom=25mm]{geometry}
@@ -150,7 +147,7 @@
 \usepackage{tikz}
 \usetikzlibrary{fit, backgrounds, shapes, arrows.meta, positioning, calc, chains}
 \usepackage[colorinlistoftodos]{todonotes}
-\usepackage{svg}
+\usepackage[inkscapepath=../output/svg/]{svg}
 \usepackage{graphicx}
 
 % --------------------------- CHAPTER HEADERS ---------------------
@@ -397,8 +394,66 @@ TODO KTOKOLWIEK
 TODO KTOKOLWIEK
 \subsection{Emulation}
 TODO KTOKOLWIEK
-\subsection{Rootfs}
-TODO ADAM
+
+\subsection{Root Filesystem (Rootfs)}
+
+The root filesystem constitutes the fundamental userspace environment of an operating system. It provides the configuration files and userspace programs (e.g., a shell) that render the system usable and interactive. In the context of operating system development, the construction of a rootfs is a structured process that transforms source code and static resources into a binary filesystem image that can be parsed and mounted by the kernel.
+
+Conceptually, the root filesystem construction process can be decomposed into four sequential phases, each responsible for a distinct transformation step within the build pipeline:
+\begin{itemize}
+    \item \textbf{Staging and Hierarchy Construction:} Creation of a temporary directory tree on the host system that reflects the intended structure of the target filesystem.
+    \item \textbf{Artifact Compilation and Population:} Cross-compilation of userspace programs followed by their installation into the corresponding locations within the staging directory.
+    \item \textbf{Overlay:} Integration of static configuration files and resources into the staging area to complement the compiled executables.
+    \item \textbf{Filesystem Image Creation:} Conversion of the fully populated staging directory into a single binary image adhering to a chosen filesystem format.
+\end{itemize}
+An overview of this pipeline is illustrated in Figure \ref{fig:rootfs_pipeline}.
+
+\begin{figure}[htbp]
+    \centering
+    \includesvg[width=\textwidth]{res/rootfs-pipeline.svg}
+    \caption{Rootfs creation pipeline}
+    \label{fig:rootfs_pipeline}
+\end{figure}
+
+\subsubsection{Staging and Hierarchy Construction}
+
+Rootfs creation begins with a staging phase, during which the build system generates a temporary directory tree on the host system. This tree mirrors the intended layout of the target operating system's filesystem and serves as an intermediate representation prior to image generation.
+
+For early-stage operating systems, strict adherence to comprehensive standards such as the Linux Filesystem Hierarchy Standard (FHS), which mandates directories such as \texttt{/usr}, \texttt{/var}, and \texttt{/opt}, is often unnecessary. Consequently, a simplified directory structure is typically adopted, for example:
+\begin{itemize}
+\item \textbf{Binaries Directory (\texttt{/bin}):} Contains executable programs compiled for the target architecture.
+\item \textbf{Configuration Directory (\texttt{/cfg} or \texttt{/etc}):} Stores text-based system configuration files.
+\item \textbf{Library Directory (\texttt{/lib}):} Holds shared libraries when dynamic linking is supported.
+\item \textbf{Drivers Directory (\texttt{/drv}):} Contains kernel-loadable drivers.
+\end{itemize}
+The staging directory is recreated for each build, ensuring reproducibility and eliminating residual artifacts from previous compilation runs.
+
+\subsubsection{Artifact Compilation and Population}
+
+After establishing the directory hierarchy, the staging area must be populated with executable content. Userspace applications are compiled using a cross-compilation toolchain and linked against standard libraries compatible with the kernel's Application Binary Interface (ABI).
+
+A well-designed build system automates this process and enforces correct dependency ordering. In particular, building the kernel should implicitly trigger the compilation of userspace programs. The resulting binaries are then installed into the appropriate locations within the staging directory (e.g., \texttt{/bin}). This automation minimizes the risk of inconsistencies, such as a kernel attempting to execute outdated userspace binaries that rely on obsolete system calls.
+
+\subsubsection{Configuration Overlays}
+
+Executable binaries alone are insufficient for a functional operating system; configuration data and static resources are also required. These include configuration files, initialization scripts, and other static assets.
+
+A common approach to managing such data is the use of a configuration overlay. In this model, the source repository contains a predefined directory tree of static files. During the build process, this tree is recursively merged into the staging directory, augmenting the compiled binaries. This separation of code and configuration promotes flexibility, as system behavior can be modified (for example, by adjusting startup parameters) without recompilation of userspace programs.
+
+\subsubsection{Filesystem Image Synthesis}
+
+Once the staging directory has been fully populated, it must be transformed into a single binary image conforming to a specific filesystem format, such as FAT, EXT2, or an archive-based formats.
+
+In academic and hobbyist operating system projects, simpler filesystems such as FAT are frequently preferred over more sophisticated journaling filesystems. FAT offers broad host-side tool support, simplifying inspection and debugging, and its relatively simple on-disk structures reduce driver implementation complexity.
+
+Image synthesis is typically performed using host-side utilities (e.g., \texttt{mtools} and \texttt{mkfs.fat}). These tools determine the required image size, format a blank image file, and populate it with the contents of the staging directory. The output is a filesystem image ready for deployment alongside the kernel.
+
+\subsubsection{The Initial Ramdisk and the Bootstrapping Problem}
+
+A fundamental challenge in early operating system development is the so-called “chicken-and-egg” problem associated with storage drivers. In order to mount a root filesystem from persistent storage devices such as NVMe or SATA, the kernel must already possess functioning disk drivers. However, these drivers are commonly stored within the root filesystem itself.
+
+This problem is addressed through the use of an \textbf{Initial Ramdisk (initrd)}. The bootloader loads the entire image into main memory alongside the kernel and passes its memory location as a boot parameter. The kernel can then expose this memory region as a block device and mount it as the root filesystem (\texttt{/}) during early initialization. This approach allows the system to complete its initialization sequence before transitioning to a more permanent storage-backed root filesystem.
+
 \subsection{Compiling Userspace Programs}
 TODO ADAM
 
@@ -1142,7 +1197,7 @@ This architectural approach provides several notable advantages. By isolating cr
     
     \end{tikzpicture}
   }%
-\caption{The Minix 3 Microkernel Architecture}
+\caption{The Minix 3 Microkernel Architecture (adapted from \cite{minix_wikipedia})}
 \label{fig:minix_architecture}
 \end{figure}
 
@@ -3057,6 +3112,7 @@ TODO KTOKOLWIEK
 \chapter*{List of symbols and abbreviations}
 
 \begin{tabular}{cl}
+ABI & Application Binary Interface \\
 API & Application Programming Interface \\
 APIC & Advanced Programmable Interrupt Controller \\
 CRTP & Curiously Recurring Template Pattern \\
@@ -3083,6 +3139,8 @@ DMA & Direct Memory Access \\
 PCP & Per-CPU Pagessets \\
 COW & Copy On Write \\
 SMP & Symmetric MultiProcessing \\
+FAT & File Allocation Table \\
+FHS & Filesystem Hierarchy Standard \\
 \end{tabular}
 \\
 \thispagestyle{empty}
