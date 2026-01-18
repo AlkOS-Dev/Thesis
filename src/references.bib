@@ -89,6 +89,51 @@ url     = {https://wiki.osdev.org/Programmable_Interval_Timer},
   url    = {https://en.wikipedia.org/wiki/Slab_allocation},
 }
 
+@inproceedings{wilson1995survey,
+  author    = {Wilson, Paul R. and Johnstone, Mark S. and Neely, Michael and Boles, David},
+  title     = {Dynamic Storage Allocation: A Survey and Critical Review},
+  booktitle = {International Workshop on Memory Management (IWMM)},
+  year      = {1995},
+  publisher = {Springer LNCS},
+  note      = {Comprehensive survey covering allocation algorithms, fragmentation theory, and program behavior analysis. Essential reference for understanding the problem space.},
+}
+
+@inproceedings{bonwick1994slab,
+  author    = {Bonwick, Jeff},
+  title     = {The Slab Allocator: An Object-Caching Kernel Memory Allocator},
+  booktitle = {USENIX Summer Technical Conference},
+  year      = {1994},
+  organization = {Sun Microsystems},
+  note      = {Introduces object caching for kernel allocators. Foundation for Linux slab/slub/slob.},
+}
+
+@inproceedings{masmano2004tlsf,
+  author    = {Masmano, M. and Ripoll, I. and Crespo, A. and Real, J.},
+  title     = {TLSF: A New Dynamic Memory Allocator for Real-Time Systems},
+  booktitle = {Euromicro Conference on Real-Time Systems (ECRTS)},
+  year      = {2004},
+  pages     = {79--86},
+  note      = {Describes O(1) allocation using two-level segregated fit with bitmap indexing.},
+}
+
+@book{knuth1973art,
+  author    = {Knuth, Donald E.},
+  title     = {The Art of Computer Programming, Volume 1: Fundamental Algorithms},
+  year      = {1973},
+  publisher = {Addison-Wesley},
+  edition   = {2nd},
+  note      = {Section 2.5 covers dynamic storage allocation, boundary tags, and the buddy system.},
+}
+
+@inproceedings{berger2000hoard,
+  author    = {Berger, Emery D. and McKinley, Kathryn S. and Blumofe, Robert D. and Wilson, Paul R.},
+  title     = {Hoard: A Scalable Memory Allocator for Multithreaded Applications},
+  booktitle = {ASPLOS},
+  year      = {2000},
+  pages     = {117--128},
+  note      = {Per-processor heaps with superblock transfer for scalable multiprocessor allocation.},
+}
+
 %% Interrupts 
 
 @manual{osdev-pic,
