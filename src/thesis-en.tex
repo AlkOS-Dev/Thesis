@@ -329,8 +329,6 @@ TODO
 \pagestyle{fancy}
 \pagenumbering{arabic}
 \setcounter{page}{11}
-TODO: JAKUB
-
 \chapter{Introduction}
 \markboth{}{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
@@ -1085,16 +1083,46 @@ struct Thread {
 };
 \end{lstlisting}
 
-\subsubsection{Context Switch}
-TODO: JAKUB
+\subsubsection{Context Creation}
+\label{subsec:context-init}
+
+At this point we already know what our context is, but next important question is how to create the context. To initialize the context we have to create function, which will fill the context frame on the stack accoridngly to some scheme we will have to define. Such scheme will have to create a layout for registers and cpu flags discussed before. To create a context we will simply fill the values for all the registers (zeros for general purpose registers or function arguments, depends on used ABI), address of function we want to execute as a next address and flags as some architecture defined defaults.
 
 \subsubsection{Context Conversion}
-TODO: JAKUB
 
-\subsubsection{Meta-Scheduler}
-TODO: JAKUB
+Before talking about switching a context we have to first create a first context we will have to switch afterwards. That means we have to create our first process and prepare all structures described before together with context initialization \ref{subsec:context-init}. We have multiple solutions here. For example we can create some first user space program which will bootup other programs or kernel space process perofrming further initialization.
 
-\subsubsection{Policies}
+\subsubsection{Context Switch}
+
+When we have first couple of tasks available we may talk about switchin the context. Assuming that whole state resides on the stack the operation of context switch is pretty straightforward we will have to perform this operations in sequnce to change the context:
+
+\begin{itemize}
+    \item Push current thread context to its stack
+    \item Do all additional actions needed
+    \item Change the stack to next threads stack
+    \item Restore the state from the stack
+\end{itemize}
+
+Based on amd64 assembly it might look like this:
+
+\begin{lstlisting}[style=nasmstyle, caption={Assembly ISR wrapper}, label={lst:isr_asm}]
+; c_decl
+; void ContextSwitch(Thread* thread)
+;   RDI = thread
+ContextSwitch:
+    sub rsp, _context_switch_stack_space_ext     ; Allocate space for saving registers.
+    push_all_regs                                ; Save the state
+
+    ; ... Some other booking, state changes -> depends on supported features
+.done:
+    mov rsp, [rdi+Thread.kernel_stack]   ; Change the stack
+
+    pop_all_regs            ; Restore registers of NEW thread's stack
+    add rsp, _all_reg_size  ; Deallocate register save space.
+    iretq                   ; Load next thread's RIP from its stack
+\end{lstlisting}
+
+\subsubsection{Scheduler}
 TODO: JAKUB
 
 \subsubsection{Sleep}
