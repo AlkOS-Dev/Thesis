@@ -333,19 +333,11 @@ TODO
 \markboth{}{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
 
-\section{Theoretical Background} 
-TODO KTOKOLWIEK
-
-\subsubsection{Interrupts}
-\subsubsection{Kernel Tick}
-\subsubsection{Exceptions}
-\subsubsection{Virtualization}
-\subsubsection{Address Space}
-\subsubsection{Context Switch}
-
 \section{Scope of the Thesis} 
 TODO KTOKOLWIEK
+
 \section{Limitations and Assumptions}
+TODO KTOKOLWIEK
 
 \subsection{Minimal requirements}
 \begin{itemize}
@@ -393,8 +385,10 @@ Before proceeding to writing actual kernel code we must first do some preparatio
 
 \subsection{Cross-Compilation Toolchain}
 TODO KTOKOLWIEK
+
 \subsection{Building Machinery}
 TODO KTOKOLWIEK
+
 \subsection{Emulation}
 TODO KTOKOLWIEK
 
@@ -408,12 +402,6 @@ TODO KTOKOLWIEK
 TODO KTOKOLWIEK
 
 \subsection{Archtiecture Abstraction}
-TODO KTOKOLWIEK
-
-\subsection{Directory Layout}
-TODO KTOKOLWIEK
-
-\subsection{Including Good Practices}
 TODO KTOKOLWIEK
 
 \section{Target Environment}
@@ -1526,6 +1514,13 @@ ContextSwitch:
 \end{lstlisting}
 
 \subsubsection{Scheduler}
+
+Having thread and process management done last thing to implement we need some machinery to pick best suitable task to run next on preemption or during yielding. And that is the main responsiblity of the scheduler to track the execution of the threads and always pick most suitable tasks to run. There are multiple approaches to design the the scheduler itself and multiple algorithms picking the task
+
+\subsubsection{SMP Scheduling}
+TODO: JAKUB
+
+\subsubsection{Synchronization}
 TODO: JAKUB
 
 \subsubsection{Sleep}
@@ -1846,25 +1841,6 @@ System calls are dispatched to specialized servers according to their functional
     \item \textbf{Virtual File System (VFS):} Handles file-related operations including \texttt{open}, \texttt{read}, \texttt{write}, and \texttt{stat}.
 \end{itemize}
 The kernel acts solely as a transport mechanism and remains agnostic to the semantics of the system call. After processing a request, the server returns a reply message to the calling process, thereby unblocking it and delivering the result.
-
-
-% ==================================================================
-
-\chapter{Supporting Multiple Hardware Platforms} 
-TODO KTOKOLWIEK
-
-\section{HAL -- Hardware Abstraction Layer} 
-TODO KTOKOLWIEK
-
-\section{x86-64 Support} 
-TODO KTOKOLWIEK
-\subsection{Technical Debt}
-TODO KTOKOLWIEK
-\subsection{Common Pitfalls}
-TODO KTOKOLWIEK
-
-
-% ==================================================================
 
 \chapter{Our Implementation} 
 TODO KTOKOLWIEK
