@@ -1,8 +1,8 @@
 \documentclass[a4paper,9pt,twoside]{report}
 
-% ----------------------   PREAMBLE PART ------------------------------
+% --------   PREAMBLE PART ----------
 
-% ------------------------ ENCODING & LANGUAGES ----------------------
+% -------- ENCODING & LANGUAGES --------
 
 \usepackage[utf8]{inputenc}
 \usepackage[MeX]{polski}
@@ -24,7 +24,7 @@
 \usepackage[inkscapepath=../output/svg/]{svg}
 
 
-% ---------------- MARGINS, INDENTATION, LINESPREAD ------------------
+% ------ MARGINS, INDENTATION, LINESPREAD ------
 
 \usepackage[inner=20mm, outer=20mm, bindingoffset=10mm, top=25mm, bottom=25mm]{geometry}
 
@@ -36,7 +36,7 @@
 \setlength{\parindent}{5mm}
 
 
-%---------------- RUNNING HEAD - CHAPTER NAMES, PAGE NUMBERS ETC. -------------------
+%------ RUNNING HEAD - CHAPTER NAMES, PAGE NUMBERS ETC. -------
 
 \usepackage{fancyhdr}
 \pagestyle{fancy}
@@ -58,7 +58,7 @@
   \renewcommand{\footrulewidth}{0.0pt}
 }
 
-%---------------- code listings -------------------
+%------ code listings -------
 
 \usepackage{listings}
 \usepackage{xcolor}
@@ -145,7 +145,7 @@
                   find_package, add_custom_command, add_custom_target, install, alkos_find_sources, alkos_register_userspace_app}
 }
 
-% --------------------------- DRAWING ---------------------
+% --------- DRAWING -------
 
 \usepackage{tikz}
 \usetikzlibrary{fit, backgrounds, shapes, arrows.meta, positioning, calc, chains}
@@ -153,7 +153,7 @@
 \usepackage{svg}
 \usepackage{graphicx}
 
-% --------------------------- CHAPTER HEADERS ---------------------
+% --------- CHAPTER HEADERS -------
 
 \usepackage{titlesec}
 \titleformat{\chapter}
@@ -171,7 +171,7 @@
   {\thesubsection.}{1ex}{}
 
 
-% ----------------------- TABLE OF CONTENTS SETUP ---------------------------
+% --------- TABLE OF CONTENTS SETUP ---------
 
 \def\cleardoublepage{\clearpage\if@twoside
 \ifodd\c@page\else\hbox{}\thispagestyle{empty}\newpage
@@ -212,13 +212,13 @@
 
 
 
-% ---------------------- TABLES AD FIGURES NUMBERING ----------------------
+% -------- TABLES AD FIGURES NUMBERING --------
 
 \renewcommand*{\thetable}{\arabic{chapter}.\arabic{table}}
 \renewcommand*{\thefigure}{\arabic{chapter}.\arabic{figure}}
 
 
-% ------------- DEFINING ENVIRONMENTS FOR THEOREMS, DEFINITIONS ETC. ---------------
+% ----- DEFINING ENVIRONMENTS FOR THEOREMS, DEFINITIONS ETC. -----
 
 \makeatletter
 \newtheoremstyle{definition}
@@ -241,13 +241,13 @@
 \newtheorem{definition}[theorem]{Definition}
 \newtheorem{remark}[theorem]{Remark}
 
-% --------------------- END OF PREAMBLE PART (MOSTLY) --------------------------
+% ------- END OF PREAMBLE PART (MOSTLY) ----------
 
 
 
 
 
-% -------------------------- USER SETTINGS ---------------------------
+% ---------- USER SETTINGS ---------
 
 \newcommand{\tytul}{Funkcjonalne jądro systemu operacyjnego: AlkOS}
 \renewcommand{\title}{From Bare Metal to a Functional Kernel: The AlkOS Operating System}
@@ -264,7 +264,7 @@
 
 \null\thispagestyle{empty}\newpage
 
-% ------------------ PAGE WITH SIGNATURES --------------------------------
+% ------ PAGE WITH SIGNATURES ------------
 
 %\thispagestyle{empty}\newpage
 %\null
@@ -280,7 +280,7 @@
 %
 
 
-% ---------------------------- ABSTRACT -----------------------------
+% ---------- ABSTRACT -----------
 
 {  \fontsize{12}{14} \selectfont
 \begin{abstract}
@@ -296,7 +296,7 @@ TODO
 
 \null\thispagestyle{empty}\newpage
 
-%% --------------------------- DECLARATIONS ------------------------------------
+%% --------- DECLARATIONS ------------
 %
 %%
 %%	IT IS NECESSARY OT ATTACH FILLED-OUT AUTORSHIP DEECLRATION. SCAN (IN PDF FORMAT) NEEDS TO BE PLACED IN scans FOLDER AND IT SHOULD BE CALLED, FOR EXAMPLE, DECLARATION_OF_AUTORSHIP.PDF. IF THE FILENAME OR FILEPATH IS DIFFERENT, THE FILEPATH IN THE NEXT COMMAND HAS TO BE ADJUSTED ACCORDINGLY.
@@ -315,7 +315,7 @@ TODO
 %%	.tex corresponding to the above PDF files are present in the 3. declarations folder 
 %
 \null\thispagestyle{empty}\newpage
-% ------------------- TABLE OF CONTENTS ---------------------
+% ------- TABLE OF CONTENTS -------
 \selectlanguage{english}
 \pagenumbering{gobble}
 \tableofcontents
@@ -323,7 +323,7 @@ TODO
 \newpage % IF YOU HAVE EVEN QUANTITY OD PAGES OF TOC, THEN REMOVE IT OR ADD \null\newpage FOR DOUBLE BLANK PAGE BEFORE INTRODUCTION
 
 
-% -------------------- THE BODY OF THE THESIS --------------------------------
+% -------- THE BODY OF THE THESIS ------------
 
 \null\thispagestyle{empty}\newpage
 \pagestyle{fancy}
@@ -655,7 +655,7 @@ In this context, the Operating System does not "discover" memory. The kernel cod
 % 3. LEFT SIDE BIT-BANDING (MANUAL PLACEMENT)
 % ==========================================
 
-% --- SRAM GROUP ---
+% - SRAM GROUP -
 % Define the target point (Base of SRAM)
 \coordinate (sram_target) at (sram.south west);
 
@@ -678,7 +678,7 @@ In this context, the Operating System does not "discover" memory. The kernel cod
 \draw (sram_region.south east) -- (sram_target);
 
 
-% --- PERIPHERAL GROUP ---
+% - PERIPHERAL GROUP -
 % Define the target point (Base of Peripheral)
 \coordinate (periph_target) at (periph.south west);
 
@@ -879,8 +879,10 @@ TODO: KRYCZKA
 
 \subsubsection{Physical Memory Management}
 \label{subsubsec:physical_memory_management}
+\todo[inline]{A ton of info here, needs some refinment, cleanup, to make it flow smoothly}
 
-The Physical Memory Manager (PMM) forms the foundational layer of any operating system's memory subsystem. It is responsible for tracking, allocating, and reclaiming the machine's finite physical RAM---measured in discrete units called \textit{page frames} (typically 4~KiB on x86-64). Unlike higher-level allocators that operate on virtual addresses, the PMM deals directly with physical hardware constraints.
+The Physical Memory Manager (PMM) forms the foundational layer of any operating system's memory subsystem. It is responsible for tracking, allocating, and reclaiming the machine's finite physical RAM-measured in discrete units called \textit{page frames} (typically 4~KiB on x86-64). 
+Allocators that support multi-page requests manage contiguous groups of pages. 
 
 \paragraph{Design Objectives}
 A PMM must balance three competing objectives:
@@ -890,11 +892,11 @@ A PMM must balance three competing objectives:
     \item \textbf{Hardware Compliance:} Respect physical addressing constraints imposed by devices (e.g., legacy ISA DMA requiring addresses below 16~MiB).
 \end{enumerate}
 
-The choice of allocation algorithm fundamentally shapes the PMM's performance profile. Before examining specific algorithms, it is essential to deeply understand the core problem: \textbf{fragmentation}---the inability to reuse memory that is free. This occurs when free blocks exist but are too small or poorly positioned to satisfy requests.
+The choice of allocation algorithm fundamentally shapes the PMM's performance profile. Before examining specific algorithms, it is essential to deeply understand the core problem: \textbf{fragmentation}-the inability to reuse memory that is free. This occurs when free regions exist but are too small or poorly positioned to satisfy requests.
 
-\textbf{Internal vs.\ External Fragmentation.} Operating system developers must distinguish between two forms. \textit{Internal fragmentation} arises when allocated blocks are larger than requested due to size-class rounding (e.g., a 50-byte request rounded to 64 bytes wastes 14 bytes inside the block). \textit{External fragmentation} occurs when free memory is scattered into many small holes, none large enough to satisfy a request, even though total free memory exceeds the request size. The lower bound on worst-case external fragmentation for any allocator is $O(M \cdot \log n)$, where $M$ is live data and $n$ is the ratio between largest and smallest block sizes~\cite{wilson1995survey}.
+\textbf{Internal vs.\ External Fragmentation.} Operating system developers must distinguish between two forms. \textit{Internal fragmentation} arises when allocated regions are larger than requested due to size-class rounding (e.g., a 50-byte request rounded to 64 bytes wastes 14 bytes). \textit{External fragmentation} occurs when free memory is scattered into many small holes, none large enough to satisfy a request, even though total free memory exceeds the request size.
 
-\textbf{The Root Cause: Isolated Deaths.} Fragmentation fundamentally arises from \textit{isolated deaths}---when an object is freed but its neighbors remain allocated, creating an unusable hole. If adjacent objects always died together, their combined space would be reclaimed as one contiguous block. The allocator's core challenge is predicting which objects will die at similar times and placing them contiguously. Since the allocator cannot know future behavior, it must rely on heuristics that exploit regularities in program behavior~\cite{wilson1995survey}.
+\textbf{The Root Cause: Isolated Deaths.} Fragmentation fundamentally arises from \textit{isolated deaths}-when an object is freed but its neighbors remain allocated, creating an unusable hole. If adjacent objects always died together, their combined space would be reclaimed as one contiguous block. The allocator's core challenge is predicting which objects will die at similar times and placing them contiguously. Since the allocator cannot know future behavior, it must rely on heuristics that exploit regularities in program behavior~\cite{wilson1995survey}.
 
 \textbf{Program Behavior Patterns.} Most real programs do not behave randomly. Studies of allocation traces reveal three dominant patterns~\cite{wilson1995survey}:
 \begin{itemize}
@@ -904,21 +906,21 @@ The choice of allocation algorithm fundamentally shapes the PMM's performance pr
 \end{itemize}
 These patterns are exploitable: objects allocated together often die together. Address-ordered allocation (using low addresses first) tends to cluster temporally-related objects, and when a phase ends, contiguous regions become free simultaneously.
 
-\textbf{Placement Policies.} Allocators implement placement policies that determine where to allocate requested blocks:
+\textbf{Placement Policies.} Allocators implement placement policies that determine where to satisfy a request:
 \begin{itemize}
-    \item \textbf{First Fit:} Use the first sufficiently large free block (address-ordered). Fast, and tends to pack one end of memory.
-    \item \textbf{Best Fit:} Use the smallest block that is large enough. Minimizes wasted remainder but may accumulate unusable ``splinters.''
+    \item \textbf{First Fit:} Use the first sufficiently large free region (address-ordered). Fast, and tends to pack one end of memory.
+    \item \textbf{Best Fit:} Use the smallest region that is large enough. Minimizes wasted remainder but may accumulate unusable ``splinters.''
     \item \textbf{Next Fit:} Resume searching from where the last allocation stopped. Scatters allocations and often performs poorly.
 \end{itemize}
 Empirical studies show that best fit and address-ordered first fit perform similarly well, both significantly outperforming next fit for real workloads~\cite{wilson1995survey}.
 
-\textbf{Splitting and Coalescing.} Two subsidiary mechanisms support placement policies. \textit{Splitting} divides a large block to satisfy a smaller request, leaving the remainder as a new free block. \textit{Coalescing} merges adjacent free blocks into a larger one. General coalescing requires knowing neighbor boundaries---this is supported by \textit{boundary tags}~\cite{knuth1973art}: each block stores its size in both a header and a footer, enabling $O(1)$ lookup of neighbors. A space optimization avoids footers on allocated blocks by stealing a bit from the next block's header to indicate whether the previous block is free.
+\textbf{Strategy, Policy, and Mechanism.} Allocator design involves three levels of abstraction~\cite{wilson1995survey}: a \textbf{strategy} exploits regularities in program behavior (e.g., ``cluster objects that will die together''), a \textbf{policy} determines where to place allocations (e.g., best fit), and a \textbf{mechanism} implements the policy efficiently (e.g., segregated free lists). Understanding this hierarchy clarifies why different allocators can achieve similar fragmentation results-they may implement equivalent policies via different mechanisms.
 
-Allocator design involves three levels of abstraction: a \textbf{strategy} that attempts to exploit regularities in program behavior, a \textbf{policy} that determines exactly where to place blocks, and a \textbf{mechanism} that implements the policy efficiently. The following subsections examine the dominant mechanisms and their trade-offs.
+With this foundation, we examine four allocation mechanisms in order of increasing sophistication. 
 
 \paragraph{Bitmap Allocation}
 
-The bitmap allocator is the most straightforward approach. The entire physical address space is represented as a bit array where each bit corresponds to one page frame---0 indicates free, 1 indicates allocated.
+The bitmap allocator is the most straightforward approach. The entire physical address space is represented as a bit array where each bit corresponds to one page frame-0 indicates free, 1 indicates allocated.
 
 \begin{figure}[htbp]
 \centering
@@ -965,15 +967,17 @@ The bitmap allocator is the most straightforward approach. The entire physical a
 \label{fig:bitmap_allocator}
 \end{figure}
 
-To allocate $n$ contiguous pages, the allocator must scan for $n$ consecutive zero bits. This results in $O(N)$ worst-case complexity, where $N$ is the total number of physical pages. For a 16~GiB system with 4~KiB pages, this means scanning over 4 million bits in the worst case---introducing significant latency and non-determinism.
+To allocate $n$ contiguous pages, the allocator must scan for $n$ consecutive zero bits. This results in $O(N)$ worst-case complexity, where $N$ is the total number of physical pages. For a 16~GiB system with 4~KiB pages, this means scanning over 4 million bits in the worst case-introducing significant latency and non-determinism.
 
-Optimizations include processing entire machine words (64 bits at once using intrinsic instructions like \texttt{\_\_builtin\_ffsll}) and maintaining a ``roaming pointer'' to skip permanently allocated regions at the start of memory. The space overhead is minimal: a 4~GiB address space requires only 128~KiB of bitmap data---a 3\% overhead for average object sizes around 10 words~\cite{wilson1995survey}.
+Optimizations include processing entire machine words (64 bits at once using intrinsic instructions like \texttt{\_\_builtin\_ffsll}) and maintaining a ``roaming pointer'' to skip permanently allocated regions at the start of memory. The space overhead is minimal: a 4~GiB address space requires only 128~KiB of bitmap data.
 
-Bitmaps have a subtle advantage for allocation policy: they naturally support \textit{address-ordered search}. Scanning from low addresses finds the first physically lowest block, which tends to pack allocations at one end of memory and cluster temporally-related objects. This implements an address-ordered first fit policy implicitly. Additionally, bitmaps are stored ``off to the side''---separate from the data they describe---which can improve cache locality during the search phase compared to traversing linked structures embedded within memory blocks.
+Bitmaps have a subtle advantage for allocation policy: they naturally support \textit{address-ordered search}. Scanning from low addresses finds the first physically lowest block, which tends to pack allocations at one end of memory and cluster temporally-related objects. This implements an address-ordered first fit policy implicitly. Additionally, bitmaps are stored ``off to the side''-separate from the data they describe-which can improve cache locality during the search phase compared to traversing linked structures embedded within memory blocks.
 
 \paragraph{Stack-Based (Free List) Allocation}
 
-The stack allocator maintains a Last-In-First-Out (LIFO) stack of free page addresses. Since the pages themselves are free, the ``next'' pointer can be stored directly within the page's memory---eliminating external metadata overhead.
+While bitmaps excel at contiguous allocation, their $O(N)$ search is expensive for single-page allocations-the most common case. A faster alternative trades contiguity support for speed.
+
+The stack allocator maintains a Last-In-First-Out (LIFO) stack of free page addresses. Since the pages themselves are free, the ``next'' pointer can be stored directly within the page's memory-eliminating external metadata overhead.
 
 \begin{figure}[htbp]
 \centering
@@ -1001,19 +1005,19 @@ The stack allocator maintains a Last-In-First-Out (LIFO) stack of free page addr
 \label{fig:stack_allocator}
 \end{figure}
 
-This approach offers strict $O(1)$ performance for single-page operations---no searching is required. The key policy decision is whether to use a LIFO (stack) or FIFO (queue) ordering:
+This approach offers strict $O(1)$ performance for single-page operations-no searching is required. The key policy decision is whether to use a LIFO (stack) or FIFO (queue) ordering:
 \begin{itemize}
-    \item \textbf{LIFO (Last-In-First-Out):} Recently freed pages are reused immediately. This maximizes CPU cache locality---the page data likely remains in cache. However, it mixes allocations from different program phases, potentially scattering objects that should be grouped.
+    \item \textbf{LIFO (Last-In-First-Out):} Recently freed pages are reused immediately. This maximizes CPU cache locality-the page data likely remains in cache. However, it mixes allocations from different program phases, potentially scattering objects that should be grouped.
     \item \textbf{FIFO (First-In-First-Out):} Pages ``age'' before reuse, giving the system time to reclaim them efficiently (e.g., for write-back). Recent studies suggest FIFO ordering can reduce fragmentation compared to pure LIFO, performing nearly as well as address ordering~\cite{wilson1995survey}.
 \end{itemize}
 
-When all pages are the same size (as in page frame allocation), this structure implements \textit{simple segregated storage}: all blocks in a page-sized ``size class'' are on one list. This eliminates internal fragmentation entirely---every returned page is exactly the requested size. However, the stack cannot efficiently satisfy requests for \textit{contiguous} multi-page allocations (e.g., for large DMA buffers), as the order of pages reflects deallocation history, not physical adjacency.
+When all pages are the same size (as in page frame allocation), this structure implements \textit{simple segregated storage}: all blocks in a page-sized ``size class'' are on one list. This eliminates internal fragmentation entirely-every returned page is exactly the requested size. However, the stack cannot efficiently satisfy requests for \textit{contiguous} multi-page allocations (e.g., for large DMA buffers), as the order of pages reflects deallocation history, not physical adjacency.
 
 \paragraph{The Buddy System}
 
-The Buddy System bridges the gap between the contiguity support of bitmaps and the speed of free lists. It is the standard algorithm in general-purpose kernels~\cite{knuth1973art}, though it comes with significant trade-offs that must be understood.
+The stack achieves $O(1)$ speed but cannot allocate contiguous ranges efficiently. The Buddy System is the standard algorithm in general-purpose kernels~\cite{knuth1973art}, though it comes with significant trade-offs that must be understood.
 
-The Buddy System is fundamentally a \textit{segregated free list} scheme with a constrained splitting and coalescing discipline. Unlike general segregated fits that can coalesce any adjacent blocks using boundary tags, the Buddy System restricts coalescing to ``buddy pairs''---blocks that together form a power-of-two aligned parent. This restriction enables an elegant $O(1)$ buddy lookup (via XOR) but limits flexibility: adjacent free blocks that are not buddies \textit{cannot be merged}, even if they are physically contiguous~\cite{wilson1995survey}.
+The Buddy System is fundamentally a \textit{segregated free list} scheme with a constrained splitting and coalescing discipline. Unlike general segregated fits that can coalesce any adjacent blocks using boundary tags, the Buddy System restricts coalescing to ``buddy pairs''-blocks that together form a power-of-two aligned parent. This restriction enables an elegant $O(1)$ buddy lookup (via XOR) but limits flexibility: adjacent free blocks that are not buddies \textit{cannot be merged}, even if they are physically contiguous~\cite{wilson1995survey}.
 
 Memory is organized into blocks sized as powers of two ($2^k$ pages). The allocator maintains an array of free lists, one per ``order'' $k$:
 \begin{itemize}
@@ -1115,19 +1119,21 @@ This property enables $O(1)$ buddy lookup during coalescing. When a block is fre
 \label{fig:buddy_split}
 \end{figure}
 
-When a request arrives, it is rounded up to the nearest power of two. If no block of that order is available, a larger block is recursively split into two ``buddies.'' On deallocation, if a block's unique buddy is also free, they are merged (coalesced) back into a larger block. This achieves $O(\log k)$ complexity where $k$ is the maximum order---effectively constant time in practice.
+When a request arrives, it is rounded up to the nearest power of two. If no block of that order is available, a larger block is recursively split into two ``buddies.'' On deallocation, if a block's unique buddy is also free, they are merged (coalesced) back into a larger block. This achieves $O(\log k)$ complexity where $k$ is the maximum order-effectively constant time in practice.
 
 \textbf{Internal Fragmentation: The Primary Drawback.} The power-of-two size restriction causes substantial internal fragmentation. A request for 33~KiB requires a 64~KiB block, wasting approximately 48\% of the allocation. Statistical analysis shows \textit{expected} internal fragmentation is approximately 28\%, though this varies with the request size distribution~\cite{wilson1995survey}. In contrast, general segregated fits schemes with finer size classes (e.g., 10--20\% spacing) can reduce internal fragmentation to just a few percent.
 
-\textbf{External Fragmentation: The Coalescing Limitation.} The buddy restriction on coalescing can also cause external fragmentation. Consider two adjacent free blocks that are \textit{not} buddies---they cannot merge, leaving unusable gaps. Studies using both real and synthetic traces show that buddy systems generally exhibit \textit{more} fragmentation than segregated fits with boundary tags, where any adjacent blocks can coalesce~\cite{wilson1995survey}.
+\textbf{External Fragmentation: The Coalescing Limitation.} The buddy restriction on coalescing can also cause external fragmentation. Consider two adjacent free blocks that are \textit{not} buddies-they cannot merge, leaving unusable gaps. Studies using both real and synthetic traces show that buddy systems generally exhibit \textit{more} fragmentation than segregated fits with boundary tags, where any adjacent blocks can coalesce~\cite{wilson1995survey}.
 
 Despite these drawbacks, the Buddy System remains popular because: (1) it is conceptually simple; (2) the XOR-based buddy lookup is extremely fast; and (3) for page-frame allocation where the atomic unit is 4~KiB, internal fragmentation only matters for multi-page allocations.
 
 \paragraph{Two-Level Segregated Fit (TLSF)}
 
-For real-time systems where deterministic latency is critical, the TLSF allocator guarantees strict $O(1)$ worst-case execution time for both allocation and deallocation, without the internal fragmentation penalty of power-of-two rounding.
+The Buddy System demonstrates that segregated free lists with appropriate coalescing can balance speed and contiguity. But its power-of-two constraint wastes substantial memory. Can we achieve $O(1)$ performance with finer-grained size classes and general coalescing?
 
-\textbf{Segregated Fit Background.} Segregated fit allocators maintain multiple free lists, each holding blocks within a specific size range. Given a request, the allocator maps the size to an index and pops from the corresponding list. The challenge is making this mapping---and finding a non-empty list---fast.
+For real-time systems where deterministic latency is critical, the TLSF allocator answers this question affirmatively, guaranteeing strict $O(1)$ worst-case execution time for both allocation and deallocation, without the internal fragmentation penalty of power-of-two rounding.
+
+\textbf{Segregated Fit Background.} Segregated fit allocators maintain multiple free lists, each holding blocks within a specific size range. Given a request, the allocator maps the size to an index and pops from the corresponding list. The challenge is making this mapping-and finding a non-empty list-fast.
 
 \textbf{The Two-Level Index.} TLSF solves this with a hierarchical bitmap structure:
 
@@ -1185,7 +1191,7 @@ For real-time systems where deterministic latency is critical, the TLSF allocato
 \label{fig:tlsf_mapping}
 \end{figure}
 
-\textbf{Constant-Time Lookup.} Both the FLI and each SLI are represented as bitmaps (typically 32 or 64 bits). When the target list is empty, the allocator must find the next larger non-empty list. This is accomplished with a single hardware \texttt{ffs} (find first set) instruction on the bitmap---a constant-time operation. No iteration is required.
+\textbf{Constant-Time Lookup.} Both the FLI and each SLI are represented as bitmaps (typically 32 or 64 bits). When the target list is empty, the allocator must find the next larger non-empty list. This is accomplished with a single hardware \texttt{ffs} (find first set) instruction on the bitmap-a constant-time operation. No iteration is required.
 
 \textbf{Allocation Algorithm:}
 \begin{enumerate}
@@ -1195,7 +1201,7 @@ For real-time systems where deterministic latency is critical, the TLSF allocato
     \item Split the found block if necessary; insert the remainder back into the appropriate list.
 \end{enumerate}
 
-\textbf{Deallocation and Coalescing.} Each allocated block carries a small header (and optionally a footer) containing its size and status. On free, TLSF checks the \textit{physical neighbors} (not buddies---any adjacent block) using these boundary tags. If a neighbor is free, the blocks are merged. Unlike the Buddy System, TLSF can coalesce any adjacent free blocks regardless of their sizes, reducing external fragmentation.
+\textbf{Deallocation and Coalescing.} Each allocated block carries a small header (and optionally a footer) containing its size and status. On free, TLSF checks the \textit{physical neighbors} (not buddies-any adjacent block) using these boundary tags. If a neighbor is free, the blocks are merged. Unlike the Buddy System, TLSF can coalesce any adjacent free blocks regardless of their sizes, reducing external fragmentation.
 
 \begin{figure}[htbp]
 \centering
@@ -1228,9 +1234,11 @@ For real-time systems where deterministic latency is critical, the TLSF allocato
 
 TLSF achieves ``good fit'' allocation (blocks closely matching request size) without power-of-two rounding. Measured fragmentation is typically under 15\%, compared to up to 50\% for the Buddy System. The strict $O(1)$ bounds and low fragmentation make TLSF the standard choice for embedded and real-time kernels~\cite{masmano2004tlsf}.
 
-\textbf{Why Segregated Fits Work Well.} TLSF exemplifies segregated fit allocators, whose effectiveness is often underappreciated. By partitioning blocks into size classes, segregated fits \textit{implicitly} implement a good-fit policy: searching the list for size $s$ excludes blocks vastly larger or smaller, making most candidates reasonable fits. This policy emerges from the indexing structure rather than explicit search---a crucial insight for achieving both speed and low fragmentation~\cite{wilson1995survey}.
+\textbf{Why Segregated Fits Work Well.} TLSF exemplifies segregated fit allocators, whose effectiveness is often underappreciated. By partitioning blocks into size classes, segregated fits \textit{implicitly} implement a good-fit policy: searching the list for size $s$ excludes blocks vastly larger or smaller, making most candidates reasonable fits. This policy emerges from the indexing structure rather than explicit search-a crucial insight for achieving both speed and low fragmentation~\cite{wilson1995survey}.
 
 \textbf{Deferred Coalescing.} TLSF performs immediate coalescing, but many allocators \textit{defer} coalescing for performance. The rationale: if a block of size $s$ is freed and then size $s$ is requested again, immediate coalescing would have merged it into a larger block, requiring the larger block to be re-split. Deferred systems maintain ``quick lists'' of recently freed blocks by size class, only coalescing during memory pressure. This trades slightly higher peak memory usage for significantly faster allocation in bursty workloads~\cite{wilson1995survey}.
+
+Having examined the core allocation algorithms, we now consider two orthogonal concerns: hardware-imposed addressing constraints, and the layered allocation architecture used in production kernels.
 
 \paragraph{Comparative Summary}
 
@@ -1252,7 +1260,7 @@ TLSF & $O(1)$ & $O(1)$ & Low & Real-time systems \\
 
 \paragraph{Addressing Constraints and Memory Partitioning}
 
-Physical memory is not always uniformly addressable by all system components. Hardware constraints force the PMM to consider \textit{which} physical frames can satisfy a given allocation:
+The algorithms above assume a uniform pool of memory. In practice, physical memory is not always uniformly addressable by all system components. Hardware constraints force the PMM to consider \textit{which} physical frames can satisfy a given allocation:
 
 \begin{itemize}
     \item \textbf{DMA Limitations:} Legacy devices (e.g., ISA bus peripherals) can only address the bottom 16~MiB of physical memory (24-bit addressing). More modern but still constrained devices may be limited to the 32-bit boundary (4~GiB). Allocations for DMA buffers must come from these restricted regions.
@@ -1260,7 +1268,7 @@ Physical memory is not always uniformly addressable by all system components. Ha
     \item \textbf{Kernel Direct Mapping:} On 32-bit systems, the kernel's virtual address space is limited. Physical memory beyond a certain threshold (often $\sim$896~MiB) cannot be permanently mapped and requires special handling.
 \end{itemize}
 
-A common solution is to partition the physical address space into disjoint \textbf{regions} or \textbf{zones}, each managed by a separate allocator instance. Allocation requests carry metadata (flags or capabilities) indicating which regions are acceptable. The allocator attempts the preferred region first and falls back to others only if permitted. Critically, a request for DMA-capable memory \textit{cannot} fall back to high memory---the hardware simply cannot address those frames.
+A common solution is to partition the physical address space into disjoint \textbf{regions} or \textbf{zones}, each managed by a separate allocator instance. Allocation requests carry metadata (flags or capabilities) indicating which regions are acceptable. The allocator attempts the preferred region first and falls back to others only if permitted. Critically, a request for DMA-capable memory \textit{cannot} fall back to high memory-the hardware simply cannot address those frames.
 
 \paragraph{Advanced Topics and Further Reading}
 
@@ -1268,7 +1276,7 @@ The allocators described above handle the fundamental problem of page frame allo
 
 \textbf{Object Caching: The Slab Allocator.} For kernel objects of fixed type (inodes, task structures, network buffers), the cost of \textit{constructing} an object often exceeds the cost of allocating memory for it. Construction includes initializing mutexes, condition variables, and reference counts. The \textit{slab allocator}~\cite{bonwick1994slab} addresses this by caching \textit{constructed} objects.
 
-A slab is a contiguous region of memory (typically one or more pages) pre-divided into fixed-size object slots. When an object is freed, it is returned to its slab \textit{without destruction}---the mutex remains initialized, the reference count at zero. On the next allocation, the object is returned immediately, avoiding constructor overhead. Measurements on SunOS showed allocation dropping from 33~microseconds to 5.7~microseconds---an 83\% reduction, mostly from avoiding reconstruction~\cite{bonwick1994slab}.
+A slab is a contiguous region of memory (typically one or more pages) pre-divided into fixed-size object slots. When an object is freed, it is returned to its slab \textit{without destruction}-the mutex remains initialized, the reference count at zero. On the next allocation, the object is returned immediately, avoiding constructor overhead. Measurements on SunOS showed allocation dropping from 33~microseconds to 5.7~microseconds-an 83\% reduction, mostly from avoiding reconstruction~\cite{bonwick1994slab}.
 
 The slab allocator also exploits \textbf{cache coloring}. Hardware caches are indexed by address, so objects at the same offset within different slabs contend for the same cache lines. By offsetting object start addresses within slabs (varying the ``color''), the allocator spreads objects across more cache lines, reducing conflict misses and improving bus utilization.
 
@@ -1277,8 +1285,6 @@ The slab allocator also exploits \textbf{cache coloring}. Hardware caches are in
     \item \textbf{Per-CPU Caches:} Each CPU maintains a small local cache of free objects. Allocations are satisfied from the local cache without locking; only when the cache empties does the CPU acquire a global lock to refill. This amortizes lock overhead across many allocations.
     \item \textbf{Hoard Architecture:} Hoard~\cite{berger2000hoard} uses per-processor heaps with a global heap fallback. Memory is organized into \textit{superblocks} (contiguous chunks of same-sized objects). When a per-processor heap is empty, it requests a superblock from the global heap; when a superblock becomes mostly empty, it is returned to the global heap for rebalancing. A key invariant bounds \textit{blowup}: memory consumption is at most a constant factor times the maximum live data across all processors, preventing runaway fragmentation from producer-consumer patterns where one thread allocates and another frees.
 \end{itemize}
-
-For AlkOS, a straightforward first step is per-CPU quick lists for single-page allocations, progressing to full slab caching for high-traffic object types.
 
 For an in-depth treatment of allocation algorithms, fragmentation theory, and experimental methodology, the comprehensive survey by Wilson et al.~\cite{wilson1995survey} remains an essential reference.
 \subsubsection{Virtual Memory Management}
@@ -1413,7 +1419,7 @@ The Linux documentation summarizes the design of the \textbf{CFS} as follows:
 \begin{quote}
 80\% of CFS's design can be summed up in a single sentence: CFS basically models an “ideal, precise multi-tasking CPU” on real hardware.
 
-“Ideal multi-tasking CPU” is a (non-existent :-)) CPU that has 100\% physical power and which can run each task at precise equal speed, in parallel, each at 1/nr\_running speed. For example: if there are 2 tasks running, then it runs each at 50\% physical power --- i.e., actually in parallel.
+“Ideal multi-tasking CPU” is a (non-existent :-)) CPU that has 100\% physical power and which can run each task at precise equal speed, in parallel, each at 1/nr\_running speed. For example: if there are 2 tasks running, then it runs each at 50\% physical power - i.e., actually in parallel.
     
 On real hardware, we can run only a single task at once, so we have to introduce the concept of “virtual runtime.” The virtual runtime of a task specifies when its next timeslice would start execution on the ideal multi-tasking CPU described above. In practice, the virtual runtime of a task is its actual runtime normalized to the total number of running tasks.
 \cite{linux_cfs}
@@ -1477,7 +1483,7 @@ The \texttt{fork()} mechanism is rooted in historical design decisions. While co
 
 \section{Minix 3}
 
-Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, Minix 3 relocates the majority of operating system components --- including device drivers, file systems, memory management mechanisms, and scheduling services --- into user-space processes. As a result, the kernel's responsibilities are strictly minimized to functions such as message passing, interrupt handling, and low-level scheduling. Currently, the system supports two hardware architectures: x86 and ARM.
+Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, Minix 3 relocates the majority of operating system components - including device drivers, file systems, memory management mechanisms, and scheduling services - into user-space processes. As a result, the kernel's responsibilities are strictly minimized to functions such as message passing, interrupt handling, and low-level scheduling. Currently, the system supports two hardware architectures: x86 and ARM.
 
 This architectural approach provides several notable advantages. By isolating critical system services in user space, Minix 3 significantly improves fault tolerance, as failures in individual components do not lead to the compromise of the entire system. Moreover, these components can be restarted independently, enabling efficient recovery from faults instead of system-wide crashes. The resulting modularity also simplifies system maintenance and evolution, since services may be updated, replaced, or extended without requiring recompilation of the kernel.
 
@@ -1487,7 +1493,7 @@ This architectural approach provides several notable advantages. By isolating cr
     \begin{tikzpicture}
     \tikzstyle{every node}=[font=\large]
 
-    % --- Background Layers ---
+    % - Background Layers -
     % Kernel Mode Background
     \draw [fill={rgb,255:red,242; green,242; blue,242}] (2.5,10.75) rectangle (17.25,8.25);
     % User Mode Background
@@ -1497,33 +1503,33 @@ This architectural approach provides several notable advantages. By isolating cr
     \draw (2.5,16) -- (17.25,16);
     \draw (2.5,13.5) -- (17.25,13.5);
 
-    % --- User Processes Layer (Layer 4) ---
+    % - User Processes Layer (Layer 4) -
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (2.75,18) rectangle node {\large User Processes} (7,16.5);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (7.25,18) rectangle node {\large Shell} (9.5,16.5);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (9.75,18) rectangle node {\large Make} (12,16.5);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (12.25,18) rectangle node {\large User} (14.5,16.5);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (14.75,18) rectangle node {\LARGE ...} (17,16.5);
 
-    % --- Server Processes Layer (Layer 3) ---
+    % - Server Processes Layer (Layer 3) -
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (2.75,15.5) rectangle node {\large Server Processes} (7,14);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (7.25,15.5) rectangle node {\large File} (9.5,14);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (9.75,15.5) rectangle node {\large PM} (12,14);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (12.25,15.5) rectangle node {\large Sched} (14.5,14);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (14.75,15.5) rectangle node {\LARGE ...} (17,14);
 
-    % --- Device Driver Layer (Layer 2) ---
+    % - Device Driver Layer (Layer 2) -
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (2.75,13) rectangle node {\large Device Processes} (7,11.5);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (7.25,13) rectangle node {\large Disk} (9.5,11.5);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (9.75,13) rectangle node {\large TTY} (12,11.5);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (12.25,13) rectangle node {\large Net} (14.5,11.5);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (14.75,13) rectangle node {\LARGE ...} (17,11.5);
 
-    % --- Kernel Layer (Layer 1) ---
+    % - Kernel Layer (Layer 1) -
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (2.75,10.25) rectangle node {\large Kernel} (7.25,8.75);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (7.75,10.25) rectangle node {\large Clock Task} (12,8.75);
     \draw [fill={rgb,255:red,211; green,211; blue,211}, rounded corners=6.0] (12.5,10.25) rectangle node {\large System Task} (17,8.75);
     
-    % --- Labels and Brackets ---
+    % - Labels and Brackets -
     % User Mode bracket
     \draw [thick] (2.0,11) -- (2.0,18.5);
     \draw [thick] (2.0,11) -- (2.2,11);
@@ -1536,7 +1542,7 @@ This architectural approach provides several notable advantages. By isolating cr
     \draw [thick] (2.0,10.75) -- (2.2,10.75);
     \node[left, align=center] at (1.8,9.5) {\large \textbf{Kernel}\\\large \textbf{Mode}};
     
-    % --- Right Side Layer Labels ---
+    % - Right Side Layer Labels -
     \node[right] at (17.5, 17.25) {\large \textbf{Layer 4}};
     \node[right] at (17.5, 14.75) {\large \textbf{Layer 3}};
     \node[right] at (17.5, 12.25) {\large \textbf{Layer 2}};
@@ -2736,7 +2742,7 @@ concept VFSInterface = VFSIO<IO> and requires(T<IO> fs, IO io) {
 };
 \end{lstlisting}
 
-The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, filesystem drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends --- such as RAM disks, physical partitions, or network storage --- without requiring implementation changes.
+The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, filesystem drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends - such as RAM disks, physical partitions, or network storage - without requiring implementation changes.
 
 \begin{lstlisting}[caption={VFSIO Concept Definition}, label={lst:vfsioConcept}]
 template <typename IO>
@@ -2875,7 +2881,7 @@ FdResult<fd_t> FdManager::Open(const vfs::Path &path, OpenMode flags)
 
 To ensure efficient memory usage and prevent resource leaks, the life cycle of \texttt{OpenFileEntry} and \texttt{File} objects is managed through intrusive reference counting. Both structures inherit from a \texttt{RefCounted} base class and are managed via smart pointers (\texttt{RefPtr} and \texttt{TaggedPointer}).
 
-When a process closes a file descriptor (or terminates), the reference to the corresponding \texttt{OpenFileEntry} in the process's \texttt{FdTable} is released. If the reference count drops to zero --- indicating that no other file descriptors (across any process) refer to this open stream --- the \texttt{OpenFileEntry} is automatically deallocated and removed from the global \texttt{OpenFileTable}.
+When a process closes a file descriptor (or terminates), the reference to the corresponding \texttt{OpenFileEntry} in the process's \texttt{FdTable} is released. If the reference count drops to zero - indicating that no other file descriptors (across any process) refer to this open stream - the \texttt{OpenFileEntry} is automatically deallocated and removed from the global \texttt{OpenFileTable}.
 
 Consequently, the destruction of an \texttt{OpenFileEntry} releases its hold on the underlying \texttt{File} object. Similarly, if the reference count of the \texttt{File} object reaches zero, it implies that no active streams are reading from or writing to that specific file. The system then automatically reclaims the associated memory from the \texttt{FileTable}. This cascading deallocation mechanism ensures that kernel memory is only consumed for files that are actively in use by at least one process.
 
@@ -3446,7 +3452,7 @@ TODO KTOKOLWIEK
 \chapter{Conclusion}
 TODO KTOKOLWIEK
 
-% ------------------------------- BIBLIOGRAPHY ---------------------------
+% ----------- BIBLIOGRAPHY ---------
 
 \printbibliography[heading=bibintoc]
 
@@ -3455,7 +3461,7 @@ TODO KTOKOLWIEK
 
 
 
-% ----------------------- LIST OF SYMBOLS AND ABBREVIATIONS ------------------
+% --------- LIST OF SYMBOLS AND ABBREVIATIONS ------
 \chapter*{List of symbols and abbreviations}
 
 \begin{tabular}{cl}
@@ -3490,11 +3496,11 @@ SMP & Symmetric MultiProcessing \\
 \thispagestyle{empty}
 
 
-% ----------------------------  LIST OF FIGURES --------------------------------
+% ----------  LIST OF FIGURES ------------
 \listoffigures
 \thispagestyle{empty}
 
-% -----------------------------  LIST OF TABLES --------------------------------
+% -----------  LIST OF TABLES ------------
 \renewcommand{\listtablename}{List of Tables}
 \listoftables
 \thispagestyle{empty}
