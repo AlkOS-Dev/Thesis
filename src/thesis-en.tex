@@ -3027,7 +3027,325 @@ The available system calls are grouped into logical categories:
 
 
 \section{Example Programs}
-TODO ADAM
+
+To validate the functionality of the AlkOS kernel and its subsystems, a set of userspace applications was developed. these programs serve as integration tests, verifying the interactions between the system call interface, the C standard library, drivers, and the kernel core. Each program targets specific subsystems and features of the operating system.
+
+\subsection{Hello World}
+
+The \texttt{hello\_world} program serves as the verification of the user space environment. The implementation was extended to validate the VFS and the standard I/O library implementation.
+
+\subsubsection{System Call Interface Verification}
+
+The primary objective of this application is to validate the correct transition from user mode to kernel mode, to verify the proper operation of the system call interface, and to confirm successful initialization of the C runtime environment.
+
+The application calls \texttt{printf}, which internally buffers data and invokes the \texttt{write} system call. The successful appearance of text on the debug terminal confirms that the Global Descriptor Table (GDT) is correctly configured for user-mode execution and the syscall dispatcher correctly routes requests.
+
+\begin{lstlisting}[caption={Hello World Standard Output Test}, label={lst:hello_stdout}]
+// userspace/programs/hello_world/main.cpp
+
+extern "C" int main()
+{
+    printf(
+        "\n----------------------------------\n"
+        "Hello from User Space via Syscall!\n"
+        "----------------------------------\n"
+    );
+    
+    // ... file operations
+    return 0;
+}
+\end{lstlisting}
+
+\subsubsection{File I/O Verification}
+
+Beyond standard output, the program performs a sequence of file manipulations to test the underlying filesystem driver and the VFS layer. The application attempts to open, write to, seek within, and read from a filepath \texttt{/docs/greet.txt}.
+
+This sequence validates path resolution, file descriptor table management in the kernel, and the read/write logic of the filesystem driver.
+
+\begin{lstlisting}[caption={File I/O Verification Logic}, label={lst:hello_fileio}]
+    // Open an existing file with read/write permissions
+    FILE *fp = fopen("/docs/greet.txt", "r+");
+    if (!fp) {
+        printf("Failed to open /docs/greet.txt for reading!\n");
+        return 1;
+    }
+
+    // Test writing to the filesystem
+    int written = fprintf(fp, "Hello AlkOS from User Space!");
+    
+    // Test Seeking
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        printf("Failed to seek to start of /docs/greet.txt!\n");
+        fclose(fp);
+        return 1;
+    }
+
+    // Test Reading back the data
+    char buffer[128];
+    size_t bytes_read = fread(buffer, 1, sizeof(buffer) - 1, fp);
+    buffer[bytes_read] = '\0';
+
+    printf("Read from file: '%s'\n", buffer);
+    fclose(fp);
+\end{lstlisting}
+
+\subsection{Graphics Test Program}
+
+The \texttt{gui\_test} application demonstrates the capability of the kernel to provide userspace processes with direct access to video hardware in a controlled manner. The resulting output is shown in Figure \ref{fig:gui_test}.
+
+\subsubsection{Video Session Initialization}
+
+The application begins by invoking the \texttt{create\_graphic\_session} system call. This request instructs the kernel's Window Manager to allocate a physical memory buffer acting as a backbuffer for the process. The kernel then maps this physical memory into the virtual address space of the process and returns a \texttt{GuiBufferInfo} structure.
+
+\begin{lstlisting}[caption={Initializing Graphical Session}, label={lst:gui_init}]
+// userspace/programs/gui_test/main.cpp
+
+extern "C" int main()
+{
+    GuiBufferInfo info = {};
+    
+    // Syscall to allocate and map framebuffer
+    __platform_create_graphic_session(&info);
+
+    if (info.buffer_ptr == nullptr) {
+        return 1;
+    }
+
+    // Cast void* to raw pixel array
+    u32 *fb = static_cast<u32 *>(info.buffer_ptr);
+    const auto &fmt = info.format;
+    
+    // ... rendering loop
+}
+\end{lstlisting}
+
+\subsubsection{Direct Framebuffer Manipulation}
+
+Once the session is established, the application treats the video buffer as a raw array of `uint32\_t`. It implements a rendering loop that generates a moving pattern by calculating pixel colors based on coordinates and a time-variable offset.
+
+\begin{lstlisting}[caption={Software Rendering Loop}, label={lst:gui_render}]
+    while (true) {
+        for (size_t y = 0; y < info.height; ++y) {
+            for (size_t x = 0; x < info.width; ++x) {
+                size_t index = (y * (info.pitch / 4)) + x;
+
+                u8 r = (x + color_offset) & 0xFF;
+                u8 g = (y + color_offset) & 0xFF;
+                u8 b = (x + y) & 0xFF;
+
+                // Pack pixel using format info provided by kernel
+                u32 pixel = 0;
+                pixel |= (static_cast<u32>(r) & ((1 << fmt.red_mask_size) - 1)) << fmt.red_pos;
+                pixel |= (static_cast<u32>(g) & ((1 << fmt.green_mask_size) - 1)) << fmt.green_pos;
+                pixel |= (static_cast<u32>(b) & ((1 << fmt.blue_mask_size) - 1)) << fmt.blue_pos;
+
+                fb[index] = pixel;
+            }
+        }
+        // ...
+    }
+\end{lstlisting}
+
+\subsubsection{Double Buffering and Synchronization}
+
+To prevent screen tearing and visual artifacts, AlkOS employs a double-buffering strategy. The user application writes to its private backbuffer. To display the frame, the application calls `blit()`. This system call triggers the kernel's Window Manager to copy the contents of the user's backbuffer to the physical video memory if its session is currently active.
+
+\begin{lstlisting}[caption={Frame Synchronization}, label={lst:gui_sync}]
+        // Blit to screen via syscall
+        __platform_blit();
+
+        color_offset += 1;
+
+        // Frame limiting
+        NanoSleep(16'000'000); // ~60 FPS
+    }
+\end{lstlisting}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.9\textwidth]{res/gui_test.png}
+    \caption{The graphics test application rendering a dynamic pattern.}
+    \label{fig:gui_test}
+\end{figure}
+
+\subsection{Shell}
+
+The Shell is a more complex userspace program implemented, integrating the input subsystem, graphics subsystem, and process management. Its basic UI is shown in Figure \ref{fig:shell_welcome}.
+
+\subsubsection{Graphical Console Subsystem}
+
+The shell provides a text-based command-line interface. This is achieved through the `GraphicsConsole` class, which renders text onto a graphical surface using the PSF2 font format. The console handles text rendering, cursor management, and screen clearing.
+
+\subsubsection{Command Line Interpreter}
+
+The shell implements a Read-Eval-Print Loop (REPL). It reads input from `stdin`, which is connected to a kernel pipe fed by the keyboard driver. The `ProcessCommand` method process the input string and dispatches execution.
+
+\begin{lstlisting}[caption={Shell Command Processing}, label={lst:shell_process}]
+// userspace/programs/shell/shell.cpp
+
+void Shell::ProcessCommand()
+{
+    // ... string view parsing ...
+
+    if (cmd == "help") {
+        CmdHelp();
+    } else if (cmd == "clear") {
+        CmdClear();
+    } else if (cmd == "ls") {
+        CmdLs(args);
+    } else if (cmd == "cat") {
+        CmdCat(args);
+    // ... other commands ...
+    } else if (cmd == "exec") {
+        CmdExec(args);
+    } else if (cmd == "kill") {
+        CmdKill(args);
+    } else {
+        console_.Write("Unknown command: ");
+        console_.PutChar('\n');
+    }
+}
+\end{lstlisting}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.9\textwidth]{res/shell_welcome.png}
+    \caption{The shell interface displaying the welcome message.}
+    \label{fig:shell_welcome}
+\end{figure}
+
+\subsubsection{Built-in Commands}
+
+The shell includes a suite of internal commands designed to facilitate system inspection and file system navigation. These commands are handled directly within the \texttt{Shell::ProcessCommand} routine without spawning new processes.
+
+\begin{itemize}
+    \item \textbf{help}: Displays a list of available commands and their usage syntax (Figure \ref{fig:shell_help}).
+    
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.9\textwidth]{res/shell_help.png}
+        \caption{The shell interface displaying the help message and available commands.}
+        \label{fig:shell_help}
+    \end{figure}
+    
+    \item \textbf{clear}: Resets the graphical console state. It invokes the \texttt{painter\_.Clear()} method to fill the framebuffer with the background color and resets the cursor position to $(0,0)$.
+    
+    \item \textbf{echo <text>}: Prints the provided arguments to standard output. This command is primarily used to verify argument parsing and standard I/O write capabilities.
+
+    \item \textbf{shutdown / reboot}: These commands invoke the \texttt{power} system call with \texttt{kShutdown} or \texttt{kReboot} actions, triggering ACPI state transitions to power off or reset the physical machine.
+\end{itemize}
+
+\subsubsection{File System Utilities}
+
+A core responsibility of the shell is to provide an interface for the Virtual File System. The shell maintains a current working directory state (\texttt{current\_dir\_}) and provides utilities to navigate and inspect the hierarchy.
+
+\begin{itemize}
+    \item \textbf{pwd}: Prints the full absolute path of the current working directory.
+    
+    \item \textbf{cd <path>}: Changes the current working directory. The shell resolves the provided path (handling relative paths and parent references like \texttt{..}) and verifies the destination exists and is a directory using the \texttt{file\_info} syscall before updating its internal state.
+
+    \item \textbf{ls [path]}: Lists the contents of a directory. It calls the \texttt{read\_directory} syscall to populate a buffer with \texttt{DirEntry} structures. The output logic includes syntax highlighting: directories are rendered in blue to visually distinguish them from regular files (Figure \ref{fig:shell_ls}).
+    
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.9\textwidth]{res/shell_ls.png}
+        \caption{Execution of the \texttt{ls} command showing the root directory structure.}
+        \label{fig:shell_ls}
+    \end{figure}
+
+    \item \textbf{cat <file>}: Displays the contents of a file. It uses standard C library functions (\texttt{fopen}, \texttt{fread}) to open the target file and stream its content to \texttt{stdout} in 512-byte chunks. This verifies the kernel's pipe buffer management when transferring larger amounts of data (Figure \ref{fig:shell_cat}).
+    
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.9\textwidth]{res/shell_cat.png}
+        \caption{The \texttt{cat} command displaying the contents of a text file from the FAT16 partition.}
+        \label{fig:shell_cat}
+    \end{figure}
+\end{itemize}
+
+\subsubsection{Process Execution and Control}
+
+The shell demonstrates the operating system's multitasking capabilities through commands that wrapper process management system calls.
+
+\begin{itemize}
+    \item \textbf{exec <file> (or ./<file>)}: Loads and executes an ELF64 binary. The shell invokes the \texttt{exec} system call and immediately calls \texttt{wait(pid)}, blocking the shell's execution until the child process terminates.
+
+    \item \textbf{exe\_async <file> (or ./<file> &)}: The shell does not wait for the child process, allowing the user to continue issuing commands while the background process executes. This validates the scheduler's ability to timeshare the CPU between the interactive shell and compute-intensive background tasks.
+
+    \item \textbf{kill <pid>}: Sends a termination signal to a specific process ID. This invokes the \texttt{kill} system call to forcibly terminate the target application and reclaim its resources.
+\end{itemize}
+
+\subsection{Doom}
+
+To demonstrate the capability of the AlkOS userspace and its standard library compatibility, we undertook the task of porting \textit{Doom}~\cite{idsoftware1993doom} (1993). In the realm of systems programming, getting Doom to run is often considered the de facto "Hello World" for graphical operating systems, proving that the scheduler, memory management, file system, and video subsystem function cohesively. A screenshot of the port running on AlkOS is shown in Figure \ref{fig:doom_gameplay}.
+
+We utilized \textbf{Doomgeneric}~\cite{doomgeneric}, a source port specifically designed to be portable. It strips away the complex, operating-system-specific dependencies (such as sound drivers, networking, or windowing) and exposes a minimal interface that the target OS must implement.
+
+It is important to note that while the Doom engine is open source since 1997 \cite{idsoftware1997doomsource}, the game data (levels, graphics, sounds) is stored in \textbf{.WAD} files, which remain under copyright. To execute the game on AlkOS, a valid \texttt{.WAD} file must be placed in the \texttt{/doom} directory of the rootfs overlay. This can be the \texttt{DOOM1.WAD} from the shareware version or the full \texttt{DOOM.WAD} from a retail copy. The engine supports games based on the same technology, such as \textit{Doom II} or \textit{Heretic}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{res/doom_gameplay.png}
+    \caption{Doom gameplay on AlkOS running at 800x600 scaled resolution.}
+    \label{fig:doom_gameplay}
+\end{figure}
+
+\subsubsection{The Doomgeneric Interface}
+
+The integration of Doomgeneric requires the implementation of a small set of C functions defined in \texttt{doomgeneric.h}. These functions serve as the bridge between the game engine and the kernel's system call interface.
+
+\begin{itemize}
+    \item \texttt{DG\_Init}: Initializes the video system and prepares input handling.
+    \item \texttt{DG\_DrawFrame}: Called by the game loop when a frame is ready to be presented to the screen.
+    \item \texttt{DG\_SleepMs}: Pauses execution to regulate the game loop timing.
+    \item \texttt{DG\_GetTicksMs}: Returns the monotonic system time in milliseconds, used for game logic timing like delta time calculations.
+    \item \texttt{DG\_GetKey}: Retrieves pending input events.
+\end{itemize}
+
+In our implementation (\texttt{doomgeneric\_alkos.c}), these functions wrap the AlkOS system calls. For instance, \texttt{DG\_GetTicksMs} utilizes \texttt{GetClockValueSysCall(kProcTimePrecise)} to retrieve high-resolution timing, and \texttt{DG\_DrawFrame} invokes the \texttt{Blit} syscall to trigger framebuffer updates.
+
+\subsubsection{Video Output and Scaling}
+
+The original resolution of Doom is $320 \times 200$ pixels. Modern framebuffers usually operate at significantly higher resolutions (e.g., $1024 \times 768$ or $1920 \times 1080$). Displaying a raw $320 \times 200$ image on such a screen would result in a tiny window. Consequently, software scaling is required.
+
+\paragraph{Scaling Strategy}
+A naive integer scaling approach (e.g., simply multiplying pixels by an integer factor) used in this fork was not taking advantage of the available screen and resulted in wasted screen space. To address this, we restored back and integrated legacy Doom scaling algorithms that support \textbf{Squash} and \textbf{Stretch} modes.
+
+We implemented an automatic mode selection algorithm in \texttt{doomgeneric.c}. Upon initialization, the game inspects the dimensions of the framebuffer allocated by the window manager and calculates the optimal scaling factor ($1\times$ to $5\times$) and mode (Stretch or Squash) to maximize screen usage.
+\begin{itemize}
+    \item \textbf{Stretch Mode}: Used when the vertical resolution allows for aspect ratio correction by stretching the height.
+    \item \textbf{Squash Mode}: Used when horizontal compression is required to fit the aspect ratio.
+    \item \textbf{Special Case}: Resolution $800 \times 600$ trigger optimized path (e.g., $3\times$ squash with $50\%$ blending) to reduce visual artifacts.
+\end{itemize}
+
+\paragraph{Pixel Format}
+The internal rendering engine of Doom operates in an 8-bit indexed color mode, utilizing a 256-color palette. However, the linear framebuffer provided by the AlkOS kernel operates in a true color mode. To bridge this gap, we implemented an efficient color conversion routine within the screen update loop. During the scaling process, each 8-bit pixel index is resolved against the current palette to obtain its RGB components. These components are then bit-shifted and packed according to the specific red, green, and blue field positions defined by the framebuffer metadata. This ensures correct color reproduction regardless of the specific pixel format utilized by the underlying hardware.
+
+\paragraph{Buffer Optimization}
+Doomgeneric renders the game to an internal buffer, and then we copy it again to the window manager's buffer. To maximize performance, we modified the \texttt{i\_video.c} rendering path to remove one layer of indirection. We allow the scaling routines to write directly into the framebuffer obtained via the \texttt{create\_graphic\_session} syscall. The scaling is performed in-place during the screen update phase.
+
+\subsubsection{Input Event Mapping}
+
+Doom expects a queue of input events (key presses and releases) using its own internal key codes. AlkOS, however, exposes a polling-based interface via the \texttt{GetKeyState} syscall, which returns the instantaneous state of a \texttt{VirtualKey} (keyboard layout agnostic key codes).
+
+To bridge this gap, we implemented a translation layer in \texttt{doomgeneric\_alkos.c}. The system maintains an array of \texttt{s\_PrevKeyStates} for all keys relevant to the game (movement, action, and menu keys). During every frame tick, the wrapper polls the current state of these keys using the kernel API. By comparing the current state with the previous state, we synthesize "Press" and "Release" events and push them into Doom's internal event queue.
+
+We also implemented a lookup table to translate AlkOS \texttt{VirtualKey} enums (e.g., \texttt{VK\_LeftCtrl}) into Doom's internal key codes (e.g., \texttt{KEY\_FIRE}), ensuring correct mapping for gameplay actions.
+
+\subsubsection{Porting Process}
+
+The process of porting \textit{Doom} revealed several shortcomings in the existing AlkOS \texttt{libc} implementation, which required a subsequent extension of its functionality. Although the Doomgeneric fork is designed to be largely operating-system-agnostic, portions of its codebase implicitly assume the presence of a runtime environment with at least partial POSIX compliance. In particular, commonly used facilities such as string manipulation routines and directory handling interfaces were expected to be available. The following sections outline the key areas where the \texttt{libc} was enhanced to meet these requirements.
+
+\paragraph{Memory Management}
+Doom relies heavily on dynamic memory allocation for level geometry, textures, and game objects (\texttt{Z\_Malloc}). Our \texttt{libc} initially lacked a heap allocator. We implemented a standard \texttt{malloc}, \texttt{free}, \texttt{calloc}, and \texttt{realloc} suite based on a linked-list memory control block strategy \cite{malloc-impl}. This required adding a new system call, \texttt{get\_heap\_start}, which allows the userspace allocator to locate the valid heap region assigned by the kernel's VMM.
+
+\paragraph{String Manipulation}
+The Doom engine, particularly the WAD management system, relies on case-insensitive string comparisons to locate resources (e.g., finding "doom.wad" when the file is named "DOOM.WAD"). We implemented POSIX-compliant \texttt{strcasecmp} and \texttt{strncasecmp} functions to support this behavior.
+
+\paragraph{Standard I/O}
+To support loading data from the file system, we expanded the `stdio` implementation to include \texttt{fopen}, \texttt{fread}, \texttt{fseek}, and \texttt{ftell}, backed by the underlying VFS file descriptor syscalls (\texttt{open}, \texttt{read}, \texttt{seek}). This allowed the Doom engine to seamlessly load WAD files from the root filesystem using standard C semantics. \\
+
+By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
 % TODO: extension
 % \section{Performance Analysis}
@@ -3083,6 +3401,10 @@ DMA & Direct Memory Access \\
 PCP & Per-CPU Pagessets \\
 COW & Copy On Write \\
 SMP & Symmetric MultiProcessing \\
+VMM & Virtual Memory Manager \\
+POSIX & Portable Operating System Interface \\
+WAD & Where's All the Data \\
+REPL & Read-Eval-Print Loop \\
 \end{tabular}
 \\
 \thispagestyle{empty}
