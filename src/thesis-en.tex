@@ -721,39 +721,7 @@ The DTB format encodes the device tree into a linear, pointerless data structure
     \item \textbf{Strings Block}: A pool of null-terminated property names referenced by offset.
 \end{enumerate}
 
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[
-    font=\sffamily\footnotesize,
-    block/.style={
-        rectangle, 
-        draw=black, 
-        thick,
-        minimum width=5cm, 
-        minimum height=0.8cm, 
-        align=center, 
-        fill=white
-    },
-    arrow/.style={-Latex, thick, color=black!70}
-]
-
-\node[block, fill=gray!10] (header) {\textbf{Header}\\ \scriptsize (Magic, Totalsize, Offsets)};
-\node[block, below=0.1cm of header] (reserve) {Memory Reservation Block};
-\node[block, below=0.1cm of reserve] (struct) {Structure Block\\ \scriptsize (Nodes \& Properties)};
-\node[block, below=0.1cm of struct] (strings) {Strings Block\\ \scriptsize (Property Names)};
-
-% Pointers
-\draw[arrow] (header.east) -- ++(0.5,0) |- node[pos=0.7, right, font=\scriptsize] {off\_mem\_rsvmap} (reserve.east);
-\draw[arrow] (header.east) -- ++(0.8,0) |- node[pos=0.7, right, font=\scriptsize] {off\_dt\_struct} (struct.east);
-\draw[arrow] (header.east) -- ++(1.1,0) |- node[pos=0.7, right, font=\scriptsize] {off\_dt\_strings} (strings.east);
-
-\end{tikzpicture}
-\caption{Structure of a Flattened Device Tree Blob}
-\label{fig:dtb_structure}
-\end{figure}
-\todo[inline]{Probably delete this, unless it can be extended or modified to bring more value}
-
-The kernel parses this blob at boot to discover available RAM. Notably, the DTB standard mandates \textbf{Big-Endian} byte ordering. On Little-Endian architectures like x86-64, the kernel must perform byte-swapping when parsing these structures.
+The kernel parses this blob at boot to discover available RAM.
 
 \cite{Devicetree-Spec}
 
@@ -881,11 +849,320 @@ This goes about the general design, but during initial development system there 
 
 Once bidirectional communication with an external system is established and tracing capabilities are active, it is advisable to implement a protocol for verifying code directly on the target system. Such a framework facilitates regression and unit testing, enabling the detection of failures with every code modification. Testing must be conducted on the target architecture, as code that functions correctly on a host Linux environment may fail locally due to missing CPU features, implementation differences in system calls, memory management constraints, or discrepancies in generated assembly. The design must isolate test executions to ensure that the side effects of a failed test do not compromise subsequent ones. Ideally, isolation is achieved by rebooting the system into a testing module after each test. While this method introduces latency, it prevents false positives that would otherwise consume significant development time. Consequently, the framework must be designed to yield reliable and repeatable results.
 
-\subsection{Memory Management}
+\section{Memory Management}
 \label{subsec:os_tutorial_mem}
 TODO: KRYCZKA
 
-\subsubsection{Physical Memory Management}
+\section{Physical Memory Management}
+\label{subsubsec:physical_memory_management}
+
+The Physical Memory Manager (PMM) constitutes the foundational layer of the operating system's memory subsystem. Its primary responsibility is the accounting of the machine's finite Random Access Memory (RAM). In a monolithic kernel with virtual memory support, the PMM typically operates at two distinct levels of granularity:
+
+\begin{enumerate}
+\item \textbf{Page Frame Allocation:} The allocation of raw, contiguous physical memory in fixed-size units called \textit{page frames} (typically 4096 bytes on x86-64). This is primarily used to back Virtual Memory mappings for user-space processes.
+\item \textbf{Kernel Heap Allocation:} The sub-allocation of memory within those pages for the kernel's own internal data structures (e.g., thread control blocks, file descriptors). These requests vary wildly in size, from a few bytes to several kilobytes.
+\end{enumerate}
+
+While the granularity differs, the fundamental algorithmic challenge remains the same: how to satisfy a request of size $S$ efficiently while minimizing wasted space. The remainder of this section explores the theoretical constraints and algorithmic solutions common to both layers, starting with the arch-nemesis of memory management: fragmentation.
+
+\subsection{The Core Challenge: Fragmentation}
+
+If an allocator simply handed out memory sequentially and never had to accept returns (frees), the implementation would be a trivial pointer increment. Complexity arises because memory is borrowed and returned in an arbitrary order. This leads to \textbf{fragmentation}: the inability to reuse memory that is technically free. Fragmentation manifests in two distinct forms \cite{wilson1995survey}:
+
+\begin{itemize}
+    \item \textbf{Internal Fragmentation:} This occurs when the allocator assigns a block larger than what was requested. For example, if a request for 20 bytes is rounded up to a 32-byte block to satisfy alignment requirements, 12 bytes are wasted. This waste is "internal" to the allocated block and unusable by others.
+    \item \textbf{External Fragmentation:} This occurs when free memory exists in the system, but it is scattered in small, non-contiguous holes such that a request for a large contiguous block cannot be satisfied. The total free memory might be sufficient, but the geometry of the holes prevents allocation.
+\end{itemize}
+
+\textbf{The Root Cause: Isolated Deaths.} Fragmentation fundamentally arises from \textit{isolated deaths} - when an object is freed but its neighbors remain allocated, creating an unusable hole. If adjacent objects always died together, their combined space would be reclaimed as one contiguous block. The allocator's core challenge is predicting which objects will die at similar times and placing them contiguously. Since the allocator cannot know future behavior, it must rely on heuristics that exploit regularities in program behavior~\cite{wilson1995survey}.
+
+The goal of any allocator is to balance the minimization of these two types of fragmentation against the computational cost (latency) of the allocation operation.
+
+\subsection{Anatomy of an Allocator}
+
+To understand how different allocators address these challenges, it is helpful to use the taxonomy proposed by Wilson et al. \cite{wilson1995survey}, which separates allocator design into three levels of abstraction:
+
+\subsubsection{1. Strategy}
+The strategy is the high-level philosophy used to combat fragmentation. It relies on heuristics about program behavior. For example, a common strategy is to "cluster objects that will likely die at the same time." If a specific system task allocates 10 small objects, processes them, and frees them instantly, a good strategy tries to keep those objects adjacent in physical memory so that when they are freed, they combine to form a single large free block rather than 10 small holes.
+
+\subsubsection{2. Policy}
+The policy is the specific decision logic used to select a free block for a given request. Common policies include:
+\begin{itemize}
+    \item \textbf{First Fit:} Scan the free memory from the beginning and return the first block that is large enough. This is fast but can accumulate small "splinters" of free memory at the start of the list.
+    \item \textbf{Best Fit:} Search the entire list to find the smallest block that satisfies the request. This minimizes the wasted remainder (unused space after the split) but requires a comprehensive search, which can be slow.
+    \item \textbf{Next Fit}: Resume searching from where the last allocation stopped. Scatters allocations and often
+performs poorly
+\end{itemize}
+
+\subsubsection{3. Mechanism}
+The mechanism is the data structure and algorithm used to implement the policy efficiently. For example, a "Best Fit" policy could be implemented via a linear scan of a linked list (mechanism: $O(N)$), or by looking up a size index in a tree or bitmap (mechanism: $O(log N)$ or $O(1)$).
+
+The following subsections examine specific mechanisms used in OS development, ordered by increasing complexity.
+
+\subsection{Mechanism: Bitmap Allocation}
+
+The bitmap allocator is conceptually the simplest mechanism, often used for \textbf{Page Frame Allocation} due to its static nature. In this scheme, the physical memory is divided into fixed-size units (pages). A separate region of memory, the bitmap, tracks the status of these units. Each bit in the bitmap corresponds to one page frame: a 0 indicates free, and a 1 indicates allocated.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    font=\sffamily\footnotesize,
+    bit/.style={draw, minimum width=0.5cm, minimum height=0.5cm, anchor=south west},
+    freeb/.style={bit, fill=green!20},
+    usedb/.style={bit, fill=red!20}
+]
+
+% Draw bitmap array
+\node[anchor=east] at (-0.2, 0.25) {\textbf{Bitmap:}};
+\node[freeb] at (0, 0) {0};
+\node[usedb] at (0.5, 0) {1};
+\node[usedb] at (1.0, 0) {1};
+\node[freeb] at (1.5, 0) {0};
+\node[freeb] at (2.0, 0) {0};
+\node[usedb] at (2.5, 0) {1};
+\node[freeb] at (3.0, 0) {0};
+\node[freeb] at (3.5, 0) {0};
+\node at (4.2, 0.25) {...};
+
+% Index labels
+\node[font=\tiny] at (0.25, -0.3) {0};
+\node[font=\tiny] at (0.75, -0.3) {1};
+\node[font=\tiny] at (1.25, -0.3) {2};
+\node[font=\tiny] at (1.75, -0.3) {3};
+\node[font=\tiny] at (2.25, -0.3) {4};
+\node[font=\tiny] at (2.75, -0.3) {5};
+\node[font=\tiny] at (3.25, -0.3) {6};
+\node[font=\tiny] at (3.75, -0.3) {7};
+
+% Physical addresses
+    \node[anchor=west, font=\scriptsize] at (5, 0.25) {Frame $i$ $\rightarrow$ Address $i \times PageSize$};
+
+\end{tikzpicture}
+\caption{Bitmap Representation of Physical Memory}
+\label{fig:bitmap_allocator}
+\end{figure}
+
+The primary advantage of bitmaps is space efficiency. To manage 4 GiB of RAM using 4 KiB pages, there are roughly 1 million frames. This requires 1 million bits, or merely 128 KiB of overhead. Furthermore, bitmaps naturally support the allocation of \textit{contiguous} multipage blocks; the allocator simply needs to find a run of $N$ consecutive zeros.
+
+However, the search complexity is linear. To find free memory, the allocator must scan the bitmap. In the worst case (a nearly full system), it may scan the entire map ($O(N)$) before finding a free page or determining that memory is exhausted.
+
+\subsection{Mechanism: Stack-Based Allocation (Free Lists)}
+
+While bitmaps handle contiguous allocations well, their linear search time is often unacceptable for the most frequent operation: allocating a single page. To achieve constant-time $O(1)$ performance, many kernels employ a \textbf{Stack} or \textbf{Linked List} allocator.
+
+In this scheme, the allocator maintains a pointer to a "head" page. This page contains a pointer to the next free page, which points to the next, forming a chain. Since these pages are by definition unused, the OS can store the "next" pointer inside the page itself, requiring no external metadata storage.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    font=\sffamily\footnotesize,
+    page/.style={draw, minimum width=2.5cm, minimum height=0.8cm, fill=green!10},
+    arrow/.style={-Latex, thick}
+]
+
+\node[page] (p1) at (0, 0) {Page @ 0x5000};
+\node[page] (p2) at (0, -1.2) {Page @ 0x9000};
+\node[page] (p3) at (0, -2.4) {Page @ 0x2000};
+\node[font=\scriptsize] at (0, -3.4) {...};
+
+\node[anchor=east, font=\bfseries] at (-1.8, 0) {HEAD $\rightarrow$};
+
+\draw[arrow] (p1.south) -- (p2.north);
+\draw[arrow] (p2.south) -- (p3.north);
+
+\node[anchor=west, align=left, font=\scriptsize] at (2, -0.6) {Pop: $O(1)$\\Push: $O(1)$};
+\node[anchor=west, align=left, font=\scriptsize, text=red!70!black] at (2, -2.0) {Loss of Contiguity};
+
+\end{tikzpicture}
+\caption{Stack-Based Free List Allocator}
+\label{fig:stack_allocator}
+\end{figure}
+
+The stack acts as a cache of "hot" pages. When a page is freed, it is pushed onto the stack; when a page is requested, it is popped. This is extremely fast but suffers from a fatal flaw regarding fragmentation: the stack order reflects \textit{execution history}, not \textit{physical address} order. A stack might contain physical page 0x1000 followed by page 0x5000. If a driver requests two contiguous pages, the stack cannot satisfy the request even if the system has plenty of memory. Consequently, stacks are often used as a fast frontend cache layered on top of a more complex backing allocator.
+
+\subsection{Mechanism: The Buddy System}
+
+To solve the contiguity problem while maintaining decent performance, general-purpose operating systems (like Linux) utilize the \textbf{Buddy System}. The Buddy System is a specific implementation of a broader class of allocators known as \textbf{Segregated Fits}.
+
+\subsubsection{Concept: Segregated Fits}
+In a segregated fit architecture, memory is not viewed as one monolithic pool. Instead, the allocator maintains an array of free lists. Each list acts as a bin dedicated to blocks of a specific size class. For example, index 0 might hold 4KiB blocks, index 1 hold 8KiB blocks, and so on. This allows the allocator to quickly locate a block that fits a request without searching through blocks that are vastly too large or too small.
+
+\subsubsection{The Binary Buddy Algorithm}
+The Buddy System applies a strict discipline to segregated fits: all block sizes must be powers of two. The allocator maintains an array of lists for orders $0$ to $MAX\_ORDER$. Order $k$ typically represents a block size of $PAGE\_SIZE \times 2^k$.
+
+\textbf{Splitting (Allocation):} When a request for a block of order $k$ arrives:
+\begin{enumerate}
+    \item The allocator checks the list at index $k$.
+    \item If the list is empty, it moves up to list $k+1$, splits a larger block into two halves (buddies), adds one half to list $k$, and returns the other.
+    \item If list $k+1$ is also empty, it recurses upward until a block is found or memory is exhausted.
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    font=\sffamily\footnotesize,
+    block/.style={draw, minimum height=0.6cm, fill=blue!10},
+    freeblock/.style={draw, minimum height=0.6cm, fill=green!20},
+    arrow/.style={-Latex, thick, dashed}
+]
+
+% Original block
+\node[block, minimum width=8cm] (orig) at (0, 2) {Order 3 Block (32 KiB)};
+
+% Split into two Order 2
+\node[freeblock, minimum width=4cm] (l2a) at (-2, 0.8) {Order 2 (16 KiB)};
+\node[block, minimum width=4cm] (l2b) at (2, 0.8) {Order 2 (16 KiB)};
+
+% Further split left Order 2
+\node[freeblock, minimum width=2cm] (l1a) at (-3, -0.4) {Order 1};
+\node[block, minimum width=2cm] (l1b) at (-1, -0.4) {Order 1};
+
+% Further split
+\node[freeblock, minimum width=1cm] (l0a) at (-3.5, -1.6) {O0};
+\node[block, minimum width=1cm, fill=red!20] (l0b) at (-2.5, -1.6) {O0};
+
+\draw[arrow] (orig.south) -- (l2a.north);
+\draw[arrow] (orig.south) -- (l2b.north);
+\draw[arrow] (l2a.south) -- (l1a.north);
+\draw[arrow] (l2a.south) -- (l1b.north);
+\draw[arrow] (l1a.south) -- (l0a.north);
+\draw[arrow] (l1a.south) -- (l0b.north);
+
+\node[anchor=west, font=\scriptsize] at (4.5, 0) {Recursive splitting};
+\node[anchor=west, font=\scriptsize, text=red!70!black] at (-0.5, -1.6) {Allocated};
+\node[anchor=west, font=\scriptsize, text=green!50!black] at (-3, -2.2) {Buddy (free)};
+
+\end{tikzpicture}
+\caption{Buddy System: Splitting on Allocation}
+\label{fig:buddy_split}
+\end{figure}
+
+\textbf{Coalescing (Freeing):} The elegance of the Buddy System lies in how it handles fragmentation. Every block has a unique "buddy" that is its physical neighbor in memory. When a block is freed, the allocator checks if its buddy is also free. If so, they merge (coalesce) into a block of the next higher order. This repeats recursively.
+
+Crucially, the address of a block's buddy can be calculated instantly using an XOR operation, without traversing lists. For a block of size $2^k$ at address $A$, the buddy is located at:
+\[ \texttt{buddy\_addr} = A \oplus 2^k \]
+
+\subsubsection{Why Buddy is Insufficient for Real-Time}
+While the Buddy System is efficient ($O(log N)$) and handles external fragmentation well via coalescing, it suffers from significant \textbf{Internal Fragmentation}. Because every request must be rounded up to a power of two, a request for 33 KiB requires a 64 KiB block, wasting 47\% of the allocated memory.
+
+Furthermore, the coalescing logic is restrictive. Two adjacent free blocks of size $2^k$ cannot always be merged; they must be \textit{buddies} (i.e., aligned on a strict $2^{k+1}$ boundary). This can lead to cases where contiguous memory is available but unusable because the blocks are "cousins" rather than "buddies" \cite{wilson1995survey}. These limitations motivate the need for more granular allocators in real-time systems, such as TLSF.
+
+\subsection{Mechanism: Two-Level Segregated Fit (TLSF)}
+
+While the Buddy System is fast, its reliance on power-of-two sizing creates unacceptable internal fragmentation for workloads that frequently allocate objects of irregular sizes (e.g., 50 bytes or 800 bytes). Additionally, real-time systems require a strict guarantee of constant-time $O(1)$ performance, regardless of the fragmentation state of the heap.
+
+The \textbf{Two-Level Segregated Fit (TLSF)} allocator \cite{masmano2004tlsf} was designed specifically to address these requirements. It is a segregated fit allocator (like Buddy) but with a much finer granularity of size classes and a more flexible coalescing strategy.
+
+\subsubsection{Addressing Internal Fragmentation: The Two-Level Index}
+To reduce internal fragmentation, an allocator needs size classes that are closer together than powers of two. However, having thousands of free lists (one for 10 bytes, one for 11, etc.) makes searching for a free block slow. TLSF solves this by organizing free lists into a two-dimensional matrix, denoted by indices $(f, s)$.
+
+\begin{enumerate}
+    \item \textbf{First-Level Index (FLI):} This corresponds to the power-of-two bucket, roughly equivalent to the "Order" in the Buddy System. It is calculated as the position of the most significant bit set in the size: $f = \lfloor \log_2(\text{size}) \rfloor$.
+    \item \textbf{Second-Level Index (SLI):} To bridge the large gap between powers of two (e.g., the gap between 256 and 512 is 256 bytes wide), TLSF subdivides each FLI bucket into $2^{SLI}$ linearly spaced sub-buckets.
+\end{enumerate}
+
+For example, if we configure the allocator with $SLI = 2$ (which means 4 subdivisions), the range $[256, 512)$ is split into 4 bands: $[256, 320)$, $[320, 384)$, $[384, 448)$, and $[448, 512)$. A request for 260 bytes no longer needs to be rounded up to 512; it fits into the first subdivision. This significantly tightens the bound on internal fragmentation.
+
+\subsubsection{O(1) Search via Bitmaps}
+The core innovation of TLSF is how it finds a suitable free block in constant time. The allocator maintains a set of \textbf{Bitmaps} that act as a summary of the free lists.
+\begin{itemize}
+    \item A bit is set to \textbf{1} if the corresponding free list contains at least one block.
+    \item A bit is set to \textbf{0} if the list is empty.
+\end{itemize}
+
+When a request arrives, the allocator maps the size to indices $(f, s)$. It checks the bitmap for that list. If the bit is 0 (empty), it does not need to loop through lists. Instead, it uses a hardware instruction - \textit{Find First Set} (\texttt{ffs}) or \textit{Count Leading Zeros} (\texttt{clz}) - to atomically find the index of the next available bit in the bitmap. This operation allows the allocator to skip over empty size classes instantly, guaranteeing $O(1)$ allocation time regardless of the heap state.
+
+\subsubsection{Physical Block Management: Boundary Tags}
+The Buddy System calculates the address of a neighbor using bitwise XOR. This is fast, but it restricts merging: a block at address 0x2000 of size 0x1000 can \textit{only} merge with its specific buddy at 0x3000. It cannot merge with a free block at 0x1000, even though they are physically adjacent.
+
+TLSF abandons the "buddy" logic in favor of \textbf{Boundary Tags} to support merging any physically adjacent free blocks.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    font=\sffamily\footnotesize,
+    block/.style={draw, minimum height=1cm, anchor=west},
+    header/.style={draw, minimum height=0.3cm, fill=gray!30, anchor=west},
+    freeblk/.style={block, fill=green!15},
+    usedblk/.style={block, fill=red!15}
+]
+
+% Memory layout
+\node[header, minimum width=0.8cm] (h1) at (0, 0) {\tiny H};
+\node[freeblk, minimum width=2cm] (b1) at (0.8, 0) {Free (64B)};
+\node[header, minimum width=0.8cm] (h2) at (2.8, 0) {\tiny H};
+\node[usedblk, minimum width=3cm] (b2) at (3.6, 0) {Used (96B)};
+\node[header, minimum width=0.8cm] (h3) at (6.6, 0) {\tiny H};
+\node[freeblk, minimum width=2cm] (b3) at (7.4, 0) {Free (48B)};
+
+% Arrows for neighbor check
+\draw[-Latex, thick, blue] (b2.north west) to[out=120, in=60] node[above, font=\scriptsize] {check prev} (b1.north east);
+\draw[-Latex, thick, blue] (b2.north east) to[out=60, in=120] node[above, font=\scriptsize] {check next} (b3.north west);
+
+\node[anchor=north, font=\scriptsize] at (4.5, -0.8) {Headers store size $\rightarrow$ locate neighbors in $O(1)$};
+
+\end{tikzpicture}
+\caption{Boundary Tags Enable Arbitrary Coalescing}
+\label{fig:tlsf_coalesce}
+\end{figure}
+
+Every block in memory (whether free or allocated) is prefixed with a header containing its size and a flag indicating if the \textit{previous} physical block is free.
+\begin{itemize}
+    \item \textbf{Freeing:} When block $B$ is freed, it checks its header to see if the previous neighbor is free. If so, it reads the previous neighbor's footer (located immediately before $B$'s header) to find its start address and merges with it. It then checks the next neighbor (at address $B + size$). If that is also free, it merges.
+    \item \textbf{Result:} This allows TLSF to counteract external fragmentation much more aggressively than the Buddy System, as any contiguous free space is immediately coalesced into the largest possible block.
+\end{itemize}
+
+\subsubsection{Summary of Trade-offs}
+TLSF is the preferred allocator for real-time kernels because it guarantees worst-case execution time ($O(1)$) and minimizes wasted memory (low fragmentation). However, it is slightly slower on average than the Buddy System due to the overhead of maintaining the doubly-linked lists for every size class and the boundary tag manipulation. For general-purpose operating systems where average throughput is more important than worst-case latency, the Buddy System is often retained.
+
+\subsection{Advanced Layering: Object Caching (Slab)}
+
+The mechanisms described so far (Buddy, TLSF) manage raw blocks of memory. However, the operating system kernel rarely wants just "64 bytes"; it usually wants a specific object, such as a process control block, a file descriptor, or a synchronization primitive.
+
+Initializing these objects can be expensive. For example, initializing a kernel mutex involves setting internal flags, initializing wait queues, and perhaps interacting with hardware interrupt controllers. If an object is allocated, initialized, used, destroyed, and freed repeatedly, the CPU spends significant cycles just setting up and tearing down the same state.
+
+The \textbf{Slab Allocator}, introduced by Jeff Bonwick for SunOS \cite{bonwick1994slab}, solves this by observing that the state of a freed object is often valid for the next allocation. It separates the concepts of \textit{memory release} and \textit{object destruction}.
+
+\subsubsection{The Concept of Object Caching}
+A Slab Allocator organizes memory into caches of specific object types (e.g., a cache for \texttt{task\_structs}, a cache for \texttt{inodes}).
+\begin{itemize}
+    \item \textbf{Construction:} When the cache grows, it allocates a page from the underlying PMM and calls a \textit{constructor} on every slot in that page. For a mutex, this initializes the lock state.
+    \item \textbf{Allocation:} When the kernel requests an object, the allocator pops one from the cache. Crucially, the object is \textit{already constructed}. The mutex is ready to be acquired immediately.
+    \item \textbf{Freeing:} When the kernel releases the object, the allocator returns it to the cache but \textit{does not} call the destructor. The state (the initialized mutex) remains intact.
+    \item \textbf{Reclamation:} Only when the system is under extreme memory pressure does the allocator reclaim the slab. It calls the \textit{destructor} on the objects and returns the raw pages to the PMM.
+\end{itemize}
+
+This effectively turns memory management into a caching problem. The allocator caches \textit{constructed state}, reducing the overhead of allocation to little more than pointer arithmetic.
+
+\subsection{Scalability: Allocating on Multicore Systems}
+
+In a Symmetric Multiprocessing (SMP) environment, a single global heap becomes a major bottleneck. If all cores must acquire the same spinlock to call \texttt{malloc}, the system's performance will degrade as core counts rise due to lock contention.
+
+To solve this, modern allocators use a two-tiered hierarchy:
+\begin{enumerate}
+    \item \textbf{Per-CPU Caches:} Each processor is assigned a small local heap (a cache of free blocks). Allocations are satisfied from this local cache without acquiring a global lock, as no other CPU touches this memory.
+    \item \textbf{Global Heap:} When a local cache empties, it grabs a batch of memory from the global heap (requiring a lock). When a local cache overflows, it returns a batch to the global heap.
+\end{enumerate}
+
+\subsubsection{The Hoard Allocator}
+A naive implementation of per-CPU heaps suffers from a specific pathology known as \textit{blowup}. Consider a "Producer-Consumer" pattern where Thread A (on CPU 1) continuously allocates packets, and Thread B (on CPU 2) consumes and frees them. CPU 1's heap constantly empties (requesting more from global), and CPU 2's heap constantly fills up (never returning to global). The system runs out of memory despite having ample free space, because that space is trapped on CPU 2.
+
+The \textbf{Hoard Allocator} \cite{berger2000hoard} addresses this by organizing memory into \textit{Superblocks} - large chunks of memory containing multiple objects of the same size. Hoard tracks the "emptiness" of these superblocks. If a superblock on a local heap becomes mostly empty, it is moved to the global heap, allowing other processors to reuse the memory. This guarantees that the memory consumption of the allocator is bounded within a constant factor of the ideal required memory, solving the blowup problem while maintaining scalability.
+
+\subsection{Hardware Constraints: Zoning}
+
+Finally, the PMM must respect the physical limitations of the hardware. Not all RAM is created equal.
+\begin{itemize}
+    \item \textbf{DMA Limitations:} Legacy hardware (like ISA devices) may only be able to address the bottom 16 MiB of RAM (24-bit addressing).
+    \item \textbf{High Memory:} On 32-bit architectures with more than 4 GiB of RAM, the kernel cannot map all physical memory into its virtual address space simultaneously.
+    \item \textbf{NUMA Topology:} On multi-socket systems, physical memory is partitioned across NUMA nodes. Allocating from a remote node incurs latency penalties, so the PMM should prefer local memory when possible.
+\end{itemize}
+
+A common solution is to partition the physical address space into disjoint \textbf{regions} or \textbf{zones}, each managed by a separate allocator instance. Allocation requests carry metadata (flags or capabilities) indicating which regions are acceptable. The allocator attempts the preferred region first and falls back to others only if permitted. Critically, a request for DMA-capable memory \textit{cannot} fall back to high memory-the hardware simply cannot address those frames.
+
+For an in-depth treatment of allocation algorithms, fragmentation theory, and experimental methodology, the comprehensive survey by Wilson et al.~\cite{wilson1995survey} remains an essential reference.
+
+\section{Physical Memory Management}
 \label{subsubsec:physical_memory_management}
 \todo[inline]{A ton of info here, needs some refinment, cleanup, to make it flow smoothly}
 
@@ -900,11 +1177,17 @@ A PMM must balance three competing objectives:
     \item \textbf{Hardware Compliance:} Respect physical addressing constraints imposed by devices (e.g., legacy ISA DMA requiring addresses below 16~MiB).
 \end{enumerate}
 
-The choice of allocation algorithm fundamentally shapes the PMM's performance profile. Before examining specific algorithms, it is essential to deeply understand the core problem: \textbf{fragmentation}-the inability to reuse memory that is free. This occurs when free regions exist but are too small or poorly positioned to satisfy requests.
+The choice of allocation algorithm fundamentally shapes the PMM's performance profile. 
+
+\subsection{Fragmentation}
+Before examining specific algorithms, it is essential to deeply understand the core problem: \textbf{fragmentation} - the inability to reuse memory that is free. This occurs when free regions exist but are too small or poorly positioned to satisfy requests.
 
 \textbf{Internal vs.\ External Fragmentation.} Operating system developers must distinguish between two forms. \textit{Internal fragmentation} arises when allocated regions are larger than requested due to size-class rounding (e.g., a 50-byte request rounded to 64 bytes wastes 14 bytes). \textit{External fragmentation} occurs when free memory is scattered into many small holes, none large enough to satisfy a request, even though total free memory exceeds the request size.
 
-\textbf{The Root Cause: Isolated Deaths.} Fragmentation fundamentally arises from \textit{isolated deaths}-when an object is freed but its neighbors remain allocated, creating an unusable hole. If adjacent objects always died together, their combined space would be reclaimed as one contiguous block. The allocator's core challenge is predicting which objects will die at similar times and placing them contiguously. Since the allocator cannot know future behavior, it must rely on heuristics that exploit regularities in program behavior~\cite{wilson1995survey}.
+\textbf{The Root Cause: Isolated Deaths.} Fragmentation fundamentally arises from \textit{isolated deaths} - when an object is freed but its neighbors remain allocated, creating an unusable hole. If adjacent objects always died together, their combined space would be reclaimed as one contiguous block. The allocator's core challenge is predicting which objects will die at similar times and placing them contiguously. Since the allocator cannot know future behavior, it must rely on heuristics that exploit regularities in program behavior~\cite{wilson1995survey}.
+
+\subsection{Program Behavior Patterns}
+In search of solutions to the above problems, we look into the following:
 
 \textbf{Program Behavior Patterns.} Most real programs do not behave randomly. Studies of allocation traces reveal three dominant patterns~\cite{wilson1995survey}:
 \begin{itemize}
@@ -962,7 +1245,7 @@ The bitmap allocator is the most straightforward approach. The entire physical a
 \node[font=\tiny] at (3.75, -0.3) {7};
 
 % Physical addresses
-\node[anchor=west, font=\scriptsize] at (5, 0.25) {Frame $i$ $\rightarrow$ Address $i \times 4096$};
+    \node[anchor=west, font=\scriptsize] at (5, 0.25) {Frame $i$ $\rightarrow$ Address $i \times PageSize$};
 
 % Legend
 \node[freeb, minimum width=0.4cm, minimum height=0.4cm] at (0, -1) {};
@@ -979,7 +1262,7 @@ To allocate $n$ contiguous pages, the allocator must scan for $n$ consecutive ze
 
 Optimizations include processing entire machine words (64 bits at once using intrinsic instructions like \texttt{\_\_builtin\_ffsll}) and maintaining a ``roaming pointer'' to skip permanently allocated regions at the start of memory. The space overhead is minimal: a 4~GiB address space requires only 128~KiB of bitmap data.
 
-Bitmaps have a subtle advantage for allocation policy: they naturally support \textit{address-ordered search}. Scanning from low addresses finds the first physically lowest block, which tends to pack allocations at one end of memory and cluster temporally-related objects. This implements an address-ordered first fit policy implicitly. Additionally, bitmaps are stored ``off to the side''-separate from the data they describe-which can improve cache locality during the search phase compared to traversing linked structures embedded within memory blocks.
+Bitmaps have a subtle advantage for allocation policy: they naturally support \textit{address-ordered search}. Scanning from low addresses finds the first physically lowest block, which tends to pack allocations at one end of memory and cluster temporally-related objects. This implements an address-ordered first fit policy implicitly. Additionally, bitmaps are stored ``off to the side'' - separate from the data they describe - which can improve cache locality during the search phase compared to traversing linked structures embedded within memory blocks.
 
 \paragraph{Stack-Based (Free List) Allocation}
 
@@ -1013,19 +1296,19 @@ The stack allocator maintains a Last-In-First-Out (LIFO) stack of free page addr
 \label{fig:stack_allocator}
 \end{figure}
 
-This approach offers strict $O(1)$ performance for single-page operations-no searching is required. The key policy decision is whether to use a LIFO (stack) or FIFO (queue) ordering:
+This approach offers strict $O(1)$ performance for single-page operations - no searching is required. The key policy decision is whether to use a LIFO (stack) or FIFO (queue) ordering:
 \begin{itemize}
     \item \textbf{LIFO (Last-In-First-Out):} Recently freed pages are reused immediately. This maximizes CPU cache locality-the page data likely remains in cache. However, it mixes allocations from different program phases, potentially scattering objects that should be grouped.
-    \item \textbf{FIFO (First-In-First-Out):} Pages ``age'' before reuse, giving the system time to reclaim them efficiently (e.g., for write-back). Recent studies suggest FIFO ordering can reduce fragmentation compared to pure LIFO, performing nearly as well as address ordering~\cite{wilson1995survey}.
+    \item \textbf{FIFO (First-In-First-Out):} Pages ``age'' before reuse, giving the system time to reclaim them efficiently (e.g., for write-back). FIFO ordering can reduce fragmentation compared to pure LIFO, performing nearly as well as address ordering~\cite{wilson1995survey}.
 \end{itemize}
 
-When all pages are the same size (as in page frame allocation), this structure implements \textit{simple segregated storage}: all blocks in a page-sized ``size class'' are on one list. This eliminates internal fragmentation entirely-every returned page is exactly the requested size. However, the stack cannot efficiently satisfy requests for \textit{contiguous} multi-page allocations (e.g., for large DMA buffers), as the order of pages reflects deallocation history, not physical adjacency.
+When all pages are the same size (as in page frame allocation), this structure implements \textit{simple segregated storage}: all blocks in a page-sized ``size class'' are on one list. This eliminates internal fragmentation entirely - every returned page is exactly the requested size. However, the stack cannot efficiently satisfy requests for \textit{contiguous} multi-page allocations (e.g., for large DMA buffers), as the order of pages reflects deallocation history, not physical adjacency.
 
 \paragraph{The Buddy System}
 
 The stack achieves $O(1)$ speed but cannot allocate contiguous ranges efficiently. The Buddy System is the standard algorithm in general-purpose kernels~\cite{knuth1973art}, though it comes with significant trade-offs that must be understood.
 
-The Buddy System is fundamentally a \textit{segregated free list} scheme with a constrained splitting and coalescing discipline. Unlike general segregated fits that can coalesce any adjacent blocks using boundary tags, the Buddy System restricts coalescing to ``buddy pairs''-blocks that together form a power-of-two aligned parent. This restriction enables an elegant $O(1)$ buddy lookup (via XOR) but limits flexibility: adjacent free blocks that are not buddies \textit{cannot be merged}, even if they are physically contiguous~\cite{wilson1995survey}.
+The Buddy System is fundamentally a \textit{segregated free list} scheme with a constrained splitting and coalescing discipline. Unlike general segregated fits that can coalesce any adjacent blocks using boundary tags, the Buddy System restricts coalescing to ``buddy pairs'' - blocks that together form a power-of-two aligned parent. This restriction enables an elegant $O(1)$ buddy lookup (via XOR) but limits flexibility: adjacent free blocks that are not buddies \textit{cannot be merged}, even if they are physically contiguous~\cite{wilson1995survey}.
 
 Memory is organized into blocks sized as powers of two ($2^k$ pages). The allocator maintains an array of free lists, one per ``order'' $k$:
 \begin{itemize}
@@ -1131,7 +1414,7 @@ When a request arrives, it is rounded up to the nearest power of two. If no bloc
 
 \textbf{Internal Fragmentation: The Primary Drawback.} The power-of-two size restriction causes substantial internal fragmentation. A request for 33~KiB requires a 64~KiB block, wasting approximately 48\% of the allocation. Statistical analysis shows \textit{expected} internal fragmentation is approximately 28\%, though this varies with the request size distribution~\cite{wilson1995survey}. In contrast, general segregated fits schemes with finer size classes (e.g., 10--20\% spacing) can reduce internal fragmentation to just a few percent.
 
-\textbf{External Fragmentation: The Coalescing Limitation.} The buddy restriction on coalescing can also cause external fragmentation. Consider two adjacent free blocks that are \textit{not} buddies-they cannot merge, leaving unusable gaps. Studies using both real and synthetic traces show that buddy systems generally exhibit \textit{more} fragmentation than segregated fits with boundary tags, where any adjacent blocks can coalesce~\cite{wilson1995survey}.
+\textbf{External Fragmentation: The Coalescing Limitation.} The buddy restriction on coalescing can also cause external fragmentation. Consider two adjacent free blocks that are \textit{not} buddies - they cannot merge, leaving unusable gaps. Studies using both real and synthetic traces show that buddy systems generally exhibit \textit{more} fragmentation than segregated fits with boundary tags, where any adjacent blocks can coalesce~\cite{wilson1995survey}.
 
 Despite these drawbacks, the Buddy System remains popular because: (1) it is conceptually simple; (2) the XOR-based buddy lookup is extremely fast; and (3) for page-frame allocation where the atomic unit is 4~KiB, internal fragmentation only matters for multi-page allocations.
 
@@ -1199,7 +1482,7 @@ For real-time systems where deterministic latency is critical, the TLSF allocato
 \label{fig:tlsf_mapping}
 \end{figure}
 
-\textbf{Constant-Time Lookup.} Both the FLI and each SLI are represented as bitmaps (typically 32 or 64 bits). When the target list is empty, the allocator must find the next larger non-empty list. This is accomplished with a single hardware \texttt{ffs} (find first set) instruction on the bitmap-a constant-time operation. No iteration is required.
+\textbf{Constant-Time Lookup.} Both the FLI and each SLI are represented as bitmaps (typically 32 or 64 bits). When the target list is empty, the allocator must find the next larger non-empty list. This is accomplished with a single hardware \texttt{ffs} (find first set) instruction on the bitmap - a constant-time operation. No iteration is required.
 
 \textbf{Allocation Algorithm:}
 \begin{enumerate}
@@ -1209,7 +1492,7 @@ For real-time systems where deterministic latency is critical, the TLSF allocato
     \item Split the found block if necessary; insert the remainder back into the appropriate list.
 \end{enumerate}
 
-\textbf{Deallocation and Coalescing.} Each allocated block carries a small header (and optionally a footer) containing its size and status. On free, TLSF checks the \textit{physical neighbors} (not buddies-any adjacent block) using these boundary tags. If a neighbor is free, the blocks are merged. Unlike the Buddy System, TLSF can coalesce any adjacent free blocks regardless of their sizes, reducing external fragmentation.
+\textbf{Deallocation and Coalescing.} Each allocated block carries a small header (and optionally a footer) containing its size and status. On free, TLSF checks the \textit{physical neighbors} (not buddies - any adjacent block) using these boundary tags. If a neighbor is free, the blocks are merged. Unlike the Buddy System, TLSF can coalesce any adjacent free blocks regardless of their sizes, reducing external fragmentation.
 
 \begin{figure}[htbp]
 \centering
@@ -1242,7 +1525,7 @@ For real-time systems where deterministic latency is critical, the TLSF allocato
 
 TLSF achieves ``good fit'' allocation (blocks closely matching request size) without power-of-two rounding. Measured fragmentation is typically under 15\%, compared to up to 50\% for the Buddy System. The strict $O(1)$ bounds and low fragmentation make TLSF the standard choice for embedded and real-time kernels~\cite{masmano2004tlsf}.
 
-\textbf{Why Segregated Fits Work Well.} TLSF exemplifies segregated fit allocators, whose effectiveness is often underappreciated. By partitioning blocks into size classes, segregated fits \textit{implicitly} implement a good-fit policy: searching the list for size $s$ excludes blocks vastly larger or smaller, making most candidates reasonable fits. This policy emerges from the indexing structure rather than explicit search-a crucial insight for achieving both speed and low fragmentation~\cite{wilson1995survey}.
+\textbf{Why Segregated Fits Work Well.} TLSF exemplifies segregated fit allocators, whose effectiveness is often underappreciated. By partitioning blocks into size classes, segregated fits \textit{implicitly} implement a good-fit policy: searching the list for size $s$ excludes blocks vastly larger or smaller, making most candidates reasonable fits. This policy emerges from the indexing structure rather than explicit search- a crucial insight for achieving both speed and low fragmentation~\cite{wilson1995survey}.
 
 \textbf{Deferred Coalescing.} TLSF performs immediate coalescing, but many allocators \textit{defer} coalescing for performance. The rationale: if a block of size $s$ is freed and then size $s$ is requested again, immediate coalescing would have merged it into a larger block, requiring the larger block to be re-split. Deferred systems maintain ``quick lists'' of recently freed blocks by size class, only coalescing during memory pressure. This trades slightly higher peak memory usage for significantly faster allocation in bursty workloads~\cite{wilson1995survey}.
 
@@ -1284,7 +1567,7 @@ The allocators described above handle the fundamental problem of page frame allo
 
 \textbf{Object Caching: The Slab Allocator.} For kernel objects of fixed type (inodes, task structures, network buffers), the cost of \textit{constructing} an object often exceeds the cost of allocating memory for it. Construction includes initializing mutexes, condition variables, and reference counts. The \textit{slab allocator}~\cite{bonwick1994slab} addresses this by caching \textit{constructed} objects.
 
-A slab is a contiguous region of memory (typically one or more pages) pre-divided into fixed-size object slots. When an object is freed, it is returned to its slab \textit{without destruction}-the mutex remains initialized, the reference count at zero. On the next allocation, the object is returned immediately, avoiding constructor overhead. Measurements on SunOS showed allocation dropping from 33~microseconds to 5.7~microseconds-an 83\% reduction, mostly from avoiding reconstruction~\cite{bonwick1994slab}.
+A slab is a contiguous region of memory (typically one or more pages) pre-divided into fixed-size object slots. When an object is freed, it is returned to its slab \textit{without destruction} - the mutex remains initialized, the reference count at zero. On the next allocation, the object is returned immediately, avoiding constructor overhead. Measurements on SunOS showed allocation dropping from 33~microseconds to 5.7~microseconds-an 83\% reduction, mostly from avoiding reconstruction~\cite{bonwick1994slab}.
 
 \textbf{Multiprocessor Scalability: Per-CPU Caches and Hoard.} On SMP systems, a single allocator lock becomes a contention bottleneck. Two solutions dominate:
 \begin{itemize}
