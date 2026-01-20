@@ -1266,7 +1266,86 @@ Most modern architectures support both local and high-precision timers. For exam
 Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21}\cite{osdev-ps22} if are available on our device. Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec}\cite{osdev-usb}.
 
 \subsection{File Systems}
-TODO: ADAM
+
+Once the kernel has established memory management and basic device communication, the next major milestone is the management of persistent data. In a raw hardware context, storage devices (Hard Disk Drives, SSDs, NVMe drives) present themselves as vast, linear arrays of blocks (typically 512~B or 4~KiB) accessed via Linear Block Addressing (LBA).
+
+Operating directly on raw sectors is impractical for a general-purpose operating system. To manage code (executables) and data effectively, the kernel requires an abstraction layer that transforms this linear physical storage into a hierarchical structure. This is the role of the File System. In the context of OS development, three primary challenges arise: defining a unified interface for disparate storage formats, abstracting the physical access to storage media, and bootstrapping the initial file system to load userspace programs.
+
+\subsubsection{Virtual File System (VFS)}
+
+A non-trivial kernel must support multiple file system formats (e.g., FAT32 \cite{fat-spec} for UEFI compatibility, Ext2 \cite{ext2-spec} for Linux compatibility, or ISO9660 \cite{iso9660-spec} for optical media). Implementing system calls like \texttt{open()} or \texttt{read()} separately for each format would lead to a combinatorial explosion of code paths and tight coupling between the kernel core and specific driver implementations.
+
+To resolve this, modern kernels implement a \textbf{Virtual File System} (VFS). The VFS is a kernel subsystem that provides a unified abstract interface for file operations. It defines generic structures --- such as file metadata, directory entries and mounted filesystems --- and a set of operations that concrete file system drivers must implement. By using function pointer table, the VFS decouples the high-level system calls from low-level storage details.
+
+\subsubsection{Block Device Abstraction}
+
+While the VFS abstracts the logical format of data (files and directories), the kernel must also abstract the physical location of that data. A file system driver, such as FAT32, contains logic to manipulate File Allocation Tables and directory clusters, but it should not contain logic for communicating with a SATA controller, or managing TCP/IP packets.
+
+To achieve this separation of concerns, the kernel implements a \textbf{Block Device Interface}. This interface treats every storage medium as a generic array of fixed-size sectors, regardless of the underlying hardware implementation. The interface typically exposes a minimal contract:
+\begin{itemize}
+    \item \texttt{read\_sectors(lba, count, buffer)}
+    \item \texttt{write\_sectors(lba, count, buffer)}
+    \item \texttt{get\_device\_info()} (total sectors, sector size)
+\end{itemize}
+
+This abstraction allows specific storage drivers to transparently fulfill requests:
+\begin{itemize}
+    \item \textbf{Physical Disks}: An AHCI driver translates the LBA request into hardware commands sent over the bus.
+    \item \textbf{RAM Disks}: A RAM disk driver simply performs a \texttt{memcpy} to or from a specific offset in physical memory.
+    \item \textbf{Network Block Devices}: A driver encapsulates the request into network packets, transmits them to a remote server, and awaits the response.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.0cm,
+    block/.style={
+        rectangle, 
+        draw=black!70, 
+        rounded corners=3pt, 
+        minimum width=3.5cm, 
+        minimum height=0.8cm, 
+        align=center, 
+        fill=white,
+        font=\small
+    },
+    arrow/.style={-Latex, thick}
+]
+
+\node (fs) [block, fill=gray!10] {Filesystem Driver\\(e.g., FAT32)};
+
+\node (bdev) [block, below=0.8cm of fs, fill=gray!20, minimum width=8cm] {\textbf{Block Device Interface}\\ \texttt{read(LBA) / write(LBA)}};
+
+\node (ram) [block, below=0.8cm of bdev, fill=gray!10, xshift=-4cm] {RAM Disk Driver\\ \scriptsize (\texttt{memcpy})};
+\node (disk) [block, below=0.8cm of bdev, fill=gray!10] {AHCI Driver\\ \scriptsize (SATA Commands)};
+\node (net) [block, below=0.8cm of bdev, fill=gray!10, xshift=4cm] {Network Driver\\ \scriptsize (TCP/IP Packets)};
+
+\draw[arrow] (fs) -- (bdev);
+\draw[arrow] (bdev.south) -- (ram.north);
+\draw[arrow] (bdev.south) -- (disk.north);
+\draw[arrow] (bdev.south) -- (net.north);
+
+\end{tikzpicture}
+\caption{Decoupling logic via Block Device Abstraction}
+\label{fig:block_abstraction}
+\end{figure}
+
+By implementing this layer, the exact same FAT32 code can handle a USB stick, a partition in memory, or a remote disk over the network without modification.
+
+\subsubsection{The Bootstrapping Problem and Initrd}
+
+A "chicken-and-egg" problem exists during the early boot process. To load a userspace program (like a shell), the kernel needs a file system driver. However, on a microkernel or a modular monolithic kernel, file system drivers and disk drivers might technically reside on the disk itself. Furthermore, writing an NVMe or AHCI (SATA) driver and a full partition parser is a massive undertaking that blocks the development of other kernel features.
+
+To bypass this complexity during the early stages of development, one can utilize an \textbf{Initial Ramdisk} (Initrd). This is a small file system image loaded into memory by the bootloader (e.g., GRUB via the Multiboot2 protocol) alongside the kernel binary.
+
+Because the bootloader handles the disk I/O to load this image, the kernel does not initially require complex disk drivers. Using the Block Device Abstraction described in Figure~\ref{fig:block_abstraction}, the kernel simply wraps the memory range containing the image in a RAM Disk block driver. It then:
+\begin{enumerate}
+    \item Initializes the Block Device pointing to the memory address.
+    \item Mounts the file system residing on that device as root (\texttt{/}).
+    \item Loads userspace executable from this memory.
+\end{enumerate}
+
+This approach isolates the development of other subsystems from the complexities of physical storage hardware, serving as a critical bridge to a self-hosting system.
 
 \subsection{Screen Drawing}
 TODO: KRYCZKA
@@ -3766,6 +3845,7 @@ COW & Copy On Write \\
 SMP & Symmetric MultiProcessing \\
 ACPI & Advanced Configuration and Power Interface \\
 PCI & Peripheral Component Interconnect \\
+PCIe & Peripheral Component Interconnect Express \\
 USB & Universal Serial Bus \\
 IPC & Inter Process Communication \\
 FAT & File Allocation Table \\
@@ -3773,6 +3853,10 @@ FHS & Filesystem Hierarchy Standard \\
 ELF & Executable and Linkable Format \\
 ASLR & Address Space Layout Randomization \\
 SIMD & Single Instruction, Multiple Data \\
+LBA & Linear Block Addressing \\
+AHCI & Advanced Host Controller Interface \\
+SATA & Serial Advanced Technology Attachment \\
+NVMe & Non-Volatile Memory Express \\
 \end{tabular}
 \\
 \thispagestyle{empty}
