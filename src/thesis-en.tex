@@ -1412,9 +1412,84 @@ TODO: JAKUB
 TODO: JAKUB
 
 \subsubsection{Syscalls}
-TODO: ADAM
+\label{subsubsec:syscalls}
+
+System calls (syscalls) are the primary interface through which userspace applications request services from the operating system kernel. Modern processors enforce a strict separation between unprivileged applications and the operating system kernel to ensure stability and security. This privilege separation is architecturally defined: x86-64 uses Protection Rings (Ring 3 for users, Ring 0 for kernel) \cite{IntelManual-Protection-Rings}, ARM64 uses Exception Levels (EL0 for users, EL1 for kernel) \cite{ARM-Arch-Ref-Exception-Levels}, and RISC-V uses Privilege Modes (User Mode and Supervisor Mode) \cite{RISCV-Priv-Spec-Privilege-Levels}.
+
+A system call is a synchronous transition wherein an application explicitly requests a service from the kernel. This process involves privilege escalation, switching stacks, performing the operation, and safely returning to the unprivileged state.
+
+\paragraph{Design Considerations}
+
+Designing an efficient and secure syscall mechanism is crucial for overall system performance and stability. The syscall interface must balance ease of use, performance, and security. Key considerations include:
+
+\begin{itemize}
+    \item \textbf{Performance:} Syscalls should introduce minimal overhead to avoid bottlenecks in application performance. Techniques such as fast syscall instructions and optimized context switching are essential.
+    \item \textbf{Security:} The syscall interface must enforce strict access controls to prevent unauthorized access to kernel resources. This includes validating parameters and ensuring that userspace applications cannot compromise kernel integrity.
+    \item \textbf{Compatibility:} The syscall interface should maintain compatibility with established standards such as POSIX to ensure portability of existing software.
+    \item \textbf{Extensibility:} The syscall interface should be designed to accommodate future extensions without breaking existing applications. This can be achieved through versioning and reserved syscall numbers.
+\end{itemize}
+
+\paragraph{Triggering Mechanisms}
+
+There are two primary methods for implementing system calls, distinguished by the balance between simplicity and performance.
+
+\begin{enumerate}
+    \item \textbf{Software Interrupts:} Historically, systems used software interrupts (e.g., \texttt{int 0x80} on x86) to trigger syscalls. In this model, the CPU looks up a handler in the Interrupt Descriptor Table (IDT), performs extensive security checks (privilege verification, segment checks), and automatically pushes the execution context onto the kernel stack. 
+    
+    While robust and easy to debug (as it unifies syscalls with exception handling), this mechanism is slow, typically consuming approximately 100--200 CPU cycles per call depending on the architecture. It is often the recommended starting point for new OS projects due to its implementation simplicity.
+
+    \item \textbf{Fast System Call Instructions:} Modern architectures provide dedicated instructions optimized for low-latency transitions (approximately 30--50 cycles). These bypass the complex interrupt logic but require the kernel to perform more manual state management.
+    \begin{itemize}
+        \item \textbf{x86-64 (\texttt{syscall}/\texttt{sysret}):} The CPU loads the kernel entry point and code segments from Model-Specific Registers (MSRs). The CPU does not switch the stack pointer automatically. The kernel must explicitly save the user stack and load the kernel stack immediately upon entry.
+        \item \textbf{ARM64 (\texttt{svc}/\texttt{eret}):} The processor saves the state and return address into specific system registers (SPSR and ELR) \cite{ARM-Arch-Ref-Exception-Levels}. Unlike x86-64, ARM64 hardware automatically switches the stack pointer to the kernel's stack (\texttt{SP\_EL1}).
+        \item \textbf{RISC-V (\texttt{ecall}/\texttt{sret}):} Following a minimalist philosophy, the hardware does little more than jump to the trap vector and switch privilege modes \cite{RISCV-Priv-Spec-System-Call}. Specifically, the hardware automatically saves the return address to \texttt{mepc} (or \texttt{sepc}), records the exception cause in \texttt{mcause} (or \texttt{scause}), updates the privilege bits in \texttt{mstatus} (or \texttt{sstatus}), and disables interrupts. However, the kernel is responsible for saving all general-purpose registers and manually swapping the stack pointer, typically using a scratch register.
+    \end{itemize}
+\end{enumerate}
+
+\paragraph{The Application Binary Interface (ABI)}
+
+Once the processor transitions to kernel mode, the kernel must identify which service is requested and where the arguments are located. This is defined by the ABI. To maximize performance, the ABI specifies that arguments are passed in CPU registers rather than on the stack. This avoids the overhead of the kernel accessing user memory directly, which creates security risks.
+
+\paragraph{Dispatch and Execution}
+
+Upon entry to the kernel, the raw system call number must be mapped to a specific internal kernel function. The standard and most efficient mechanism for this is a plain Dispatch Table. This approach utilizes a contiguous array of function pointers, where the system call number serves as the index. The dispatch logic is minimal:
+\begin{enumerate}
+    \item \textbf{Bounds Check:} The kernel verifies that the requested number is less than the total number of supported syscalls.
+    \item \textbf{Invocation:} The kernel executes an indirect call to the address stored at \texttt{table[syscall\_number]}.
+\end{enumerate}
+This method guarantees $O(1)$ constant-time performance, ensuring that the latency of invoking a system call remains minimal. This approach requires syscall numbers to be contiguous; gaps in the numbering space are typically handled by null pointers or stub functions in the table.
+
+\paragraph{Security and Validation}
+
+The syscall interface is the primary attack surface of the kernel. The kernel must treat all data from userspace as untrusted.
+\begin{itemize}
+    \item \textbf{Pointer Validation:} The kernel must ensure that pointers passed by the user actually point to valid userspace memory. Failing to perform this check allows a malicious program to trick the kernel into reading or overwriting its own internal structures (see the "Confused Deputy" problem \cite{confused_deputy_problem}).
+    \item \textbf{TOCTOU (Time-of-Check to Time-of-Use):} If the kernel validates data in user memory and reads it later, a separate thread could modify that data in between. For example, a kernel might check that a filename pointer is valid, but before it reads the actual filename, another thread could modify that memory to point to a privileged file. To prevent this, the kernel must copy data into kernel-space buffers \textit{before} validation and processing.
+\end{itemize}
+
+\paragraph{Performance Optimization}
+
+For high-frequency operations where even the minimal syscall overhead is too high (e.g., querying the system time), Linux employs \textbf{vDSO} (virtual Dynamic Shared Object). This mechanism maps a read-only page of kernel memory containing specific data and code into the user process. The application can then execute a standard function call to read this data without ever triggering a context switch or entering kernel mode \cite{linux_vdso}.
+
 \subsubsection{Libc System Headers}
-TODO: ADAM
+
+Although the system call interface constitutes the fundamental mechanism for interaction with the kernel, it operates at a level of abstraction that is unsuitable for general-purpose application development. In practice, application programmers do not invoke syscalls directly via assembly instructions. Instead, they rely on the \texttt{libc}, whose header files define the API between userspace software and the operating system.
+
+In the context of custom operating system development, system headers are commonly structured into three distinct categories in order to ensure clarity, portability, and standards compliance.
+
+\paragraph{Standard ISO C Headers}
+To enable existing software to compile and run on a new operating system, the \texttt{libc} implementation must provide all headers required by the ISO C standard \cite{iso_c_std}. These headers must strictly conform to the standardized function signatures and data types.
+
+Internally, such functions act as abstraction layers over the kernel interface. The implementation of \texttt{fopen} typically allocates a userspace data structure to represent the file stream and subsequently invokes the kernel's syscall to obtain a file descriptor or handle. This design effectively decouples application-level code from kernel-specific details such as syscall numbers, calling conventions, and ABI constraints.
+
+\paragraph{POSIX and System Headers}
+In addition to the ISO C standard, many operating systems implement parts of the POSIX specification \cite{posix_std} to improve compatibility with existing UNIX-like software. Headers associated with POSIX functionality are commonly placed within the \texttt{sys/} directory (e.g., \texttt{<sys/types.h>} or \texttt{<sys/stat.h>}).
+
+\paragraph{OS-Specific Extensions}
+Custom operating systems frequently introduce features that fall outside the scope of ISO C or POSIX, such as direct frame buffer access, specialized inter-process communication mechanisms, or hardware-specific controls.
+
+It is considered best practice to place operating system-specific extensions within a clearly separated namespace, for example under a dedicated directory such as \texttt{<alkos/...>}. This approach enables applications developed specifically for the target operating system to access unique kernel features.
+
 \subsubsection{Conversion to User Space}
 TODO: JAKUB
 

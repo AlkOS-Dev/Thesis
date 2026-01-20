@@ -88,6 +88,13 @@
   url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
 }
 
+@manual{IntelManual-Protection-Rings,
+author  = {Intel Corporation},
+title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
+pages   = {170--172},
+url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+}
+
 @manual{osdev-pic,
   author  = {OsDev community},
   title   = {OsDev - PIC},
@@ -293,7 +300,15 @@ url     = {https://github.com/agl/critbit/blob/4bb69901a9813de05331bd3afc5085e00
   note    = {See System Registers section describing ID\_AA64PFR0\_EL1 for feature discovery.},
 }
 
-% RISC-V PRIVILEGED
+@manual{ARM-Arch-Ref-Exception-Levels,
+  author  = {ARM Holdings},
+  title   = {Arm Architecture Reference Manual for A-profile architecture},
+  year    = {2022},
+  url     = {https://developer.arm.com/documentation/ddi0487/latest/},
+  note    = {See Chapter 3.3 Exception Levels for details on EL0, EL1, EL2, and EL3 privilege levels.},
+}
+
+% RISC-V ARCHITECTURE
 @manual{RISCV-Priv-Spec,
   author  = {RISC-V International},
   title   = {The RISC-V Instruction Set Manual, Volume II: Privileged Architecture},
@@ -301,6 +316,24 @@ url     = {https://github.com/agl/critbit/blob/4bb69901a9813de05331bd3afc5085e00
   year    = {2021},
   url     = {https://riscv.org/technical/specifications/},
   note    = {See Chapter 'Machine-Level ISA', specifically the Machine ISA Register (misa) for extension discovery.},
+}
+
+@manual{RISCV-Priv-Spec-Privilege-Levels,
+  author  = {RISC-V International},
+  title   = {The RISC-V Instruction Set Manual, Volume II: Privileged Architecture},
+  version = {20211203},
+  year    = {2021},
+  url     = {https://docs.riscv.org/reference/isa/_attachments/riscv-privileged.pdf},
+  note    = {See Chapter 'Privilege Levels', specifically the M-mode, S-mode, and U-mode privilege levels.},
+}
+
+@manual{RISCV-Priv-Spec-System-Call,
+  author  = {RISC-V International},
+  title   = {The RISC-V Instruction Set Manual, Volume II: Privileged Architecture},
+  version = {20211203},
+  year    = {2021},
+  url     = {https://docs.riscv.org/reference/isa/_attachments/riscv-privileged.pdf},
+  note    = {See Chapter 'Machine Trap Delegation' for system call handling and delegation mechanisms.},
 }
 
 % INTEL SDM SPECIFIC FEATURES
@@ -518,3 +551,33 @@ howpublished = {Source Code},
   title       = {Linux Task Struct Definition},
   url         = {https://github.com/torvalds/linux/blob/master/include/linux/sched.h},
 }
+
+@misc{linux_vdso,
+  author      = {Linux Foundation},
+  title       = {Linux Virtual Dynamic Shared Object},
+  url         = {https://www.man7.org/linux/man-pages/man7/vdso.7.html},
+}
+
+% STANDARDS
+
+@manual{iso_c_std,
+  title        = {ISO/IEC 9899:2024 Information technology — Programming languages — C (C23)},
+  organization = {International Organization for Standardization},
+  year         = {2024},
+  note         = {Section 7: Library},
+}
+
+@manual{posix_std,
+  title        = {The Open Group Base Specifications Issue 8, 2024 Edition},
+  organization = {The Open Group},
+  year         = {2024},
+  note         = {IEEE Std 1003.1-2024},
+}
+
+% OTHER
+
+@misc{confused_deputy_problem,
+   author = {Wikipedia},
+   title =  {Confused deputy problem},
+   url =    {https://en.wikipedia.org/wiki/Confused_deputy_problem},
+ }
