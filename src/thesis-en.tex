@@ -21,9 +21,6 @@
 
 \usepackage[hidelinks]{hyperref}
 
-\usepackage[inkscapepath=../output/svg/]{svg}
-
-
 % ------ MARGINS, INDENTATION, LINESPREAD ------
 
 \usepackage[inner=20mm, outer=20mm, bindingoffset=10mm, top=25mm, bottom=25mm]{geometry}
@@ -152,6 +149,10 @@
 \usepackage[colorinlistoftodos]{todonotes}
 \usepackage[inkscapepath=../output/svg/]{svg}
 \usepackage{graphicx}
+
+% --------- LIST OF SYMBOLS AND ABBREVIATIONS ------
+
+\usepackage{supertabular}
 
 % --------- CHAPTER HEADERS -------
 
@@ -714,7 +715,7 @@ In this context, the Operating System does not "discover" memory. The kernel cod
 
 To allow a single kernel binary to support multiple board configurations without hardcoding, architectures such as ARM64 and RISC-V utilize the \textbf{Flattened Device Tree}. The bootloader passes a pointer to a binary structure (the DTB Blob) which describes the hardware topology, including physical memory ranges and reserved regions.
 
-The DTB format encodes the device tree into a linear, pointerless data structure, as illustrated in Figure~\ref{fig:dtb_structure}. It consists of a fixed-size header followed by three variable-sized blocks:
+The DTB format encodes the device tree into a linear, pointerless data structure. It consists of a fixed-size header followed by three variable-sized blocks:
 \begin{enumerate}
     \item \textbf{Memory Reservation Block}: Lists physical memory ranges that the kernel must not overwrite (e.g., firmware runtime data).
     \item \textbf{Structure Block}: Describes the device nodes and properties in a linear tree format using token-based tags.
@@ -1642,7 +1643,7 @@ The compilation of userspace applications for a custom operating system differs 
 
 A standardized executable container format must be selected to serve as a formal contract between the compiler toolchain and the kernel loader. The Executable and Linkable Format (ELF) is the standard for Unix-like systems and custom operating system projects due to its extensibility and broad toolchain support.
 
-ELF binaries utilize \emph{program headers} to describe contiguous regions of the file known as \emph{segments}. The kernel loader parses these headers to determine:
+ELF binaries utilize "program headers" to describe contiguous regions of the file known as \textbf{segments}. The kernel loader parses these headers to determine:
 \begin{itemize}
 \item \textbf{Load addresses:} The virtual memory addresses at which segments are mapped.
 \item \textbf{Memory footprint:} The distinction between file size and memory size, allowing for the automatic zero-initialization of uninitialized data regions (BSS).
@@ -1653,7 +1654,7 @@ For early-stage operating systems, \textbf{static linking} is often the preferre
 
 \subsubsection{Memory Layout}
 
-To enforce the given memory layout, a custom linker script is required. This script groups program sections according to their protection requirements, enabling the kernel to utilize hardware-level security mechanisms such as the NX (No-Execute) bit on the x86\_64 platform. A standard userspace memory layout comprises the following sections in order of increasing virtual address:
+To enforce the given memory layout, a custom linker script is required. This script groups program sections according to their protection requirements, enabling the kernel to utilize hardware-level security mechanisms, such as non-executable memory regions. A standard userspace memory layout comprises the following sections in order of increasing virtual address:
 \begin{enumerate}
 \item \textbf{.text}: Executable code; marked read-only and executable.
 \item \textbf{.rodata}: Constants and string literals; marked read-only and non-executable.
@@ -1661,7 +1662,9 @@ To enforce the given memory layout, a custom linker script is required. This scr
 \item \textbf{.bss}: Uninitialized global variables; these occupy no storage space in the binary but are allocated in virtual memory at runtime.
 \end{enumerate}
 
-For example, on the x86\_64 architecture adhering to the System V ABI, the \textbf{.text} section typically originates at virtual address \texttt{0x400000} to prevent bugs associated with null pointer dereferences. Subsequent sections are aligned to page boundaries (commonly 4KiB). The userspace stack is conventionally located near the upper boundary of the user address space and grows downward, while the heap is initialized immediately following the \textbf{.bss} section and grows upward.
+Across all major architectures, these sections are aligned to page boundaries to satisfy the requirements of the memory management unit (MMU), with page sizes typically being 4~KiB, though larger pages may be supported. The use of page-level permissions enables the kernel to prevent unintended execution of data regions and to enforce write protection for code and constant data.
+
+While the exact virtual base address of the \textbf{.text} section is platform- and ABI-dependent, it is commonly chosen to be non-zero in order to mitigate errors related to null pointer dereferences. Similarly, the overall organization of dynamic memory follows a shared convention: the userspace heap is initialized immediately after the \textbf{.bss} section and grows toward higher virtual addresses, whereas the userspace stack is placed near the upper limit of the user address space and grows downward.
 
 \subsubsection{Runtime Initialization}
 
@@ -3847,7 +3850,7 @@ This sequence validates path resolution, file descriptor table management in the
     fclose(fp);
 \end{lstlisting}
 
-\subsection{Graphics Test Program}
+\subsection{Graphics Test}
 
 The \texttt{gui\_test} application demonstrates the capability of the kernel to provide userspace processes with access to video hardware in a controlled manner. The resulting output is shown in Figure \ref{fig:gui_test}.
 
@@ -4132,25 +4135,37 @@ TODO: JAKUB
 % --------- LIST OF SYMBOLS AND ABBREVIATIONS ------
 \chapter*{List of symbols and abbreviations}
 
-\begin{tabular}{cl}
+\begin{supertabular}{cl}
 ABI & Application Binary Interface \\
+ACPI & Advanced Configuration and Power Interface \\
+AHCI & Advanced Host Controller Interface \\
 API & Application Programming Interface \\
 APIC & Advanced Programmable Interrupt Controller \\
+ASLR & Address Space Layout Randomization \\
+BSS & Block Starting Symbol \\
 CFS & Completly Fair Scheduler \\
 COW & Copy On Write \\
 CRTP & Curiously Recurring Template Pattern \\
 DMA & Direct Memory Access \\
 EEVDF & Earliest Eligible Virtual Deadline First \\
+ELF & Executable and Linkable Format \\
+FAT & File Allocation Table \\
+FHS & Filesystem Hierarchy Standard \\
 GDT & Global Descriptor Table \\
 IDT & Interrupt Descriptor Table \\
 IPC & Inter-Process Communication \\
 ISR & Interrupt Service Routine \\
 LAPIC & Local Advanced Programmable Interrupt Controller \\
+LBA & Linear Block Addressing \\
 LIT & Logical Interrupt Table \\
+LKM & Loadable Kernel Module \\
 MLFQ & Multi-Level Feedback Queue \\
 MMIO & Memory-Mapped I/O \\
 MMU & Memory Management Unit \\
+NVMe & Non-Volatile Memory Express \\
 OS & Operating System \\
+PCI & Peripheral Component Interconnect \\
+PCIe & Peripheral Component Interconnect Express \\
 PCP & Per-CPU Pagessets \\
 PIC & Programmable Interrupt Controller \\
 PID & Process IDentifier \\
@@ -4159,34 +4174,17 @@ PMM & Physical Memory Manager \\
 POSIX & Portable Operating System Interface \\
 REPL & Read-Eval-Print Loop \\
 RTC & Real-Time Clock \\
+SATA & Serial Advanced Technology Attachment \\
+SIMD & Single Instruction, Multiple Data \\
 SMP & Symmetric MultiProcessing \\
 TID & Thread IDentifier \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
-VFS & Virtual File System \\
-CFS & Completly Fair Scheduler \\
-EEVDF & Earliest Eligible Virtual Deadline First \\
-DMA & Direct Memory Access \\
-PCP & Per-CPU Pagessets \\
-COW & Copy On Write \\
-SMP & Symmetric MultiProcessing \\
-ACPI & Advanced Configuration and Power Interface \\
-PCI & Peripheral Component Interconnect \\
-PCIe & Peripheral Component Interconnect Express \\
 USB & Universal Serial Bus \\
-IPC & Inter Process Communication \\
-FAT & File Allocation Table \\
-FHS & Filesystem Hierarchy Standard \\
-ELF & Executable and Linkable Format \\
-ASLR & Address Space Layout Randomization \\
-SIMD & Single Instruction, Multiple Data \\
-LBA & Linear Block Addressing \\
-AHCI & Advanced Host Controller Interface \\
-SATA & Serial Advanced Technology Attachment \\
-NVMe & Non-Volatile Memory Express \\
+VFS & Virtual File System \\
 VMM & Virtual Memory Manager \\
 WAD & Where's All the Data \\
-\end{tabular}
+\end{supertabular}
 \\
 \thispagestyle{empty}
 
