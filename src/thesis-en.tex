@@ -21,9 +21,6 @@
 
 \usepackage[hidelinks]{hyperref}
 
-\usepackage[inkscapepath=../output/svg/]{svg}
-
-
 % ------ MARGINS, INDENTATION, LINESPREAD ------
 
 \usepackage[inner=20mm, outer=20mm, bindingoffset=10mm, top=25mm, bottom=25mm]{geometry}
@@ -150,8 +147,12 @@
 \usepackage{tikz}
 \usetikzlibrary{fit, backgrounds, shapes, arrows.meta, positioning, calc, chains}
 \usepackage[colorinlistoftodos]{todonotes}
-\usepackage{svg}
+\usepackage[inkscapepath=../output/svg/]{svg}
 \usepackage{graphicx}
+
+% --------- LIST OF SYMBOLS AND ABBREVIATIONS ------
+
+\usepackage{supertabular}
 
 % --------- CHAPTER HEADERS -------
 
@@ -1266,7 +1267,86 @@ Most modern architectures support both local and high-precision timers. For exam
 Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21}\cite{osdev-ps22} if are available on our device. Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec}\cite{osdev-usb}.
 
 \subsection{File Systems}
-TODO: ADAM
+
+Once the kernel has established memory management and basic device communication, the next major milestone is the management of persistent data. In a raw hardware context, storage devices (Hard Disk Drives, SSDs, NVMe drives) present themselves as vast, linear arrays of blocks (typically 512~B or 4~KiB) accessed via Linear Block Addressing (LBA).
+
+Operating directly on raw sectors is impractical for a general-purpose operating system. To manage code (executables) and data effectively, the kernel requires an abstraction layer that transforms this linear physical storage into a hierarchical structure. This is the role of the File System. In the context of OS development, three primary challenges arise: defining a unified interface for disparate storage formats, abstracting the physical access to storage media, and bootstrapping the initial file system to load userspace programs.
+
+\subsubsection{Virtual File System (VFS)}
+
+A non-trivial kernel must support multiple file system formats (e.g., FAT32 \cite{fat-spec} for UEFI compatibility, Ext2 \cite{ext2-spec} for Linux compatibility, or ISO9660 \cite{iso9660-spec} for optical media). Implementing system calls like \texttt{open()} or \texttt{read()} separately for each format would lead to a combinatorial explosion of code paths and tight coupling between the kernel core and specific driver implementations.
+
+To resolve this, modern kernels implement a \textbf{Virtual File System} (VFS). The VFS is a kernel subsystem that provides a unified abstract interface for file operations. It defines generic structures --- such as file metadata, directory entries and mounted filesystems --- and a set of operations that concrete file system drivers must implement. By using function pointer table, the VFS decouples the high-level system calls from low-level storage details.
+
+\subsubsection{Block Device Abstraction}
+
+While the VFS abstracts the logical format of data (files and directories), the kernel must also abstract the physical location of that data. A file system driver, such as FAT32, contains logic to manipulate File Allocation Tables and directory clusters, but it should not contain logic for communicating with a SATA controller, or managing TCP/IP packets.
+
+To achieve this separation of concerns, the kernel implements a \textbf{Block Device Interface}. This interface treats every storage medium as a generic array of fixed-size sectors, regardless of the underlying hardware implementation. The interface typically exposes a minimal contract:
+\begin{itemize}
+    \item \texttt{read\_sectors(lba, count, buffer)}
+    \item \texttt{write\_sectors(lba, count, buffer)}
+    \item \texttt{get\_device\_info()} (total sectors, sector size)
+\end{itemize}
+
+This abstraction allows specific storage drivers to transparently fulfill requests:
+\begin{itemize}
+    \item \textbf{Physical Disks}: An AHCI driver translates the LBA request into hardware commands sent over the bus.
+    \item \textbf{RAM Disks}: A RAM disk driver simply performs a \texttt{memcpy} to or from a specific offset in physical memory.
+    \item \textbf{Network Block Devices}: A driver encapsulates the request into network packets, transmits them to a remote server, and awaits the response.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.0cm,
+    block/.style={
+        rectangle, 
+        draw=black!70, 
+        rounded corners=3pt, 
+        minimum width=3.5cm, 
+        minimum height=0.8cm, 
+        align=center, 
+        fill=white,
+        font=\small
+    },
+    arrow/.style={-Latex, thick}
+]
+
+\node (fs) [block, fill=gray!10] {Filesystem Driver\\(e.g., FAT32)};
+
+\node (bdev) [block, below=0.8cm of fs, fill=gray!20, minimum width=8cm] {\textbf{Block Device Interface}\\ \texttt{read(LBA) / write(LBA)}};
+
+\node (ram) [block, below=0.8cm of bdev, fill=gray!10, xshift=-4cm] {RAM Disk Driver\\ \scriptsize (\texttt{memcpy})};
+\node (disk) [block, below=0.8cm of bdev, fill=gray!10] {AHCI Driver\\ \scriptsize (SATA Commands)};
+\node (net) [block, below=0.8cm of bdev, fill=gray!10, xshift=4cm] {Network Driver\\ \scriptsize (TCP/IP Packets)};
+
+\draw[arrow] (fs) -- (bdev);
+\draw[arrow] (bdev.south) -- (ram.north);
+\draw[arrow] (bdev.south) -- (disk.north);
+\draw[arrow] (bdev.south) -- (net.north);
+
+\end{tikzpicture}
+\caption{Decoupling logic via Block Device Abstraction}
+\label{fig:block_abstraction}
+\end{figure}
+
+By implementing this layer, the exact same FAT32 code can handle a USB stick, a partition in memory, or a remote disk over the network without modification.
+
+\subsubsection{The Bootstrapping Problem and Initrd}
+
+A "chicken-and-egg" problem exists during the early boot process. To load a userspace program (like a shell), the kernel needs a file system driver. However, on a microkernel or a modular monolithic kernel, file system drivers and disk drivers might technically reside on the disk itself. Furthermore, writing an NVMe or AHCI (SATA) driver and a full partition parser is a massive undertaking that blocks the development of other kernel features.
+
+To bypass this complexity during the early stages of development, one can utilize an \textbf{Initial Ramdisk} (Initrd). This is a small file system image loaded into memory by the bootloader (e.g., GRUB via the Multiboot2 protocol) alongside the kernel binary.
+
+Because the bootloader handles the disk I/O to load this image, the kernel does not initially require complex disk drivers. Using the Block Device Abstraction described in Figure~\ref{fig:block_abstraction}, the kernel simply wraps the memory range containing the image in a RAM Disk block driver. It then:
+\begin{enumerate}
+    \item Initializes the Block Device pointing to the memory address.
+    \item Mounts the file system residing on that device as root (\texttt{/}).
+    \item Loads userspace executable from this memory.
+\end{enumerate}
+
+This approach isolates the development of other subsystems from the complexities of physical storage hardware, serving as a critical bridge to a self-hosting system.
 
 \subsection{Screen Drawing}
 TODO: KRYCZKA
@@ -1412,18 +1492,212 @@ TODO: JAKUB
 TODO: JAKUB
 
 \subsubsection{Syscalls}
-TODO: ADAM
+\label{subsubsec:syscalls}
+
+System calls (syscalls) are the primary interface through which userspace applications request services from the operating system kernel. Modern processors enforce a strict separation between unprivileged applications and the operating system kernel to ensure stability and security. This privilege separation is architecturally defined: x86-64 uses Protection Rings (Ring 3 for users, Ring 0 for kernel) \cite{IntelManual-Protection-Rings}, ARM64 uses Exception Levels (EL0 for users, EL1 for kernel) \cite{ARM-Arch-Ref-Exception-Levels}, and RISC-V uses Privilege Modes (User Mode and Supervisor Mode) \cite{RISCV-Priv-Spec-Privilege-Levels}.
+
+A system call is a synchronous transition wherein an application explicitly requests a service from the kernel. This process involves privilege escalation, switching stacks, performing the operation, and safely returning to the unprivileged state.
+
+\paragraph{Design Considerations}
+
+Designing an efficient and secure syscall mechanism is crucial for overall system performance and stability. The syscall interface must balance ease of use, performance, and security. Key considerations include:
+
+\begin{itemize}
+    \item \textbf{Performance:} Syscalls should introduce minimal overhead to avoid bottlenecks in application performance. Techniques such as fast syscall instructions and optimized context switching are essential.
+    \item \textbf{Security:} The syscall interface must enforce strict access controls to prevent unauthorized access to kernel resources. This includes validating parameters and ensuring that userspace applications cannot compromise kernel integrity.
+    \item \textbf{Compatibility:} The syscall interface should maintain compatibility with established standards such as POSIX to ensure portability of existing software.
+    \item \textbf{Extensibility:} The syscall interface should be designed to accommodate future extensions without breaking existing applications. This can be achieved through versioning and reserved syscall numbers.
+\end{itemize}
+
+\paragraph{Triggering Mechanisms}
+
+There are two primary methods for implementing system calls, distinguished by the balance between simplicity and performance.
+
+\begin{enumerate}
+    \item \textbf{Software Interrupts:} Historically, systems used software interrupts (e.g., \texttt{int 0x80} on x86) to trigger syscalls. In this model, the CPU looks up a handler in the Interrupt Descriptor Table (IDT), performs extensive security checks (privilege verification, segment checks), and automatically pushes the execution context onto the kernel stack. 
+    
+    While robust and easy to debug (as it unifies syscalls with exception handling), this mechanism is slow, typically consuming approximately 100--200 CPU cycles per call depending on the architecture. It is often the recommended starting point for new OS projects due to its implementation simplicity.
+
+    \item \textbf{Fast System Call Instructions:} Modern architectures provide dedicated instructions optimized for low-latency transitions (approximately 30--50 cycles). These bypass the complex interrupt logic but require the kernel to perform more manual state management.
+    \begin{itemize}
+        \item \textbf{x86-64 (\texttt{syscall}/\texttt{sysret}):} The CPU loads the kernel entry point and code segments from Model-Specific Registers (MSRs). The CPU does not switch the stack pointer automatically. The kernel must explicitly save the user stack and load the kernel stack immediately upon entry.
+        \item \textbf{ARM64 (\texttt{svc}/\texttt{eret}):} The processor saves the state and return address into specific system registers (SPSR and ELR) \cite{ARM-Arch-Ref-Exception-Levels}. Unlike x86-64, ARM64 hardware automatically switches the stack pointer to the kernel's stack (\texttt{SP\_EL1}).
+        \item \textbf{RISC-V (\texttt{ecall}/\texttt{sret}):} Following a minimalist philosophy, the hardware does little more than jump to the trap vector and switch privilege modes \cite{RISCV-Priv-Spec-System-Call}. Specifically, the hardware automatically saves the return address to \texttt{mepc} (or \texttt{sepc}), records the exception cause in \texttt{mcause} (or \texttt{scause}), updates the privilege bits in \texttt{mstatus} (or \texttt{sstatus}), and disables interrupts. However, the kernel is responsible for saving all general-purpose registers and manually swapping the stack pointer, typically using a scratch register.
+    \end{itemize}
+\end{enumerate}
+
+\paragraph{The Application Binary Interface (ABI)}
+
+Once the processor transitions to kernel mode, the kernel must identify which service is requested and where the arguments are located. This is defined by the ABI. To maximize performance, the ABI specifies that arguments are passed in CPU registers rather than on the stack. This avoids the overhead of the kernel accessing user memory directly, which creates security risks.
+
+\paragraph{Dispatch and Execution}
+
+Upon entry to the kernel, the raw system call number must be mapped to a specific internal kernel function. The standard and most efficient mechanism for this is a plain Dispatch Table. This approach utilizes a contiguous array of function pointers, where the system call number serves as the index. The dispatch logic is minimal:
+\begin{enumerate}
+    \item \textbf{Bounds Check:} The kernel verifies that the requested number is less than the total number of supported syscalls.
+    \item \textbf{Invocation:} The kernel executes an indirect call to the address stored at \texttt{table[syscall\_number]}.
+\end{enumerate}
+This method guarantees $O(1)$ constant-time performance, ensuring that the latency of invoking a system call remains minimal. This approach requires syscall numbers to be contiguous; gaps in the numbering space are typically handled by null pointers or stub functions in the table.
+
+\paragraph{Security and Validation}
+
+The syscall interface is the primary attack surface of the kernel. The kernel must treat all data from userspace as untrusted.
+\begin{itemize}
+    \item \textbf{Pointer Validation:} The kernel must ensure that pointers passed by the user actually point to valid userspace memory. Failing to perform this check allows a malicious program to trick the kernel into reading or overwriting its own internal structures (see the "Confused Deputy" problem \cite{confused_deputy_problem}).
+    \item \textbf{TOCTOU (Time-of-Check to Time-of-Use):} If the kernel validates data in user memory and reads it later, a separate thread could modify that data in between. For example, a kernel might check that a filename pointer is valid, but before it reads the actual filename, another thread could modify that memory to point to a privileged file. To prevent this, the kernel must copy data into kernel-space buffers \textit{before} validation and processing.
+\end{itemize}
+
+\paragraph{Performance Optimization}
+
+For high-frequency operations where even the minimal syscall overhead is too high (e.g., querying the system time), Linux employs \textbf{vDSO} (virtual Dynamic Shared Object). This mechanism maps a read-only page of kernel memory containing specific data and code into the user process. The application can then execute a standard function call to read this data without ever triggering a context switch or entering kernel mode \cite{linux_vdso}.
+
 \subsubsection{Libc System Headers}
-TODO: ADAM
+
+Although the system call interface constitutes the fundamental mechanism for interaction with the kernel, it operates at a level of abstraction that is unsuitable for general-purpose application development. In practice, application programmers do not invoke syscalls directly via assembly instructions. Instead, they rely on the \texttt{libc}, whose header files define the API between userspace software and the operating system.
+
+In the context of custom operating system development, system headers are commonly structured into three distinct categories in order to ensure clarity, portability, and standards compliance.
+
+\paragraph{Standard ISO C Headers}
+To enable existing software to compile and run on a new operating system, the \texttt{libc} implementation must provide all headers required by the ISO C standard \cite{iso_c_std}. These headers must strictly conform to the standardized function signatures and data types.
+
+Internally, such functions act as abstraction layers over the kernel interface. The implementation of \texttt{fopen} typically allocates a userspace data structure to represent the file stream and subsequently invokes the kernel's syscall to obtain a file descriptor or handle. This design effectively decouples application-level code from kernel-specific details such as syscall numbers, calling conventions, and ABI constraints.
+
+\paragraph{POSIX and System Headers}
+In addition to the ISO C standard, many operating systems implement parts of the POSIX specification \cite{posix_std} to improve compatibility with existing UNIX-like software. Headers associated with POSIX functionality are commonly placed within the \texttt{sys/} directory (e.g., \texttt{<sys/types.h>} or \texttt{<sys/stat.h>}).
+
+\paragraph{OS-Specific Extensions}
+Custom operating systems frequently introduce features that fall outside the scope of ISO C or POSIX, such as direct frame buffer access, specialized inter-process communication mechanisms, or hardware-specific controls.
+
+It is considered best practice to place operating system-specific extensions within a clearly separated namespace, for example under a dedicated directory such as \texttt{<alkos/...>}. This approach enables applications developed specifically for the target operating system to access unique kernel features.
+
 \subsubsection{Conversion to User Space}
 TODO: JAKUB
 
 \section{Host Environment -- Working OS}
 
-\subsection{Rootfs}
-TODO: ADAM
+\subsection{Root Filesystem (Rootfs)}
+\label{subsec:rootfs}
+
+The root filesystem constitutes the fundamental userspace environment of an operating system. It provides the configuration files and userspace programs (e.g., a shell) that render the system usable and interactive. In the context of operating system development, the construction of a rootfs is a structured process that transforms source code and static resources into a binary filesystem image that can be parsed and mounted by the kernel.
+
+Conceptually, the root filesystem construction process can be decomposed into four sequential phases, each responsible for a distinct transformation step within the build pipeline:
+\begin{itemize}
+    \item \textbf{Staging and Hierarchy Construction:} Creation of a temporary directory tree on the host system that reflects the intended structure of the target filesystem.
+    \item \textbf{Artifact Compilation and Population:} Cross-compilation of userspace programs followed by their installation into the corresponding locations within the staging directory.
+    \item \textbf{Overlay:} Integration of static configuration files and resources into the staging area to complement the compiled executables.
+    \item \textbf{Filesystem Image Creation:} Conversion of the fully populated staging directory into a single binary image adhering to a chosen filesystem format.
+\end{itemize}
+An overview of this pipeline is illustrated in Figure \ref{fig:rootfs_pipeline}.
+
+\begin{figure}[htbp]
+    \centering
+    \includesvg[width=\textwidth]{res/rootfs-pipeline.svg}
+    \caption{Rootfs creation pipeline}
+    \label{fig:rootfs_pipeline}
+\end{figure}
+
+\subsubsection{Staging and Hierarchy Construction}
+
+Rootfs creation begins with a staging phase, during which the build system generates a temporary directory tree on the host system. This tree mirrors the intended layout of the target operating system's filesystem and serves as an intermediate representation prior to image generation.
+
+For early-stage operating systems, strict adherence to comprehensive standards such as the Linux Filesystem Hierarchy Standard (FHS), which mandates directories such as \texttt{/usr}, \texttt{/var}, and \texttt{/opt}, is often unnecessary. Consequently, a simplified directory structure is typically adopted, for example:
+\begin{itemize}
+\item \textbf{Binaries Directory (\texttt{/bin}):} Contains executable programs compiled for the target architecture.
+\item \textbf{Configuration Directory (\texttt{/cfg} or \texttt{/etc}):} Stores text-based system configuration files.
+\item \textbf{Library Directory (\texttt{/lib}):} Holds shared libraries when dynamic linking is supported.
+\item \textbf{Drivers Directory (\texttt{/drv}):} Contains kernel-loadable drivers.
+\end{itemize}
+The staging directory is recreated for each build, ensuring reproducibility and eliminating residual artifacts from previous compilation runs.
+
+\subsubsection{Artifact Compilation and Population}
+
+After establishing the directory hierarchy, the staging area must be populated with executable content. Userspace applications are compiled using a cross-compilation toolchain and linked against standard libraries compatible with the kernel's Application Binary Interface (ABI).
+
+A well-designed build system automates this process and enforces correct dependency ordering. In particular, building the kernel should implicitly trigger the compilation of userspace programs. The resulting binaries are then installed into the appropriate locations within the staging directory (e.g., \texttt{/bin}). This automation minimizes the risk of inconsistencies, such as a kernel attempting to execute outdated userspace binaries that rely on obsolete system calls.
+
+\subsubsection{Configuration Overlays}
+
+Executable binaries alone are insufficient for a functional operating system; configuration data and static resources are also required. These include configuration files, initialization scripts, and other static assets.
+
+A common approach to managing such data is the use of a configuration overlay. In this model, the source repository contains a predefined directory tree of static files. During the build process, this tree is recursively merged into the staging directory, augmenting the compiled binaries. This separation of code and configuration promotes flexibility, as system behavior can be modified (for example, by adjusting startup parameters) without recompilation of userspace programs.
+
+\subsubsection{Filesystem Image Synthesis}
+
+Once the staging directory has been fully populated, it must be transformed into a single binary image conforming to a specific filesystem format, such as FAT, EXT2, or an archive-based formats.
+
+In academic and hobbyist operating system projects, simpler filesystems such as FAT are frequently preferred over more sophisticated journaling filesystems. FAT offers broad host-side tool support, simplifying inspection and debugging, and its relatively simple on-disk structures reduce driver implementation complexity.
+
+Image synthesis is typically performed using host-side utilities (e.g., \texttt{mtools} and \texttt{mkfs.fat}). These tools determine the required image size, format a blank image file, and populate it with the contents of the staging directory. The output is a filesystem image ready for deployment alongside the kernel.
+
+\subsubsection{The Initial Ramdisk and the Bootstrapping Problem}
+
+A fundamental challenge in early operating system development is the so-called “chicken-and-egg” problem associated with storage drivers. In order to mount a root filesystem from persistent storage devices such as NVMe or SATA, the kernel must already possess functioning disk drivers. However, these drivers are commonly stored within the root filesystem itself.
+
+This problem is addressed through the use of an \textbf{Initial Ramdisk (initrd)}. The bootloader loads the entire image into main memory alongside the kernel and passes its memory location as a boot parameter. The kernel can then expose this memory region as a block device and mount it as the root filesystem (\texttt{/}) during early initialization. This approach allows the system to complete its initialization sequence before transitioning to a more permanent storage-backed root filesystem.
+
 \subsection{Compiling Userspace Programs}
-TODO: ADAM
+
+The compilation of userspace applications for a custom operating system differs fundamentally from standard application development on a host machine. Standard host toolchains are configured to target the host environment, automatically linking against its standard library and adhering to its specific runtime initialization model. Consequently, generating binaries for a new operating system requires adaptation of the build system to target the new environment. This section outlines the necessary components and configurations needed to compile userspace programs for a custom OS.
+
+\subsubsection{Executable Format}
+
+A standardized executable container format must be selected to serve as a formal contract between the compiler toolchain and the kernel loader. The Executable and Linkable Format (ELF) is the standard for Unix-like systems and custom operating system projects due to its extensibility and broad toolchain support.
+
+ELF binaries utilize "program headers" to describe contiguous regions of the file known as \textbf{segments}. The kernel loader parses these headers to determine:
+\begin{itemize}
+\item \textbf{Load addresses:} The virtual memory addresses at which segments are mapped.
+\item \textbf{Memory footprint:} The distinction between file size and memory size, allowing for the automatic zero-initialization of uninitialized data regions (BSS).
+\item \textbf{Access permissions:} The hardware-level protection attributes (read, write, execute) required for each segment.
+\end{itemize}
+
+For early-stage operating systems, \textbf{static linking} is often the preferred strategy. This approach embeds all library code directly into the executable, avoiding the complexity of implementing a dynamic linker and shared object support within the kernel. Furthermore, compiling as Position Independent Executables (PIE) enables the kernel to load programs at arbitrary memory addresses, a prerequisite for advanced security features such as Address Space Layout Randomization (ASLR).
+
+\subsubsection{Memory Layout}
+
+To enforce the given memory layout, a custom linker script is required. This script groups program sections according to their protection requirements, enabling the kernel to utilize hardware-level security mechanisms, such as non-executable memory regions. A standard userspace memory layout comprises the following sections in order of increasing virtual address:
+\begin{enumerate}
+\item \textbf{.text}: Executable code; marked read-only and executable.
+\item \textbf{.rodata}: Constants and string literals; marked read-only and non-executable.
+\item \textbf{.data}: Initialized global variables; marked read-write and non-executable.
+\item \textbf{.bss}: Uninitialized global variables; these occupy no storage space in the binary but are allocated in virtual memory at runtime.
+\end{enumerate}
+
+Across all major architectures, these sections are aligned to page boundaries to satisfy the requirements of the memory management unit (MMU), with page sizes typically being 4~KiB, though larger pages may be supported. The use of page-level permissions enables the kernel to prevent unintended execution of data regions and to enforce write protection for code and constant data.
+
+While the exact virtual base address of the \textbf{.text} section is platform- and ABI-dependent, it is commonly chosen to be non-zero in order to mitigate errors related to null pointer dereferences. Similarly, the overall organization of dynamic memory follows a shared convention: the userspace heap is initialized immediately after the \textbf{.bss} section and grows toward higher virtual addresses, whereas the userspace stack is placed near the upper limit of the user address space and grows downward.
+
+\subsubsection{Runtime Initialization}
+
+The final stage of the compilation pipeline is the definition of the program entry point and the runtime initialization sequence. While application logic begins within the \texttt{main()} function, the kernel does not invoke this function directly. Instead, the linker is configured to use a dedicated entry symbol, conventionally named \texttt{\_start}.
+
+The code located at \texttt{\_start}, known as the \emph{C Runtime Startup} (CRT0), is a routine linked into every userspace application. Its purpose is to establish the execution environment expected by high-level languages:
+\begin{enumerate}
+\item \textbf{Stack alignment:} Ensuring compliance with ABI alignment requirements (e.g., 16-byte alignment for SIMD instructions).
+\item \textbf{Environment initialization:} Retrieving command-line arguments (\texttt{argv}) passed by the kernel.
+\item \textbf{Global lifetime management:} Invoking constructors for global/static objects before \texttt{main()} and destructors after \texttt{main()} returns.
+\item \textbf{Process termination:} Capturing the return value of \texttt{main()} and invoking the system call to ensure controlled process termination.
+\end{enumerate}
+This startup sequence ensures that userspace applications execute within a consistent, initialized environment and terminate in a predictable manner.
+
+\subsubsection{OS-Specific Toolchain Adaptation}
+
+While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86\_64-elf}) is sufficient for compiling the kernel itself, it presents limitations for userspace development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively (e.g., via a target like \texttt{x86\_64-alkos}). This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts.
+
+\paragraph{System Root (Sysroot)}
+
+The sysroot is a directory hierarchy on the host machine that mirrors the target operating system's root filesystem. It organizes system headers (e.g., \texttt{sysroot/usr/include}) and compiled libraries (e.g., \texttt{sysroot/usr/lib}) according to standard conventions.
+
+By configuring the cross-compiler with the \texttt{\text{-}\text{-}with-sysroot} option, the toolchain anchors its search paths to this directory. This ensures that inclusion directives, such as \texttt{\#include <stdio.h>}, resolve exclusively to the headers of the custom operating system's standard library, thereby isolating the build process from the host environment.
+
+\paragraph{Implicit Linker Configuration}
+
+An OS-specific toolchain further simplifies the linking phase by implicitly managing runtime dependencies. In a raw compilation setup, the developer must explicitly specify the C runtime startup object (\texttt{crt0.o}), the initialization and finalization objects (\texttt{crti.o}, \texttt{crtbegin.o}, \texttt{crtend.o}, \texttt{crtn.o}), and the appropriate standard library linkage for every userspace program.
+
+In contrast, a customized toolchain encapsulates this configuration internally. Upon invocation, the compiler automatically injects the necessary object files and links against the correct version of the system library. This abstraction allows developers to compile userspace applications with minimal command-line arguments.
+
+\subsubsection{Build System Integration}
+
+The compilation of userspace programs can be automated and synchronized with the kernel build process. The build system manages the dependency graph, ensuring that changes to the system library trigger recompilation of user applications. The resulting binaries are then automatically staged for inclusion in the system image, as described in Section~\ref{subsec:rootfs}.
 
 % ==================================================================
 
@@ -1582,7 +1856,7 @@ The \texttt{fork()} mechanism is rooted in historical design decisions. While co
 
 \section{Minix 3}
 
-Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, Minix 3 relocates the majority of operating system components - including device drivers, file systems, memory management mechanisms, and scheduling services - into user-space processes. As a result, the kernel's responsibilities are strictly minimized to functions such as message passing, interrupt handling, and low-level scheduling. Currently, the system supports two hardware architectures: x86 and ARM.
+Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, Minix 3 relocates the majority of operating system components --- including device drivers, file systems, memory management mechanisms, and scheduling services --- into userspace processes. As a result, the kernel's responsibilities are strictly minimized to functions such as message passing, interrupt handling, and low-level scheduling. Currently, the system supports two hardware architectures: x86 and ARM.
 
 This architectural approach provides several notable advantages. By isolating critical system services in user space, Minix 3 significantly improves fault tolerance, as failures in individual components do not lead to the compromise of the entire system. Moreover, these components can be restarted independently, enabling efficient recovery from faults instead of system-wide crashes. The resulting modularity also simplifies system maintenance and evolution, since services may be updated, replaced, or extended without requiring recompilation of the kernel.
 
@@ -1649,12 +1923,12 @@ This architectural approach provides several notable advantages. By isolating cr
     
     \end{tikzpicture}
   }%
-\caption{The Minix 3 Microkernel Architecture}
+\caption{The Minix 3 Microkernel Architecture (adapted from \cite{minix_wikipedia})}
 \label{fig:minix_architecture}
 \end{figure}
 
 \subsection{Scheduler}
-Adhering to the microkernel philosophy, Minix 3 separates scheduling policy from the low-level context switching mechanism. While the kernel remains responsible for the mechanics of context switching and interrupt handling, scheduling decisions are delegated to a dedicated user-space server, referred to as the \texttt{Sched} server.
+Adhering to the microkernel philosophy, Minix 3 separates scheduling policy from the low-level context switching mechanism. While the kernel remains responsible for the mechanics of context switching and interrupt handling, scheduling decisions are delegated to a dedicated userspace server, referred to as the \texttt{Sched} server.
 
 The scheduler employs a multi-level priority round-robin algorithm \cite{minix_sched}. The system maintains sixteen priority queues organized hierarchically. Kernel tasks occupy the highest priority levels, followed by device drivers, system servers, and user applications. The lowest priority queue is reserved exclusively for idle tasks. At any scheduling decision point, the scheduler selects the next runnable process from the highest non-empty priority queue.
 
@@ -1671,13 +1945,13 @@ Minix 3 provides an abstraction layer over platform-specific timing hardware. On
 \subsubsection{Timers and Alarms}
 The kernel maintains a \texttt{clock\_timers} queue to manage synchronous timers and alarms \cite{minix_kernel_clock}. Upon receipt of a hardware timer interrupt, the \texttt{timer\_int\_handler} routine is executed. If the expiration time of the next scheduled timer in the \texttt{clock\_timers} queue has been reached, the kernel executes the associated callback function. 
 
-In the case of system alarms, this callback is the \texttt{cause\_alarm} function \cite{minix_do_setalarm}. This function sends a notification message from the Clock Task to the requesting process (e.g., the Process Manager or Scheduler), informing it that the requested time interval has elapsed. This mechanism allows user-space servers to perform periodic tasks, such as the scheduler's queue balancing.
+In the case of system alarms, this callback is the \texttt{cause\_alarm} function \cite{minix_do_setalarm}. This function sends a notification message from the Clock Task to the requesting process (e.g., the Process Manager or Scheduler), informing it that the requested time interval has elapsed. This mechanism allows userspace servers to perform periodic tasks, such as the scheduler's queue balancing.
 
 \subsubsection{Real-Time Clock (RTC)}
-Persistent wall-clock time is provided by a dedicated user-space driver, \texttt{readclock}. This driver interfaces directly with the CMOS Real-Time Clock (RTC) to retrieve the current date and time. During system initialization, this information is communicated to the Process Manager to establish the system's initial time reference \cite{minix_readclock}.
+Persistent wall-clock time is provided by a dedicated userspace driver, \texttt{readclock}. This driver interfaces directly with the CMOS Real-Time Clock (RTC) to retrieve the current date and time. During system initialization, this information is communicated to the Process Manager to establish the system's initial time reference \cite{minix_readclock}.
 
 \subsection{Memory Management}
-Memory management in Minix 3 is primarily handled by the user-space Virtual Memory (VM) server. The kernel retains control over the hardware Memory Management Unit (MMU) and address space switching but delegates higher-level memory policies to the VM server.
+Memory management in Minix 3 is primarily handled by the userspace Virtual Memory (VM) server. The kernel retains control over the hardware Memory Management Unit (MMU) and address space switching but delegates higher-level memory policies to the VM server.
 
 \subsubsection{VM Server}
 The VM server is responsible for memory region allocation, page table administration, and page fault handling. It implements a region-based memory model in which a process address space is divided into contiguous regions with defined access permissions (read, write, and execute). To efficiently manage free and allocated memory regions, the VM server uses \textbf{AVL trees} \cite{minix_vm}.
@@ -1707,7 +1981,7 @@ IPC in Minix 3 is governed by these strict policies:
 \begin{enumerate}
     \item \textbf{Access Control:} Processes may exchange messages only with explicitly authorized peers.
     \item \textbf{Hierarchical Communication:} Message flow generally follows the system's layered architecture (Layer 4 $\rightarrow$ Layer 3 $\rightarrow$ Layer 2).
-    \item \textbf{User-Space Isolation:} User processes are prohibited from communicating directly with one another or with the kernel.
+    \item \textbf{Userspace Isolation:} User processes are prohibited from communicating directly with one another or with the kernel.
 \end{enumerate}
 
 \subsubsection{System Call Implementation}
@@ -1806,7 +2080,7 @@ Entry:
 
 \subsubsection{CPU Feature Detection}
 
-Before attempting the Long Mode transition, Loader32 verifies that the CPU supports the required features. This is accomplished through the CPUID instruction \cite{Intel-CPUID}:
+Before attempting the Long Mode transition, Loader32 verifies that the CPU supports the required features. This is accomplished through the CPUID instruction \cite{Intel-CPUID}, as shown in Listing~\ref{lst:check_longmode}:
 
 \begin{lstlisting}[style=nasmstyle, caption={Long Mode Detection (checks.nasm)}, label={lst:check_longmode}]
 EXTENDED_FUNCTIONS_THRESHOLD equ 0x80000000
@@ -1834,7 +2108,7 @@ CheckLongMode:
 
 \subsubsection{Memory Management Initialization}
 
-Before enabling paging, Loader32 initializes a temporary bootstrap Physical Memory Manager (PMM) and Virtual Memory Manager (VMM). The memory map obtained from the Multiboot2 information structure is parsed to identify available physical memory regions. Loader32 then creates an \textbf{identity mapping} of the first 10 gigabytes of physical memory using 1GB pages:
+Before enabling paging, Loader32 initializes a temporary bootstrap Physical Memory Manager (PMM) and Virtual Memory Manager (VMM). The memory map obtained from the Multiboot2 information structure is parsed to identify available physical memory regions. Loader32 then creates an \textbf{identity mapping} of the first 10 gigabytes of physical memory using 1GB pages, as demonstrated in Listing~\ref{lst:loader32_mmap}:
 
 \begin{lstlisting}[caption={Identity Mapping Setup (main.cpp)}, label={lst:loader32_mmap}]
 MemoryManagers SetupMemoryManagement(MultibootInfo &multiboot_info) {
@@ -1861,7 +2135,7 @@ The identity mapping ensures that code continues to execute correctly after pagi
 
 \subsubsection{Long Mode Enablement}
 
-The transition to Long Mode follows the sequence defined in the Intel Software Developer's Manual \cite{Intel-ControlRegisters}:
+The transition to Long Mode follows the sequence defined in the Intel Software Developer's Manual \cite{Intel-ControlRegisters}, as shown in Listing~\ref{lst:enable_longmode}:
 
 \begin{lstlisting}[style=nasmstyle, caption={Enabling Long Mode and Paging (enables.nasm)}, label={lst:enable_longmode}]
 LONG_MODE_BIT equ 1 << 8
@@ -1896,7 +2170,7 @@ EnablePaging:
 
 \subsubsection{Loading Loader64 as an ELF Module}
 
-A critical responsibility of Loader32 is loading the next stage. Loader64 is provided to GRUB as a separate Multiboot2 module. Loader32 locates this module, parses it as an ELF64 executable, allocates memory for its segments, and performs dynamic relocation:
+A critical responsibility of Loader32 is loading the next stage. Loader64 is provided to GRUB as a separate Multiboot2 module. Loader32 locates this module, parses it as an ELF64 executable, allocates memory for its segments, and performs dynamic relocation (Listing~\ref{lst:load_loader64}):
 
 \begin{lstlisting}[caption={Loading Loader64 Module (main.cpp)}, label={lst:load_loader64}]
 static u64 LoadNextStageModule(MultibootInfo &multiboot_info, 
@@ -1927,7 +2201,7 @@ static u64 LoadNextStageModule(MultibootInfo &multiboot_info,
 
 \subsubsection{64-bit GDT and Mode Transition}
 
-Before jumping to 64-bit code, a 64-bit Global Descriptor Table must be loaded. The GDT defines the code and data segments for Long Mode:
+Before jumping to 64-bit code, a 64-bit Global Descriptor Table must be loaded. The GDT defines the code and data segments for Long Mode (Listing~\ref{lst:gdt64}):
 
 \begin{lstlisting}[style=nasmstyle, caption={64-bit GDT Definition (gdt.nasm)}, label={lst:gdt64}]
 section .data
@@ -1954,7 +2228,7 @@ GDT64:
         dq GDT64
 \end{lstlisting}
 
-The final transition performs a far jump to flush the CPU pipeline and begin executing 64-bit code:
+The final transition performs a far jump to flush the CPU pipeline and begin executing 64-bit code (Listing~\ref{lst:transition64}):
 
 \begin{lstlisting}[style=nasmstyle, caption={Transition to 64-bit Mode (transition\_64.nasm)}, label={lst:transition64}]
     ; Save kernel entry address and loader data pointer
@@ -1991,7 +2265,7 @@ Loader64 executes in 64-bit Long Mode but faces a unique challenge: it is loaded
 
 \subsubsection{Position-Independent Compilation}
 
-Loader64 is compiled as a Position-Independent Executable (PIE). The CMake configuration specifies:
+Loader64 is compiled as a Position-Independent Executable (PIE). The CMake configuration is shown in Listing~\ref{lst:loader64_cmake}:
 
 \begin{lstlisting}[language=cmake, caption={Loader64 CMake Configuration}, label={lst:loader64_cmake}]
 set_target_properties(alkos.boot.loader.64 PROPERTIES 
@@ -2003,7 +2277,7 @@ target_link_options(alkos.boot.loader.64 PRIVATE
 )
 \end{lstlisting}
 
-This ensures all code uses RIP-relative addressing. The entry point demonstrates this:
+This ensures all code uses RIP-relative addressing. The entry point demonstrates this (Listing~\ref{lst:loader64_entry}):
 
 \begin{lstlisting}[style=nasmstyle, caption={Loader64 Entry Point with RIP-Relative Addressing (entry.nasm)}, label={lst:loader64_entry}]
 section .text
@@ -2031,7 +2305,7 @@ Entry:
 
 \subsubsection{State Restoration from Loader32}
 
-Loader32 passes its PMM and VMM state to Loader64 via a \texttt{TransitionData} structure. Loader64 deserializes this state to continue memory management:
+Loader32 passes its PMM and VMM state to Loader64 via a \texttt{TransitionData} structure. Loader64 deserializes this state to continue memory management, as shown in Listing~\ref{lst:transition_data}:
 
 \begin{lstlisting}[caption={TransitionData Deserialization (main.cpp)}, label={lst:transition_data}]
 static auto InitializeLoaderEnvironment(const TransitionData *transition_data) {
@@ -2052,7 +2326,7 @@ static auto InitializeLoaderEnvironment(const TransitionData *transition_data) {
 
 \subsubsection{Kernel Loading at Higher-Half Address}
 
-The kernel ELF is linked to execute at virtual address \texttt{0xFFFFFFFE00000000}. Loader64 allocates virtual memory at this address and loads the kernel segments:
+The kernel ELF is linked to execute at virtual address \texttt{0xFFFFFFFE00000000}. Loader64 allocates virtual memory at this address and loads the kernel segments (Listing~\ref{lst:kernel_load}):
 
 \begin{lstlisting}[caption={Higher-Half Kernel Loading (main.cpp)}, label={lst:kernel_load}]
 // Kernel virtual address (upper 33 bits set)
@@ -2078,7 +2352,7 @@ static u64 LoadKernelIntoMemory(MultibootInfo &multiboot_info,
 
 \subsubsection{Direct Memory Mapping}
 
-To allow the kernel to access physical memory directly, Loader64 creates a \textbf{direct memory mapping}, a large region of virtual address space that maps linearly to physical memory:
+To allow the kernel to access physical memory directly, Loader64 creates a \textbf{direct memory mapping}, a large region of virtual address space that maps linearly to physical memory (Listing~\ref{lst:direct_map}):
 
 \begin{lstlisting}[caption={Direct Memory Mapping Setup (main.cpp)}, label={lst:direct_map}]
 static constexpr u64 kDirectMemMapAddrStart = 0xFFFF800000000000ULL;
@@ -2101,7 +2375,7 @@ This mapping allows the kernel to convert any physical address \texttt{P} to the
 
 \subsubsection{Kernel Arguments Preparation}
 
-Before transferring control to the kernel, Loader64 collects essential system information into a \texttt{KernelArguments} structure:
+Before transferring control to the kernel, Loader64 collects essential system information into a \texttt{KernelArguments} structure (Listing~\ref{lst:kernel_args}):
 
 \begin{lstlisting}[caption={Kernel Arguments Preparation (main.cpp)}, label={lst:kernel_args}]
 struct PACK alignas(64) KernelArguments {
@@ -2146,7 +2420,7 @@ struct PACK alignas(64) KernelArguments {
 }
 \end{lstlisting}
 
-The final transition to the kernel is a simple jump:
+The final transition to the kernel is a simple jump (Listing~\ref{lst:enter_kernel}):
 
 \begin{lstlisting}[style=nasmstyle, caption={Kernel Entry (transition.nasm)}, label={lst:enter_kernel}]
 ; void EnterKernel(u64 kernel_entry, KernelArguments *args)
@@ -2200,7 +2474,7 @@ Figure \ref{fig:memory_layout} illustrates the virtual memory layout established
 
 \subsection{Architecture Initialization}
 
-After the kernel receives control, the first architecture-specific function executed is \texttt{arch::ArchInit}. This function enables additional CPU features that were not safe to enable during the bootloader phase:
+After the kernel receives control, the first architecture-specific function executed is \texttt{arch::ArchInit}. This function enables additional CPU features that were not safe to enable during the bootloader phase, as shown in Listing~\ref{lst:arch_init}:
 
 \begin{lstlisting}[caption={Architecture Initialization (init.cpp)}, label={lst:arch_init}]
 namespace arch {
@@ -2409,7 +2683,7 @@ As previously mentioned, the OS utilizes the interrupt mechanism to perform task
 
 To switch contexts, we must ensure the current thread's state is preserved in a \textbf{Unified Interrupt Frame} (Figure \ref{fig:unifiedstackframe}) on its kernel stack. Additionally, a valid frame must exist for the target thread. If a thread has run previously, it will have saved its frame naturally during its last preemption. However, for a new thread that has never executed, this frame must be constructed manually. 
 
-We assume that all threads begin execution in kernel space before eventually jumping to user space. Since all interrupt handling occurs within the kernel, the interrupt frame always resides on the kernel stack. Therefore, we can initialize the kernel stack of the new thread with a fabricated frame before the context switch. The initialization procedure is as follows:
+We assume that all threads begin execution in kernel space before eventually jumping to user space. Since all interrupt handling occurs within the kernel, the interrupt frame always resides on the kernel stack. Therefore, we can initialize the kernel stack of the new thread with a fabricated frame before the context switch. The initialization procedure is shown in Listing~\ref{lst:threadStack}:
 
 \begin{lstlisting}[caption={Thread stack initialization}, label={lst:threadStack}]
 void InitializeThreadStack(void **stack, const Sched::Task &task)
@@ -2448,7 +2722,7 @@ With both stack frames prepared, the context switch logic is straightforward: sw
 
 \subsection{Jumping to Userspace}
 
-Transitioning to userspace is performed similarly to a thread context switch. We construct an artificial interrupt frame, but in this case, the code segment and stack segment within the frame are set to the user space selectors, and the stack pointer is set to the user space stack. The implementation is shown below:
+Transitioning to userspace is performed similarly to a thread context switch. We construct an artificial interrupt frame, but in this case, the code segment and stack segment within the frame are set to the user space selectors, and the stack pointer is set to the user space stack. The C++ implementation is shown in Listing~\ref{lst:userSpaceJump}, and the corresponding NASM code is shown in Listing~\ref{lst:userSpaceJumpNasm}:
 
 \begin{lstlisting}[caption={Userspace Jump C++ code}, label={lst:userSpaceJump}]
 extern "C" void cdecl_JumpToUserSpaceEntry(void *addr, IsrStackFrame *frame)
@@ -2526,7 +2800,7 @@ The architecture-specific code is responsible for detecting available hardware a
 
 \subsection{Clocks}
 
-Clock Drivers are defined by the following structure:
+Clock Drivers are defined by the structure shown in Listing~\ref{lst:clockDriver}:
 
 \begin{lstlisting}[caption={Clock Driver Structure}, label={lst:clockDriver}]
 struct alignas(arch::kCacheLineSizeBytes) ClockRegistryEntry : data_structures::RegistryEntry {
@@ -2559,7 +2833,7 @@ The High Precision Event Timer (HPET) also offers high precision and is generall
 
 \subsection{Event Clocks}
 
-Event Clock Drivers are defined by the following structure:
+Event Clock Drivers are defined by the structure shown in Listing~\ref{lst:eventClockDriver}:
 
 \begin{lstlisting}[caption={Event Clock Driver Structure}, label={lst:eventClockDriver}]
 struct PACK EventClockFlags {
@@ -2689,6 +2963,7 @@ When a VFS operation (e.g., \texttt{CreateFile}) is invoked, the module executes
     \item \textbf{Path Translation}: The absolute system path is translated into a path relative to the mount point root.
     \item \textbf{Delegation}: The operation is delegated to the corresponding method of the specific filesystem driver.
 \end{enumerate}
+An example implementation is shown in Listing~\ref{lst:vfsModuleCreateFile}.
 
 \begin{lstlisting}[caption={VfsModule CreateFile Implementation}, label={lst:vfsModuleCreateFile}]
 Result<> internal::VfsModule::CreateFile(const Path &path)
@@ -2707,7 +2982,7 @@ Result<> internal::VfsModule::CreateFile(const Path &path)
 
 \subsubsection{Filesystem Interface}
 
-The \texttt{vfs::Filesystem} struct acts as a uniform interface that all concrete filesystem drivers must expose. It contains function pointers for various file and directory manipulations, alongside metadata about the filesystem. Each function pointer accepts a \texttt{void* ctx} argument, allowing the generic VFS layer to pass the concrete driver instance.
+The \texttt{vfs::Filesystem} struct acts as a uniform interface that all concrete filesystem drivers must expose (Listing~\ref{lst:vfsFilesystem}). It contains function pointers for various file and directory manipulations, alongside metadata about the filesystem. Each function pointer accepts a \texttt{void* ctx} argument, allowing the generic VFS layer to pass the concrete driver instance.
 
 \begin{lstlisting}[caption={vfs::Filesystem Structure}, label={lst:vfsFilesystem}]
 struct Filesystem {
@@ -2744,7 +3019,7 @@ private:
 
 Each filesystem driver implements the logic required for a specific filesystem type (e.g., FAT12, FAT16, FAT32). The driver interprets the raw data structures on the storage device and performs the requested operations. For instance, the FAT32 driver handles the manipulation of the File Allocation Table, directory entries, and cluster chains according to the FAT32 specification (for details, see \cite{fat-spec}).
 
-To implement these drivers efficiently, we employ the Curiously Recurring Template Pattern (CRTP) \cite{crtp}. Each driver class inherits from a templated base class that provides common functionality, while the derived class implements format-specific details. This approach enables static polymorphism, reducing the runtime overhead typically associated with virtual function calls.
+To implement these drivers efficiently, we employ the Curiously Recurring Template Pattern (CRTP) \cite{crtp}. Each driver class inherits from a templated base class that provides common functionality, while the derived class implements format-specific details (Listing~\ref{lst:fatCrtp}). This approach enables static polymorphism, reducing the runtime overhead typically associated with virtual function calls.
 
 \begin{lstlisting}[caption={FAT Driver CRTP Base Class}, label={lst:fatCrtp}]
 template <template <typename> typename T, typename IO>
@@ -2781,7 +3056,7 @@ private:
 };
 \end{lstlisting}
 
-Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT entries differs between FAT12 and FAT32/16) and provides a static \texttt{IsValid(IO \&io)} method to probe whether a given I/O device contains a valid instance of that filesystem.
+Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT entries differs between FAT12 and FAT32/16, as shown in Listing~\ref{lst:fat12GetFatEntry}) and provides a static \texttt{IsValid(IO \&io)} method to probe whether a given I/O device contains a valid instance of that filesystem.
 
 \begin{lstlisting}[caption={Fat12 GetFATEntry Implementation}, label={lst:fat12GetFatEntry}]
     NODISCARD FORCE_INLINE_F ClusterNumT GetFATEntry_(ClusterNumT cluster) const
@@ -2850,7 +3125,7 @@ The file descriptor system provides a hierarchical structure to handle file I/O 
 As depicted in Figure \ref{fig:fd_architecture}, the system comprises three main tables:
 
 \subsubsection{FdTable (Per-Process)}
-Each process maintains its own \texttt{FdTable}, which is an array mapping integer file descriptors to \texttt{RefPtr<OpenFileEntry>} objects.
+Each process maintains its own \texttt{FdTable}, which is an array mapping integer file descriptors to \texttt{RefPtr<OpenFileEntry>} objects (Listing~\ref{lst:fdTableAllocate}).
 
 \begin{lstlisting}[caption={FdTable Allocation}, label={lst:fdTableAllocate}]
 FdResult<fd_t> FdTable::Allocate(data_structures::RefPtr<OpenFileEntry> global_entry)
@@ -2869,7 +3144,7 @@ FdResult<fd_t> FdTable::Allocate(data_structures::RefPtr<OpenFileEntry> global_e
 
 \subsubsection{OpenFileTable (Global)}
 
-The \texttt{OpenFileTable} is a system-wide pool of \texttt{OpenFileEntry} objects. Each entry represents a unique "open" instance of a resource (file or pipe), maintaining dynamic state such as the current read/write offset, access flags (e.g., Read/Write), and a handle to the underlying resource. Multiple file descriptors from different processes can point to the same \texttt{OpenFileEntry}, allowing them to share the cursor position.
+The \texttt{OpenFileTable} is a system-wide pool of \texttt{OpenFileEntry} objects. Each entry represents a unique "open" instance of a resource (file or pipe), maintaining dynamic state such as the current read/write offset, access flags (e.g., Read/Write), and a handle to the underlying resource. Multiple file descriptors from different processes can point to the same \texttt{OpenFileEntry}, allowing them to share the cursor position (Listing~\ref{lst:openFileTableOpenFile}).
 
 \begin{lstlisting}[caption={OpenFileTable Creation}, label={lst:openFileTableOpenFile}]
 FdResult<data_structures::RefPtr<OpenFileEntry>> OpenFileTable::OpenFile(File *file, OpenMode flags)
@@ -2900,7 +3175,7 @@ FdResult<data_structures::RefPtr<OpenFileEntry>> OpenFileTable::OpenFile(File *f
 The \texttt{FileHandle} utilizes a \texttt{NonOwningTaggedPtr} to hold either a pointer to a \texttt{File} object or a \texttt{Pipe} instance, enabling the \texttt{OpenFileEntry} to manage both cases seamlessly.
 
 \subsubsection{FileTable (Global)}
-The \texttt{FileTable} manages unique \texttt{File} objects system-wide. Each \texttt{File} object acts as the in-memory representation of a physical file on the filesystem, storing static attributes such as the path and file size. This ensures that a file on the VFS has a single representation in memory, regardless of how many times it has been opened.
+The \texttt{FileTable} manages unique \texttt{File} objects system-wide (Listing~\ref{lst:fileTableGetOrCreate}). Each \texttt{File} object acts as the in-memory representation of a physical file on the filesystem, storing static attributes such as the path and file size. This ensures that a file on the VFS has a single representation in memory, regardless of how many times it has been opened.
 
 \begin{lstlisting}[caption={FileTable GetOrCreate}, label={lst:fileTableGetOrCreate}]
 FdResult<data_structures::RefPtr<File>> FileTable::GetOrCreate(const vfs::Path &path)
@@ -2931,7 +3206,7 @@ FdResult<data_structures::RefPtr<File>> FileTable::GetOrCreate(const vfs::Path &
 \end{lstlisting}
 
 \subsubsection{FdManager}
-The \texttt{FdManager} integrates these three tables and exposes file descriptor operations (e.g., \texttt{Open}, \texttt{Close}, \texttt{Read}). When a process requests to open a file, the \texttt{FdManager} coordinates the interaction: it validates existence via the VFS module, retrieves the \texttt{File} object, creates a new entry in the \texttt{OpenFileTable}, and finally assigns a file descriptor in the process's \texttt{FdTable}.
+The \texttt{FdManager} integrates these three tables and exposes file descriptor operations (e.g., \texttt{Open}, \texttt{Close}, \texttt{Read}). When a process requests to open a file, the \texttt{FdManager} coordinates the interaction: it validates existence via the VFS module, retrieves the \texttt{File} object, creates a new entry in the \texttt{OpenFileTable}, and finally assigns a file descriptor in the process's \texttt{FdTable} (Listing~\ref{lst:fdManagerOpen}).
 
 \begin{lstlisting}[caption={FdManager Open Implementation}, label={lst:fdManagerOpen}]
 FdResult<fd_t> FdManager::Open(const vfs::Path &path, OpenMode flags)
@@ -2971,7 +3246,7 @@ The scheduling module is the final core component of the operating system, relyi
 
 \subsection{Process Structure}
 
-The process structure is defined as follows:
+The process structure is defined in Listing~\ref{lst:processStruct}:
 
 \begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
 struct PACK Pid {
@@ -3174,7 +3449,7 @@ A collection of bitfields that determine how the scheduler manages the thread:
 
 \subsubsection{Thread State}
 
-Describes the current status of the thread. This state tracking allows the kernel to monitor each thread individually and verify system integrity, as only specific state transitions are permitted. The thread state transitions graph is defined as follows:
+Describes the current status of the thread. This state tracking allows the kernel to monitor each thread individually and verify system integrity, as only specific state transitions are permitted. The thread state transitions are illustrated in Figure~\ref{fig:thread-states}.
 
 \newgeometry{top=1cm, bottom=1.5cm, left=1cm, right=1cm} 
 
@@ -3212,7 +3487,7 @@ Before initializing the scheduling module, the operating system creates three es
 
 \subsection{Intrusive Data Structures}
 
-Since threads frequently migrate between different linked lists and data structures, allocating and freeing list nodes for every operation introduces significant overhead. To address this, the system employs intrusive data structures. Instead of allocating a node that contains a pointer to the object, the node structure is embedded directly within the object itself. Operations on the lists are performed by simply modifying the fields of the object.
+Since threads frequently migrate between different linked lists and data structures, allocating and freeing list nodes for every operation introduces significant overhead. To address this, the system employs intrusive data structures (Listing~\ref{lst:intrusiveNodes}). Instead of allocating a node that contains a pointer to the object, the node structure is embedded directly within the object itself. Operations on the lists are performed by simply modifying the fields of the object.
 
 \begin{lstlisting}[caption={Intrusive Nodes}, label={lst:intrusiveNodes}]
 template <class T, int kIntrusiveLevel>
@@ -3284,7 +3559,7 @@ The following scheduling policies have been implemented:
 
 \textbf{Multi-Level Feedback Queue (MLFQ) Scheduling Policy} -- policy that segregates threads into distinct queues according to their workload characteristics. The policy penalizes CPU-bound threads by demoting them to lower priorities, whereas I/O-bound threads are elevated to higher priorities, thereby favoring interactive performance. To prevent the starvation of low-priority tasks, a periodic reset mechanism promotes all threads to the highest priority queue every 100ms. Within each queue, threads are managed using \textbf{Red-Black trees}, sorted by a key that combines user-defined priority and aggregated CPU burst times (the amount of time a thread spends executing on the CPU before it either completes, requires I/O operations, or is interrupted by the operating system). This ensures that each thread in the given queue receives a fair share of CPU time.
 
-\noindent These policies establish a hierarchy defined by the following enumeration:
+\noindent These policies establish a hierarchy defined by the enumeration shown in Listing~\ref{lst:policyHierarchy}:
 
 \begin{lstlisting}[caption={Scheduling Policy Hierarchy}, label={lst:policyHierarchy}]
 // PO > P1 > .. > P4
@@ -3313,7 +3588,7 @@ Each policy is designated for a specific group of tasks:
 \subsubsection{Policies Abstraction}
 \label{subsec:policies}
 
-The policy abstraction is defined as follows:
+The policy abstraction is shown in Listing~\ref{lst:policyStruct}:
 
 \begin{lstlisting}[caption={Policy Abstraction}, label={lst:policyStruct}]
 struct Policy {
@@ -3347,7 +3622,7 @@ TODO: JAKUB
 
 \section{User's Manual}
 
-This section describes the usage of the AlkOS build environment and documents the public interfaces available to user-space applications. It outlines the build and execution workflow, the integration of user programs, and the system call interface provided by the operating system.
+This section describes the usage of the AlkOS build environment and documents the public interfaces available to userspace applications. It outlines the build and execution workflow, the integration of user programs, and the system call interface provided by the operating system.
 
 \subsection{Building and Running the OS}
 
@@ -3380,7 +3655,7 @@ The build and execution workflow consists of three sequential stages:
     Here, \texttt{<platform>} denotes the target architecture (e.g., \texttt{x86\_64}), \texttt{<build\_type>} specifies either \texttt{Debug} or \texttt{Release}. A complete list of options can be obtained using the \texttt{\text{-}\text{-}help} flag.
 
     \item \textbf{Compilation and Execution:}
-    In the final stage, the kernel and all registered user-space applications are compiled, the root filesystem image and bootable ISO are generated, and the operating system is launched using the QEMU emulator. This process can be initiated with the command:
+    In the final stage, the kernel and all registered userspace applications are compiled, the root filesystem image and bootable ISO are generated, and the operating system is launched using the QEMU emulator. This process can be initiated with the command:
     \begin{verbatim}
     ./scripts/alkos_cli.bash --run
     \end{verbatim}
@@ -3390,11 +3665,11 @@ In the event of errors occurring at any stage of the process, the scripts may be
 
 \subsection{Developing Userspace Applications}
 
-AlkOS supports user-space applications written in C and C++. These applications are integrated into the operating system at build time and included directly in the generated root filesystem.
+AlkOS supports userspace applications written in C and C++. These applications are integrated into the operating system at build time and included directly in the generated root filesystem.
 
 \subsubsection{Project Structure}
 
-User-space programs reside in the \texttt{userspace/programs/} directory. Each application is placed in its own subdirectory and must include all relevant source files along with a \texttt{CMakeLists.txt} configuration file. A minimal example of a user application is shown in Listing \ref{lst:minimalUserAppStructure}.
+Userspace programs reside in the \texttt{userspace/programs/} directory. Each application is placed in its own subdirectory and must include all relevant source files along with a \texttt{CMakeLists.txt} configuration file. A minimal example of a user application is shown in Listing \ref{lst:minimalUserAppStructure}.
 
 \begin{lstlisting}[caption={Minimal User Application Structure}, label={lst:minimalUserAppStructure}]
 // userspace/programs/my_app/main.cpp
@@ -3408,7 +3683,7 @@ extern "C" int main() {
 
 \subsubsection{Build System Integration}
 
-To include a user-space application in the build process, it must be registered with the CMake-based build system. AlkOS provides the helper macro \texttt{alkos\_register\_userspace\_app}, which automatically configures compiler flags and links the application against the custom C and C++ standard libraries (\texttt{libc} and \texttt{libc++}). An example registration is shown in Listing \ref{lst:userAppCMakeRegistration}.
+To include a userspace application in the build process, it must be registered with the CMake-based build system. AlkOS provides the helper macro \texttt{alkos\_register\_userspace\_app}, which automatically configures compiler flags and links the application against the custom C and C++ standard libraries (\texttt{libc} and \texttt{libc++}). An example registration is shown in Listing \ref{lst:userAppCMakeRegistration}.
 
 {
     \renewcommand{\lstlistingname}{CMake Snippet}
@@ -3449,7 +3724,7 @@ Certain low-level system interactions are beyond the scope of the standard C lib
 
 \subsection{Syscalls}
 
-The system call interface represents the controlled boundary between user-space applications executing in Ring 3 and the kernel executing in Ring 0. On the \texttt{x86\_64} architecture, AlkOS utilizes the \texttt{int 0x80} software interrupt mechanism to invoke system calls.
+The system call interface represents the controlled boundary between userspace applications executing in Ring 3 and the kernel executing in Ring 0. On the \texttt{x86\_64} architecture, AlkOS utilizes the \texttt{int 0x80} software interrupt mechanism to invoke system calls.
 
 \subsubsection{Calling Convention}
 
@@ -3515,7 +3790,323 @@ The available system calls are grouped into logical categories:
 
 
 \section{Example Programs}
-TODO ADAM
+
+To validate the functionality of the kernel and its subsystems, a set of userspace applications was developed. these programs serve as integration tests, verifying the interactions between the system call interface, the C standard library, drivers, and the kernel core. Each program targets specific subsystems and features of the operating system.
+
+\subsection{Hello World}
+
+The \texttt{hello\_world} program serves as the verification of the system call interface, standard I/O operations, and filesystem functionality.
+
+\subsubsection{System Call Interface Verification}
+
+The application calls \texttt{printf}, which internally buffers data and invokes the \texttt{write} system call. The successful appearance of text on the debug terminal confirms that we successfully transitioned from user space to kernel space and back, validating that the syscall dispatcher correctly routes requests to the appropriate kernel handlers (Listing~\ref{lst:hello_stdout}).
+
+\begin{lstlisting}[caption={Hello World Standard Output Test}, label={lst:hello_stdout}]
+// userspace/programs/hello_world/main.cpp
+
+extern "C" int main()
+{
+    printf(
+        "\n----------------------------------\n"
+        "Hello from User Space via Syscall!\n"
+        "----------------------------------\n"
+    );
+    
+    // ... file operations
+    return 0;
+}
+\end{lstlisting}
+
+\subsubsection{File I/O Verification}
+
+Beyond standard output, the program performs a sequence of file manipulations to test the underlying filesystem driver and the VFS layer. The application attempts to open, write to, seek within, and read from a filepath \texttt{/docs/greet.txt}.
+
+This sequence validates path resolution, file descriptor table management in the kernel, and the read/write logic of the filesystem driver (Listing~\ref{lst:hello_fileio}).
+
+\begin{lstlisting}[caption={File I/O Verification Logic}, label={lst:hello_fileio}]
+    // Open an existing file with read/write permissions
+    FILE *fp = fopen("/docs/greet.txt", "r+");
+    if (!fp) {
+        printf("Failed to open /docs/greet.txt for reading!\n");
+        return 1;
+    }
+
+    // Test writing to the filesystem
+    int written = fprintf(fp, "Hello AlkOS from User Space!");
+    
+    // Test Seeking
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        printf("Failed to seek to start of /docs/greet.txt!\n");
+        fclose(fp);
+        return 1;
+    }
+
+    // Test Reading back the data
+    char buffer[128];
+    size_t bytes_read = fread(buffer, 1, sizeof(buffer) - 1, fp);
+    buffer[bytes_read] = '\0';
+
+    printf("Read from file: '%s'\n", buffer);
+    fclose(fp);
+\end{lstlisting}
+
+\subsection{Graphics Test}
+
+The \texttt{gui\_test} application demonstrates the capability of the kernel to provide userspace processes with access to video hardware in a controlled manner. The resulting output is shown in Figure \ref{fig:gui_test}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{res/gui_test.png}
+    \caption{The graphics test application rendering a dynamic pattern.}
+    \label{fig:gui_test}
+\end{figure}
+
+\subsubsection{Video Session Initialization}
+
+The application begins by invoking the \texttt{create\_graphic\_session} system call (Listing~\ref{lst:gui_init}). This request instructs the kernel's window manager to allocate a physical memory buffer acting as a backbuffer for the process. The kernel then maps this physical memory into the virtual address space of the process and returns a \texttt{GuiBufferInfo} structure.
+
+\begin{lstlisting}[caption={Initializing Graphical Session}, label={lst:gui_init}]
+// userspace/programs/gui_test/main.cpp
+
+extern "C" int main()
+{
+    GuiBufferInfo info = {};
+    
+    // Syscall to allocate and map framebuffer
+    __platform_create_graphic_session(&info);
+
+    if (info.buffer_ptr == nullptr) {
+        return 1;
+    }
+
+    // Cast void* to raw pixel array
+    u32 *fb = static_cast<u32 *>(info.buffer_ptr);
+    const auto &fmt = info.format;
+    
+    // ... rendering loop
+}
+\end{lstlisting}
+
+\subsubsection{Direct Framebuffer Manipulation}
+
+Once the session is established, the application treats the video buffer as a linear array of pixels. It implements a rendering loop that generates a moving pattern by calculating pixel colors based on coordinates and a time-variable offset (Listing~\ref{lst:gui_render}).
+
+\begin{lstlisting}[caption={Software Rendering Loop}, label={lst:gui_render}]
+    while (true) {
+        for (size_t y = 0; y < info.height; ++y) {
+            for (size_t x = 0; x < info.width; ++x) {
+                size_t index = (y * (info.pitch / 4)) + x;
+
+                u8 r = (x + color_offset) & 0xFF;
+                u8 g = (y + color_offset) & 0xFF;
+                u8 b = (x + y) & 0xFF;
+
+                // Pack pixel using format info provided by kernel
+                u32 pixel = 0;
+                pixel |= (static_cast<u32>(r) & ((1 << fmt.red_mask_size) - 1)) << fmt.red_pos;
+                pixel |= (static_cast<u32>(g) & ((1 << fmt.green_mask_size) - 1)) << fmt.green_pos;
+                pixel |= (static_cast<u32>(b) & ((1 << fmt.blue_mask_size) - 1)) << fmt.blue_pos;
+
+                fb[index] = pixel;
+            }
+        }
+        // ...
+    }
+\end{lstlisting}
+
+\subsubsection{Double Buffering and Synchronization}
+
+To prevent screen tearing, AlkOS employs a double-buffering strategy. The user application writes to its private backbuffer. To display the frame, the application calls `blit()` (Listing~\ref{lst:gui_sync}). This system call triggers the kernel's window manager to copy the contents of the user's backbuffer to the physical video memory if its session is currently active.
+
+\begin{lstlisting}[caption={Frame Synchronization}, label={lst:gui_sync}]
+        // Blit to screen
+        __platform_blit();
+
+        color_offset += 1;
+
+        // Frame limiting
+        NanoSleep(16'000'000); // ~60 FPS
+    }
+\end{lstlisting}
+
+\subsection{Shell}
+
+The Shell is a more complex userspace program implemented, integrating the input subsystem, graphics subsystem, and process management. Its basic UI is shown in Figure \ref{fig:shell_welcome}.
+
+\subsubsection{Graphical Console Subsystem}
+
+The shell provides a text-based command-line interface. This is achieved through the \texttt{GraphicsConsole} class, which renders text onto a graphical surface using the PSF2 font format \cite{osdev-psf}. The console handles text rendering and cursor management.
+
+\subsubsection{Command Line Interpreter}
+
+The shell implements a Read-Eval-Print Loop (REPL). It reads input from \texttt{stdin}, which is connected to a kernel pipe fed by the keyboard driver. The \texttt{ProcessCommand} method processes the input string and dispatches execution (Listing~\ref{lst:shell_process}).
+
+\begin{lstlisting}[caption={Shell Command Processing}, label={lst:shell_process}]
+// userspace/programs/shell/shell.cpp
+
+void Shell::ProcessCommand()
+{
+    // ... string view parsing ...
+
+    if (cmd == "help") {
+        CmdHelp();
+    } else if (cmd == "clear") {
+        CmdClear();
+    } else if (cmd == "ls") {
+        CmdLs(args);
+    } else if (cmd == "cat") {
+        CmdCat(args);
+    // ... other commands ...
+    } else if (cmd == "exec") {
+        CmdExec(args);
+    } else if (cmd == "kill") {
+        CmdKill(args);
+    } else {
+        console_.Write("Unknown command: ");
+        console_.PutChar('\n');
+    }
+}
+\end{lstlisting}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{res/shell_welcome.png}
+    \caption{The shell interface displaying the welcome message.}
+    \label{fig:shell_welcome}
+\end{figure}
+
+\subsubsection{Built-in Commands}
+
+The shell includes a suite of internal commands, which are handled directly within the \texttt{Shell::ProcessCommand} routine without spawning new processes.
+
+\begin{itemize}
+    \item \textbf{help}: Displays a list of available commands and their usage syntax (Figure \ref{fig:shell_help}).
+    
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=\textwidth]{res/shell_help.png}
+        \caption{The shell interface displaying the help message and available commands.}
+        \label{fig:shell_help}
+    \end{figure}
+    
+    \item \textbf{clear}: Resets the graphical console state. It invokes the \texttt{painter\_.Clear()} method to fill the framebuffer with the background color and resets the cursor position to $(0,0)$.
+    
+    \item \textbf{echo <text>}: Prints the provided text to the console.
+
+    \item \textbf{shutdown / reboot}: These commands invoke the \texttt{power} system call with \texttt{kShutdown} or \texttt{kReboot} actions, triggering ACPI state transitions to power off or reset the physical machine.
+\end{itemize}
+
+\subsubsection{File System Utilities}
+
+The shell maintains a current working directory state and provides utilities to navigate and inspect the filesystem.
+
+\begin{itemize}
+    \item \textbf{pwd}: Prints the full absolute path of the current working directory.
+    
+    \item \textbf{cd <path>}: Changes the current working directory. The shell resolves the provided path (handling relative paths and parent references like \texttt{..}) and verifies the destination exists and is a directory using the \texttt{file\_info} syscall before updating its internal state.
+
+    \item \textbf{ls [path]}: Lists the contents of a directory. It calls the \texttt{read\_directory} syscall to retrieve directory entries. The output logic includes highlighting: directories are rendered in blue to visually distinguish them from regular files (Figure \ref{fig:shell_ls}).
+    
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=\textwidth]{res/shell_ls.png}
+        \caption{Execution of the \texttt{ls} command showing the root directory structure.}
+        \label{fig:shell_ls}
+    \end{figure}
+
+    \item \textbf{cat <file>}: Displays the contents of a file. It uses standard C library functions (\texttt{fopen}, \texttt{fread}) to open the target file and print its content to the console. This command verifies the read functionality of the filesystem driver (Figure \ref{fig:shell_cat}).
+    
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=\textwidth]{res/shell_cat.png}
+        \caption{The \texttt{cat} command displaying the contents of a text file from the FAT16 partition.}
+        \label{fig:shell_cat}
+    \end{figure}
+\end{itemize}
+
+\subsubsection{Process Execution and Control}
+
+The shell demonstrates the operating system's multitasking capabilities through commands that wrap process management system calls.
+
+\begin{itemize}
+    \item \textbf{exec <file> (or ./<file>)}: Loads and executes an ELF64 binary. The shell invokes the \texttt{exec} system call and immediately calls \texttt{wait(pid)}, blocking the shell's execution until the child process terminates.
+
+    \item \textbf{exe\_async <file> (or ./<file> \&)}: The shell does not wait for the child process, allowing the user to continue issuing commands while the background process executes. This validates the scheduler's ability to timeshare the CPU between the interactive shell and compute-intensive background tasks.
+
+    \item \textbf{kill <pid>}: Sends a termination signal to a specific process. This invokes the \texttt{kill} system call to forcibly terminate the target application and reclaim its resources.
+\end{itemize}
+
+\subsection{Doom}
+
+To demonstrate the capability of the AlkOS userspace and its standard library compatibility, we undertook the task of porting \textit{Doom}~\cite{idsoftware1993doom} (1993). In the realm of systems programming, getting Doom to run is often considered the de facto "Hello World" for operating systems, proving that the scheduler, memory management, file system, and video subsystem function cohesively. A screenshot of the port running on AlkOS is shown in Figure \ref{fig:doom_gameplay}.
+
+We utilized \textbf{Doomgeneric}~\cite{doomgeneric}, a source port specifically designed to be portable. It strips away the complex, operating-system-specific dependencies (such as sound drivers, networking, or windowing) and exposes a minimal interface that the target OS must implement.
+
+It is important to note that while the Doom engine is open source since 1997 \cite{idsoftware1997doomsource}, the game data (levels, graphics, sounds) is stored in \textbf{.WAD} files, which remain under copyright. To execute the game on AlkOS, a valid \texttt{.WAD} file must be placed in the \texttt{/doom} directory of the rootfs overlay. This can be the \texttt{DOOM1.WAD} from the shareware version or the full \texttt{DOOM.WAD} from a retail copy. The engine supports games based on the same technology, such as \textit{Doom II} or \textit{Heretic}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{res/doom_gameplay.png}
+    \caption{Doom gameplay on AlkOS running at 800x600 scaled resolution.}
+    \label{fig:doom_gameplay}
+\end{figure}
+
+\subsubsection{The Doomgeneric Interface}
+
+The integration of \textit{Doomgeneric} requires the implementation of a small set of functions defined in \texttt{doomgeneric.h}. These functions handle video output, input processing, and timing. The key functions that must be provided are:
+
+\begin{itemize}
+    \item \texttt{DG\_Init}: Initializes the video system and prepares input handling.
+    \item \texttt{DG\_DrawFrame}: Called by the game loop when a frame is ready to be presented to the screen.
+    \item \texttt{DG\_SleepMs}: Pauses execution to regulate the game loop timing.
+    \item \texttt{DG\_GetTicksMs}: Returns the monotonic system time in milliseconds, used for game logic timing like delta time calculations.
+    \item \texttt{DG\_GetKey}: Retrieves pending input events.
+\end{itemize}
+
+In our implementation (\texttt{doomgeneric\_alkos.c}), these functions wrap the AlkOS system calls. For instance, \texttt{DG\_GetTicksMs} utilizes \texttt{get\_clock\_value} to retrieve high-resolution timing, and \texttt{DG\_DrawFrame} invokes the \texttt{blit} syscall to trigger framebuffer updates.
+
+\subsubsection{Video Output and Scaling}
+
+The original resolution of Doom is $320 \times 200$ pixels. Modern framebuffers usually operate at significantly higher resolutions (e.g., $1024 \times 768$ or $1920 \times 1080$). Displaying a raw $320 \times 200$ image on such a screen would result in a tiny window. Consequently, software scaling is required.
+
+\paragraph{Scaling Strategy}
+A naive integer scaling approach (e.g., simply multiplying pixels by an integer factor) used in this port was not taking advantage of the available screen and resulted in wasted screen space. To address this, we restored and integrated legacy Doom scaling algorithms that support \textbf{Squash} and \textbf{Stretch} modes.
+
+We implemented an automatic mode selection algorithm in \texttt{doomgeneric.c}. Upon initialization, the game inspects the dimensions of the framebuffer allocated by the window manager and calculates the optimal scaling factor ($1\times$ to $5\times$) and select mode (Stretch or Squash) to maximize screen usage:
+\begin{itemize}
+    \item \textbf{Stretch Mode}: Used when the vertical resolution allows for aspect ratio correction by stretching the height.
+    \item \textbf{Squash Mode}: Used when horizontal compression is required to fit the aspect ratio.
+    \item \textbf{Special Case}: Resolution $800 \times 600$ trigger optimized path ($3\times$ squash with $50\%$ pixel blending) to reduce visual artifacts.
+\end{itemize}
+
+\paragraph{Pixel Format}
+The internal rendering engine of Doom operates in an 8-bit indexed color mode, utilizing a 256-color palette. However, the linear framebuffer provided by the kernel operates in a true color mode. To bridge this gap, we implemented a color conversion routine within the screen update loop. During the scaling process, each 8-bit pixel index is resolved against the current palette to obtain its RGB components. These components are then packed according to the specific red, green, and blue field positions defined by the framebuffer metadata. This ensures correct color reproduction regardless of the specific pixel format utilized by the underlying hardware.
+
+\paragraph{Buffer Optimization}
+\textit{Doomgeneric} renders the game to an internal buffer, and then we copy it again to the window manager's buffer. To maximize performance, we modified the \texttt{i\_video.c} rendering path to remove one layer of indirection. We allow the scaling routines to write directly into the framebuffer obtained via the \texttt{create\_graphic\_session} syscall. The scaling is performed in-place during the screen update phase.
+
+\subsubsection{Input Event Mapping}
+
+Doom expects a queue of input events (key presses and releases) using its own internal key codes. AlkOS, however, exposes a polling-based interface via the \texttt{GetKeyState} syscall, which returns the instantaneous state of a \texttt{VirtualKey} (keyboard layout agnostic key codes).
+
+To bridge this gap, we implemented a translation layer in \texttt{doomgeneric\_alkos.c}. The system maintains an array of previous key states for all keys relevant to the game (movement, action, and menu keys). During every frame tick, the wrapper polls the current state of these keys using the kernel API. By comparing the current state with the previous state, we synthesize "Press" and "Release" events and push them into Doom's internal event queue.
+
+We also utilized a lookup table to translate \texttt{VirtualKey} enum (e.g., \texttt{VK\_LeftCtrl}) into Doom's internal key codes (e.g., \texttt{KEY\_FIRE}), ensuring correct mapping for gameplay actions.
+
+\subsubsection{Porting Process}
+
+The process of porting \textit{Doom} revealed several shortcomings in the existing \texttt{libc} implementation, which required a subsequent extension of its functionality. Although the \textit{Doomgeneric} is designed to be largely operating-system-agnostic, portions of its codebase implicitly assume the presence of a runtime environment with at least partial POSIX compliance. In particular, commonly used facilities such as string manipulation routines and directory handling interfaces were expected to be available. The following sections outline the key areas where the \texttt{libc} was enhanced to meet these requirements.
+
+\paragraph{Memory Management}
+Doom relies heavily on dynamic memory allocation for level geometry, textures, and game objects (\texttt{Z\_Malloc}). Our \texttt{libc} initially lacked a heap allocator. We implemented a standard \texttt{malloc}, \texttt{free}, \texttt{calloc}, and \texttt{realloc} suite based on a linked-list memory control block strategy \cite{malloc-impl}. This required adding a new system call, \texttt{get\_heap\_start}, which allows the userspace allocator to locate the valid heap region assigned by the kernel's VMM.
+
+\paragraph{String Manipulation}
+The Doom engine, particularly the WAD management system, relies on case-insensitive string comparisons to locate resources (e.g., finding "doom.wad" when the file is named "DOOM.WAD"). We implemented POSIX-compliant \texttt{strcasecmp} and \texttt{strncasecmp} functions to support this behavior.
+
+\paragraph{Standard I/O}
+To support loading data from the file system, we expanded the \texttt{stdio} implementation to include \texttt{fopen}, \texttt{fread}, \texttt{fseek}, and \texttt{ftell}, backed by the underlying syscalls (\texttt{open}, \texttt{read}, \texttt{seek}). This allowed the Doom engine to seamlessly load WAD files from the root filesystem using standard I/O semantics. Also \texttt{create\_directory} needed to be implemented to create the \texttt{saves/} directory for saving game progress. \\
+
+By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
 % TODO: extension
 % \section{Performance Analysis}
@@ -3544,39 +4135,56 @@ TODO: JAKUB
 % --------- LIST OF SYMBOLS AND ABBREVIATIONS ------
 \chapter*{List of symbols and abbreviations}
 
-\begin{tabular}{cl}
+\begin{supertabular}{cl}
+ABI & Application Binary Interface \\
+ACPI & Advanced Configuration and Power Interface \\
+AHCI & Advanced Host Controller Interface \\
 API & Application Programming Interface \\
 APIC & Advanced Programmable Interrupt Controller \\
+ASLR & Address Space Layout Randomization \\
+BSS & Block Starting Symbol \\
+CFS & Completly Fair Scheduler \\
+COW & Copy On Write \\
 CRTP & Curiously Recurring Template Pattern \\
+DMA & Direct Memory Access \\
+EEVDF & Earliest Eligible Virtual Deadline First \\
+ELF & Executable and Linkable Format \\
+FAT & File Allocation Table \\
+FHS & Filesystem Hierarchy Standard \\
+GDT & Global Descriptor Table \\
 IDT & Interrupt Descriptor Table \\
 IPC & Inter-Process Communication \\
 ISR & Interrupt Service Routine \\
 LAPIC & Local Advanced Programmable Interrupt Controller \\
+LBA & Linear Block Addressing \\
 LIT & Logical Interrupt Table \\
+LKM & Loadable Kernel Module \\
 MLFQ & Multi-Level Feedback Queue \\
 MMIO & Memory-Mapped I/O \\
 MMU & Memory Management Unit \\
+NVMe & Non-Volatile Memory Express \\
 OS & Operating System \\
+PCI & Peripheral Component Interconnect \\
+PCIe & Peripheral Component Interconnect Express \\
+PCP & Per-CPU Pagessets \\
 PIC & Programmable Interrupt Controller \\
 PID & Process IDentifier \\
 PIT & Programmable Interval Timer \\
+PMM & Physical Memory Manager \\
+POSIX & Portable Operating System Interface \\
+REPL & Read-Eval-Print Loop \\
 RTC & Real-Time Clock \\
+SATA & Serial Advanced Technology Attachment \\
+SIMD & Single Instruction, Multiple Data \\
+SMP & Symmetric MultiProcessing \\
 TID & Thread IDentifier \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
-VFS & Virtual File System \\
-CFS & Completly Fair Scheduler \\
-EEVDF & Earliest Eligible Virtual Deadline First \\
-DMA & Direct Memory Access \\
-PCP & Per-CPU Pagessets \\
-COW & Copy On Write \\
-SMP & Symmetric MultiProcessing \\
-ACPI & Advanced Configuration and Power Interface \\
-PCI & Peripheral Component Interconnect \\
 USB & Universal Serial Bus \\
-IPC & Inter Process Communication \\
-
-\end{tabular}
+VFS & Virtual File System \\
+VMM & Virtual Memory Manager \\
+WAD & Where's All the Data \\
+\end{supertabular}
 \\
 \thispagestyle{empty}
 
