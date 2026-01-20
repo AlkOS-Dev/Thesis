@@ -1,19 +1,23 @@
-% CPU amd64
+% ==============================================================================
+% CPU AMD64
+% ==============================================================================
 
 @manual{IntelManual-Segments,
-  author  = {Intel Corporation},
-  title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
-  pages   = {85--100},
-  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  author = {Intel Corporation},
+  title  = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
+  pages  = {85--100},
+  url    = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
 }
 
 @manual{osdev-tss,
-  author  = {OsDev community},
-  title   = {OsDev - TSS},
-  url     = {https://wiki.osdev.org/Task_State_Segment},
+  author = {OsDev community},
+  title  = {OsDev - TSS},
+  url    = {https://wiki.osdev.org/Task_State_Segment},
 }
 
-%% Memory
+% ==============================================================================
+% Memory
+% ==============================================================================
 
 @misc{buddy_allocator,
   author = {Wikipedia},
@@ -37,12 +41,12 @@
 }
 
 @inproceedings{bonwick1994slab,
-  author    = {Bonwick, Jeff},
-  title     = {The Slab Allocator: An Object-Caching Kernel Memory Allocator},
-  booktitle = {USENIX Summer Technical Conference},
-  year      = {1994},
+  author       = {Bonwick, Jeff},
+  title        = {The Slab Allocator: An Object-Caching Kernel Memory Allocator},
+  booktitle    = {USENIX Summer Technical Conference},
+  year         = {1994},
   organization = {Sun Microsystems},
-  note      = {Introduces object caching for kernel allocators. Foundation for Linux slab/slub/slob.},
+  note         = {Introduces object caching for kernel allocators. Foundation for Linux slab/slub/slob.},
 }
 
 @inproceedings{masmano2004tlsf,
@@ -72,77 +76,81 @@
   note      = {Per-processor heaps with superblock transfer for scalable multiprocessor allocation.},
 }
 
-%% Interrupts 
+% ==============================================================================
+% Interrupts
+% ==============================================================================
 
 @manual{IntelManual-APIC,
-  author  = {Intel Corporation},
-  title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
-  pages   = {393--443},
-  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  author = {Intel Corporation},
+  title  = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
+  pages  = {393--443},
+  url    = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
 }
 
 @manual{IntelManual-Interrupts,
-  author  = {Intel Corporation},
-  title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
-  pages   = {199--257},
-  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  author = {Intel Corporation},
+  title  = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
+  pages  = {199--257},
+  url    = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
 }
 
 @manual{IntelManual-Protection-Rings,
-author  = {Intel Corporation},
-title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
-pages   = {170--172},
-url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  author = {Intel Corporation},
+  title  = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
+  pages  = {170--172},
+  url    = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
 }
 
 @manual{osdev-pic,
-  author  = {OsDev community},
-  title   = {OsDev - PIC},
-  url     = {https://wiki.osdev.org/8259_PIC},
+  author = {OsDev community},
+  title  = {OsDev - PIC},
+  url    = {https://wiki.osdev.org/8259_PIC},
 }
 
 @manual{osdev-apic,
-  author  = {OsDev community},
-  title   = {OsDev - APIC},
-  url     = {https://wiki.osdev.org/APIC},
+  author = {OsDev community},
+  title  = {OsDev - APIC},
+  url    = {https://wiki.osdev.org/APIC},
 }
 
-%% Devices
+% ==============================================================================
+% Devices
+% ==============================================================================
 
 @manual{usb20-spec,
-  title   = {USB 2.0 specification},
-  year    = {2025},
-  url     = {https://usb.org/document-library/usb-20-specification},
+  title = {USB 2.0 specification},
+  year  = {2025},
+  url   = {https://usb.org/document-library/usb-20-specification},
 }
 
 @manual{osdev-usb,
-  author  = {OsDev community},
-  title   = {OsDev - PS2 Keyboard},
-  url     = {https://wiki.osdev.org/Universal_Serial_Bus},
+  author = {OsDev community},
+  title  = {OsDev - PS2 Keyboard},
+  url    = {https://wiki.osdev.org/Universal_Serial_Bus},
 }
 
 @manual{osdev-ps21,
-  author  = {OsDev community},
-  title   = {OsDev - PS2 Keyboard},
-  url     = {https://wiki.osdev.org/PS/2_Keyboard},
+  author = {OsDev community},
+  title  = {OsDev - PS2 Keyboard},
+  url    = {https://wiki.osdev.org/PS/2_Keyboard},
 }
 
 @manual{osdev-ps22,
-  author  = {OsDev community},
-  title   = {OsDev - PS-2 Controller},
-  url     = {https://wiki.osdev.org/I8042_PS/2_Controller},
+  author = {OsDev community},
+  title  = {OsDev - PS-2 Controller},
+  url    = {https://wiki.osdev.org/I8042_PS/2_Controller},
 }
 
 @manual{osdev-gs,
-  author  = {OsDev community},
-  title   = {OsDev - SWAPGS},
-  url     = {https://wiki.osdev.org/SWAPGS},
+  author = {OsDev community},
+  title  = {OsDev - SWAPGS},
+  url    = {https://wiki.osdev.org/SWAPGS},
 }
 
 @manual{osdev-pci,
-  author  = {OsDev community},
-  title   = {OsDev - PCI},
-  url     = {https://wiki.osdev.org/PCI},
+  author = {OsDev community},
+  title  = {OsDev - PCI},
+  url    = {https://wiki.osdev.org/PCI},
 }
 
 @manual{ACPI-spec,
@@ -155,67 +163,67 @@ url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/
 }
 
 @manual{IntelManual-LAPIC-Timer,
-  author  = {Intel Corporation},
-  title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
-  pages   = {408--409},
-  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  author = {Intel Corporation},
+  title  = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
+  pages  = {408--409},
+  url    = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
 }
 
 @manual{Intel-HPET,
-  author  = {Intel Corporation},
-  title   = {Intel HPET specification},
-  url     = {https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/software-developers-hpet-spec-1-0a.pdf},
+  author = {Intel Corporation},
+  title  = {Intel HPET specification},
+  url    = {https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/software-developers-hpet-spec-1-0a.pdf},
 }
 
 @manual{IntelManual-TSC,
-  author  = {Intel Corporation},
-  title   = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
-  pages   = {684--686},
-  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  author = {Intel Corporation},
+  title  = {Intel Manual - Software Developer's Manual Combined Volumes 3A, 3B, 3C, and 3D},
+  pages  = {684--686},
+  url    = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
 }
 
 @manual{osdev-hpet,
-  author  = {OsDev community},
-  title   = {OsDev - HPET},
-  url     = {https://wiki.osdev.org/HPET},
+  author = {OsDev community},
+  title  = {OsDev - HPET},
+  url    = {https://wiki.osdev.org/HPET},
 }
 
 @manual{osdev-lapic-timer,
-  author  = {OsDev community},
-  title   = {OsDev - LAPIC Timer},
-  url     = {https://wiki.osdev.org/APIC_Timer},
+  author = {OsDev community},
+  title  = {OsDev - LAPIC Timer},
+  url    = {https://wiki.osdev.org/APIC_Timer},
 }
 
 @manual{osdev-pit,
-  author  = {OsDev community},
-  title   = {OsDev - PIT},
-  url     = {https://wiki.osdev.org/Programmable_Interval_Timer},
+  author = {OsDev community},
+  title  = {OsDev - PIT},
+  url    = {https://wiki.osdev.org/Programmable_Interval_Timer},
 }
 
 @manual{osdev-tsc,
-  author  = {OsDev community},
-  title   = {OsDev - TSC},
-  url     = {https://wiki.osdev.org/TSC},
+  author = {OsDev community},
+  title  = {OsDev - TSC},
+  url    = {https://wiki.osdev.org/TSC},
 }
 
 @manual{osdev-psf,
-  author  = {OsDev community},
-  title   = {OsDev - PC Screen Font},
-  url     = {https://wiki.osdev.org/PC_Screen_Font},
+  author = {OsDev community},
+  title  = {OsDev - PC Screen Font},
+  url    = {https://wiki.osdev.org/PC_Screen_Font},
 }
 
-%% Bootloader
+% ==============================================================================
+% Bootloader
+% ==============================================================================
 
-% ARM
 @manual{ARM-CortexM4-Generic-User-Guide,
-  author  = {ARM Holdings},
-  title   = {Cortex-M4 Devices Generic User Guide},
-  year    = {2010},
-  url     = {https://developer.arm.com/documentation/dui0553/latest/},
-  note    = {See Section 2.3 Exception Model and Vector Table definition. Explains fetch from address 0x00000000.},
+  author = {ARM Holdings},
+  title  = {Cortex-M4 Devices Generic User Guide},
+  year   = {2010},
+  url    = {https://developer.arm.com/documentation/dui0553/latest/},
+  note   = {See Section 2.3 Exception Model and Vector Table definition. Explains fetch from address 0x00000000.},
 }
 
-% UEFI PI
 @manual{UEFI-PI-Spec,
   author  = {UEFI Forum},
   title   = {UEFI Platform Initialization (PI) Specification},
@@ -226,67 +234,54 @@ url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/
   note    = {Volume 1 details the SEC, PEI, and DXE phases responsible for silicon initialization before OS loading.},
 }
 
-% LIMINE
 @manual{Limine-Spec,
-  author  = {Limine Bootloader Project},
-  title   = {Limine Bootloader Protocol Specification},
-  url     = {https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md},
-  note    = {See "Machine State" section defining the 64-bit protected mode entry state provided to the kernel.},
+  author = {Limine Bootloader Project},
+  title  = {Limine Bootloader Protocol Specification},
+  url    = {https://github.com/limine-bootloader/limine/blob/v8.x/PROTOCOL.md},
+  note   = {See "Machine State" section defining the 64-bit protected mode entry state provided to the kernel.},
 }
 
-% INTEL RESET
 @manual{IntelManual-Reset,
-author  = {Intel Corporation},
-title   = {Intel Manual - Software Developer's manual combined},
-volume  = {3A},
-chapter = {9},
-url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  author  = {Intel Corporation},
+  title   = {Intel Manual - Software Developer's manual combined},
+  volume  = {3A},
+  chapter = {9},
+  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
   note    = {See Chapter 9, Table 9-1 for detailed Processor State after Reset (CS=0xF000, EIP=0xFFF0).},
 }
 
-% UEFI
 @manual{UEFI-Base-Spec,
-  author  = {UEFI Forum},
-  title   = {UEFI Specification},
-  url     = {https://uefi.org/specifications},
-  note    = {The base specification defining the runtime services and boot services available to the OS loader.},
+  author = {UEFI Forum},
+  title  = {UEFI Specification},
+  url    = {https://uefi.org/specifications},
+  note   = {The base specification defining the runtime services and boot services available to the OS loader.},
 }
 
 @manual{UEFI-BootManager,
-author  = {UEFI Forum},
-title   = {UEFI Specification - Boot Manager},
-version = {2.10},
-url     = {https://uefi.org/specs/UEFI/2.10_A/03_Boot_Manager.html},
+  author  = {UEFI Forum},
+  title   = {UEFI Specification - Boot Manager},
+  version = {2.10},
+  url     = {https://uefi.org/specs/UEFI/2.10_A/03_Boot_Manager.html},
 }
 
-% MULTIBOOT2
 @manual{Multiboot2-Spec,
-author  = {Free Software Foundation},
-title   = {Multiboot2 Specification},
-url     = {https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html},
+  author = {Free Software Foundation},
+  title  = {Multiboot2 Specification},
+  url    = {https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html},
 }
 
-% CRIT-BIT TREE
-@misc{critbit,
-author  = {Adam Langley},
-title   = {Crit-bit Trees},
-url     = {https://github.com/agl/critbit/blob/4bb69901a9813de05331bd3afc5085e00050f701/critbit.pdf},
-}
-
-% ----------------------------------------------------------------------
+% ==============================================================================
 % Memory Preloading / CPU Initialization
-% ----------------------------------------------------------------------
+% ==============================================================================
 
-% INTEL DATASHEETS (Power Sequencing)
 @manual{Intel-Datasheet-Vol1,
-  author  = {Intel Corporation},
-  title   = {Intel Core Processor Family Datasheet, Volume 1},
-  year    = {2020},
-  url     = {https://www.intel.com/content/www/us/en/products/docs/processors/core/core-technical-resources.html},
-  note    = {See sections on Power Sequencing Signals (Processor Power Good, PM Sync) and Voltage Regulator Interface (VID).},
+  author = {Intel Corporation},
+  title  = {Intel Core Processor Family Datasheet, Volume 1},
+  year   = {2020},
+  url    = {https://www.intel.com/content/www/us/en/products/docs/processors/core/core-technical-resources.html},
+  note   = {See sections on Power Sequencing Signals (Processor Power Good, PM Sync) and Voltage Regulator Interface (VID).},
 }
 
-% DEVICETREE
 @manual{Devicetree-Spec,
   author  = {Devicetree.org},
   title   = {Devicetree Specification},
@@ -296,24 +291,22 @@ url     = {https://github.com/agl/critbit/blob/4bb69901a9813de05331bd3afc5085e00
   note    = {Defines the flattened device tree format, structure block, and memory reservation block.},
 }
 
-% ARM ARCHITECTURE
 @manual{ARM-Arch-Ref,
-  author  = {ARM Holdings},
-  title   = {Arm Architecture Reference Manual for A-profile architecture},
-  year    = {2022},
-  url     = {https://developer.arm.com/documentation/ddi0487/latest/},
-  note    = {See System Registers section describing ID\_AA64PFR0\_EL1 for feature discovery.},
+  author = {ARM Holdings},
+  title  = {Arm Architecture Reference Manual for A-profile architecture},
+  year   = {2022},
+  url    = {https://developer.arm.com/documentation/ddi0487/latest/},
+  note   = {See System Registers section describing ID\_AA64PFR0\_EL1 for feature discovery.},
 }
 
 @manual{ARM-Arch-Ref-Exception-Levels,
-  author  = {ARM Holdings},
-  title   = {Arm Architecture Reference Manual for A-profile architecture},
-  year    = {2022},
-  url     = {https://developer.arm.com/documentation/ddi0487/latest/},
-  note    = {See Chapter 3.3 Exception Levels for details on EL0, EL1, EL2, and EL3 privilege levels.},
+  author = {ARM Holdings},
+  title  = {Arm Architecture Reference Manual for A-profile architecture},
+  year   = {2022},
+  url    = {https://developer.arm.com/documentation/ddi0487/latest/},
+  note   = {See Chapter 3.3 Exception Levels for details on EL0, EL1, EL2, and EL3 privilege levels.},
 }
 
-% RISC-V ARCHITECTURE
 @manual{RISCV-Priv-Spec,
   author  = {RISC-V International},
   title   = {The RISC-V Instruction Set Manual, Volume II: Privileged Architecture},
@@ -341,166 +334,170 @@ url     = {https://github.com/agl/critbit/blob/4bb69901a9813de05331bd3afc5085e00
   note    = {See Chapter 'Machine Trap Delegation' for system call handling and delegation mechanisms.},
 }
 
-% INTEL SDM SPECIFIC FEATURES
 @manual{Intel-CPUID,
-  author  = {Intel Corporation},
-  title   = {Intel 64 and IA-32 Architectures Software Developer's Manual},
-  volume  = {2A},
-  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
-  note    = {See Instruction Set Reference (A-L) for CPUID instruction details and return values.},
+  author = {Intel Corporation},
+  title  = {Intel 64 and IA-32 Architectures Software Developer's Manual},
+  volume = {2A},
+  url    = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  note   = {See Instruction Set Reference (A-L) for CPUID instruction details and return values.},
 }
 
 @manual{Intel-AVX,
-  author  = {Intel Corporation},
-  title   = {Intel 64 and IA-32 Architectures Software Developer's Manual},
-  volume  = {1},
-  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
-  note    = {See Chapter 14 'Programming with AVX, FMA, and AVX2' for detection and usage guidelines.},
+  author = {Intel Corporation},
+  title  = {Intel 64 and IA-32 Architectures Software Developer's Manual},
+  volume = {1},
+  url    = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  note   = {See Chapter 14 'Programming with AVX, FMA, and AVX2' for detection and usage guidelines.},
 }
 
 @manual{Intel-XSAVE,
-  author  = {Intel Corporation},
-  title   = {Intel 64 and IA-32 Architectures Software Developer's Manual},
-  volume  = {1},
-  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
-  note    = {See Chapter 13 'Managing State Using the XSAVE Feature Set' for XCR0 and context size determination.},
+  author = {Intel Corporation},
+  title  = {Intel 64 and IA-32 Architectures Software Developer's Manual},
+  volume = {1},
+  url    = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  note   = {See Chapter 13 'Managing State Using the XSAVE Feature Set' for XCR0 and context size determination.},
 }
 
 @manual{Intel-ControlRegisters,
-  author  = {Intel Corporation},
-  title   = {Intel 64 and IA-32 Architectures Software Developer's Manual},
-  volume  = {3A},
-  url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
-  note    = {See Chapter 2 for Control Registers (CR0, CR4) and their bit distinctions (PE, PG, OSFXSR, OSXSAVE).},
+  author = {Intel Corporation},
+  title  = {Intel 64 and IA-32 Architectures Software Developer's Manual},
+  volume = {3A},
+  url    = {https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html},
+  note   = {See Chapter 2 for Control Registers (CR0, CR4) and their bit distinctions (PE, PG, OSFXSR, OSXSAVE).},
 }
 
-% FAT SPEC
+% ==============================================================================
+% File Systems
+% ==============================================================================
+
 @techreport{fat-spec,
-author       = {Microsoft Corporation},
-title        = {FAT32 File System Specification: FAT: General Overview of On-Disk Format},
-institution  = {Microsoft Corporation},
-year         = {2000},
-month        = {12},
-day          = {6},
-type         = {Hardware White Paper},
-number       = {Version 1.03},
-note         = {Designing Hardware for Microsoft Operating Systems, Microsoft Extensible Firmware Initiative},
-url          = {https://www.cs.fsu.edu/~cop4610t/assignments/project3/spec/fatspec.pdf},
+  author      = {Microsoft Corporation},
+  title       = {FAT32 File System Specification: FAT: General Overview of On-Disk Format},
+  institution = {Microsoft Corporation},
+  year        = {2000},
+  month       = {12},
+  day         = {6},
+  type        = {Hardware White Paper},
+  number      = {Version 1.03},
+  note        = {Designing Hardware for Microsoft Operating Systems, Microsoft Extensible Firmware Initiative},
+  url         = {https://www.cs.fsu.edu/~cop4610t/assignments/project3/spec/fatspec.pdf},
 }
 
-% EXT2 SPEC
 @techreport{ext2-spec,
-author       = {Filesystems Group},
-title        = {The Second Extended File System},
-institution  = {NonGNU},
-year         = {1997},
-url          = {https://www.nongnu.org/ext2-doc/ext2.pdf},
-note         = {Complete specification of ext2 file system design, inode structure, block allocation, and directory format.},
+  author      = {Filesystems Group},
+  title       = {The Second Extended File System},
+  institution = {NonGNU},
+  year        = {1997},
+  url         = {https://www.nongnu.org/ext2-doc/ext2.pdf},
+  note        = {Complete specification of ext2 file system design, inode structure, block allocation, and directory format.},
 }
 
-% ISO9660 SPEC
 @techreport{iso9660-spec,
-author       = {ECMA International},
-title        = {Volume and file structure of CD-ROM for information interchange},
-organization = {ECMA International},
-year         = {2025},
-month        = {12},
-edition      = {6th},
-url          = {https://ecma-international.org/wp-content/uploads/ECMA-119_6th_edition_december_2025.pdf},
-note         = {ISO 9660 standard for CD-ROM and DVD-ROM file system specification.},
+  author       = {ECMA International},
+  title        = {Volume and file structure of CD-ROM for information interchange},
+  organization = {ECMA International},
+  year         = {2025},
+  month        = {12},
+  edition      = {6th},
+  url          = {https://ecma-international.org/wp-content/uploads/ECMA-119_6th_edition_december_2025.pdf},
+  note         = {ISO 9660 standard for CD-ROM and DVD-ROM file system specification.},
 }
 
-% CPPREFERENCE
+% ==============================================================================
+% C++ Reference
+% ==============================================================================
 
 @misc{crtp,
-author  = {cppreference.com},
-title   = {Curiously Recurring Template Pattern},
-url     = {https://en.cppreference.com/w/cpp/language/crtp},
+  author = {cppreference.com},
+  title  = {Curiously Recurring Template Pattern},
+  url    = {https://en.cppreference.com/w/cpp/language/crtp},
 }
 
+% ==============================================================================
 % MINIX 3
+% ==============================================================================
 
 @misc{minix_wikipedia,
-author = {Wikipedia},
-title  = {MINIX},
-url    = {https://en.wikipedia.org/wiki/Minix},
-} 
+  author = {Wikipedia},
+  title  = {MINIX},
+  url    = {https://en.wikipedia.org/wiki/Minix},
+}
 
 @misc{minix_repo,
-author = {Stichting MINIX Research Foundation},
-title  = {MINIX 3 Operating System Repository},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix},
+  author = {Stichting MINIX Research Foundation},
+  title  = {MINIX 3 Operating System Repository},
+  url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix},
 }
 
 @misc{minix_sched,
-author = {Stichting MINIX Research Foundation},
-title  = {Scheduling Implementation},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/servers/sched/schedule.c},
-howpublished = {Source Code},
+  author       = {Stichting MINIX Research Foundation},
+  title        = {Scheduling Implementation},
+  url          = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/servers/sched/schedule.c},
+  howpublished = {Source Code},
 }
 
 @misc{minix_sched_bq,
-author = {Stichting MINIX Research Foundation},
-title  = {Queue Balancing Logic},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/servers/sched/schedule.c},
-howpublished = {Source Code},
-note   = {See function \texttt{balance\_queues()}},
+  author       = {Stichting MINIX Research Foundation},
+  title        = {Queue Balancing Logic},
+  url          = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/servers/sched/schedule.c},
+  howpublished = {Source Code},
+  note         = {See function \texttt{balance\_queues()}},
 }
 
 @misc{minix_arch_clock,
-author = {Stichting MINIX Research Foundation},
-title  = {Architecture Dependent Clock},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/arch/earm/arch_clock.c},
-howpublished = {Source Code},
+  author       = {Stichting MINIX Research Foundation},
+  title        = {Architecture Dependent Clock},
+  url          = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/arch/earm/arch_clock.c},
+  howpublished = {Source Code},
 }
 
 @misc{minix_kernel_clock,
-author = {Stichting MINIX Research Foundation},
-title  = {Kernel Clock Driver},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/clock.c},
-howpublished = {Source Code},
+  author       = {Stichting MINIX Research Foundation},
+  title        = {Kernel Clock Driver},
+  url          = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/clock.c},
+  howpublished = {Source Code},
 }
 
 @misc{minix_do_setalarm,
-author = {Stichting MINIX Research Foundation},
-title  = {Set Alarm System Call Handler},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/system/do_setalarm.c},
-howpublished = {Source Code},
+  author       = {Stichting MINIX Research Foundation},
+  title        = {Set Alarm System Call Handler},
+  url          = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/system/do_setalarm.c},
+  howpublished = {Source Code},
 }
 
 @misc{minix_readclock,
-author = {Stichting MINIX Research Foundation},
-title  = {Readclock Driver},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/drivers/clock/readclock/readclock.c},
-howpublished = {Source Code},
+  author       = {Stichting MINIX Research Foundation},
+  title        = {Readclock Driver},
+  url          = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/drivers/clock/readclock/readclock.c},
+  howpublished = {Source Code},
 }
 
 @misc{minix_vm,
-author = {Stichting MINIX Research Foundation},
-title  = {Virtual Memory Server},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/tree/master/minix/servers/vm/},
-howpublished = {Source Code},
+  author       = {Stichting MINIX Research Foundation},
+  title        = {Virtual Memory Server},
+  url          = {https://github.com/Stichting-MINIX-Research-Foundation/minix/tree/master/minix/servers/vm/},
+  howpublished = {Source Code},
 }
 
 @misc{minix_ipc,
-author = {Stichting MINIX Research Foundation},
-title  = {Inter-Process Communication Header},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/include/minix/ipc.h},
-howpublished = {Source Code},
+  author       = {Stichting MINIX Research Foundation},
+  title        = {Inter-Process Communication Header},
+  url          = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/include/minix/ipc.h},
+  howpublished = {Source Code},
 }
 
 @misc{minix_callnr,
-author = {Stichting MINIX Research Foundation},
-title  = {System Call Numbers},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/include/minix/callnr.h},
-howpublished = {Source Code},
+  author       = {Stichting MINIX Research Foundation},
+  title        = {System Call Numbers},
+  url          = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/include/minix/callnr.h},
+  howpublished = {Source Code},
 }
 
 @misc{minix_safecopy,
-author = {Stichting MINIX Research Foundation},
-title  = {SafeCopy and Grant Mechanism},
-url    = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/system/do_safecopy.c},
-howpublished = {Source Code},
+  author       = {Stichting MINIX Research Foundation},
+  title        = {SafeCopy and Grant Mechanism},
+  url          = {https://github.com/Stichting-MINIX-Research-Foundation/minix/blob/master/minix/kernel/system/do_safecopy.c},
+  howpublished = {Source Code},
 }
 
 @misc{shenoy_lecture,
@@ -511,11 +508,13 @@ howpublished = {Source Code},
   url         = {https://lass.cs.umass.edu/~shenoy/courses/spring20/lectures/lecture11-scribe.pdf},
 }
 
-% LINUX
+% ==============================================================================
+% Linux
+% ==============================================================================
 
 @misc{linux_lkm,
   author = {Wikipedia},
-  title  = {Lodabable Kernel Module},
+  title  = {Loadable Kernel Module},
   url    = {https://en.wikipedia.org/wiki/Loadable_kernel_module},
 }
 
@@ -526,66 +525,68 @@ howpublished = {Source Code},
 }
 
 @misc{linux_highres_code,
-  author      = {Linux Foundation},
-  title       = {Linux High Resolution Timers Code},
-  url         = {https://github.com/torvalds/linux/blob/master/include/linux/hrtimer.h},
+  author = {Linux Foundation},
+  title  = {Linux High Resolution Timers Code},
+  url    = {https://github.com/torvalds/linux/blob/master/include/linux/hrtimer.h},
 }
 
 @misc{linux_jiffies,
-  author      = {Linux Foundation},
-  title       = {Linux Jiffies},
-  url         = {https://github.com/torvalds/linux/blob/master/include/linux/jiffies.h},
+  author = {Linux Foundation},
+  title  = {Linux Jiffies},
+  url    = {https://github.com/torvalds/linux/blob/master/include/linux/jiffies.h},
 }
 
 @misc{linux_cfs,
-  author      = {Linux Foundation},
-  title       = {Linux CFS},
-  url         = {https://docs.kernel.org/scheduler/sched-design-CFS.html},
+  author = {Linux Foundation},
+  title  = {Linux CFS},
+  url    = {https://docs.kernel.org/scheduler/sched-design-CFS.html},
 }
 
 @misc{linux_eevdf,
-  author      = {Linux Foundation},
-  title       = {Linux CFS},
-  url         = {https://docs.kernel.org/scheduler/sched-design-CFS.html},
+  author = {Linux Foundation},
+  title  = {Linux EEVDF},
+  url    = {https://docs.kernel.org/scheduler/sched-design-CFS.html},
 }
 
 @misc{linux_policies,
-  author      = {Linux Foundation},
-  title       = {Linux Man Sched},
-  url         = {https://man7.org/linux/man-pages/man7/sched.7.html},
+  author = {Linux Foundation},
+  title  = {Linux Man Sched},
+  url    = {https://man7.org/linux/man-pages/man7/sched.7.html},
 }
 
 @misc{linux_mem_interfaces,
-  author      = {Linux Foundation},
-  title       = {Linux Memory Allocation Interfaces},
-  url         = {https://docs.kernel.org/core-api/memory-allocation.html#memory-allocation},
+  author = {Linux Foundation},
+  title  = {Linux Memory Allocation Interfaces},
+  url    = {https://docs.kernel.org/core-api/memory-allocation.html#memory-allocation},
 }
 
 @misc{linux_mem_phys,
-  author      = {Linux Foundation},
-  title       = {Linux Physical Memory design},
-  url         = {https://docs.kernel.org/mm/physical_memory.html},
+  author = {Linux Foundation},
+  title  = {Linux Physical Memory design},
+  url    = {https://docs.kernel.org/mm/physical_memory.html},
 }
 
 @misc{linux_timer_wheel,
-  author      = {Jonathan Corbet},
-  title       = {Linux PTimer Wheel},
-  url         = {https://lwn.net/Articles/646950/},
+  author = {Jonathan Corbet},
+  title  = {Linux Timer Wheel},
+  url    = {https://lwn.net/Articles/646950/},
 }
 
 @misc{linux_task,
-  author      = {Linux Foundation},
-  title       = {Linux Task Struct Definition},
-  url         = {https://github.com/torvalds/linux/blob/master/include/linux/sched.h},
+  author = {Linux Foundation},
+  title  = {Linux Task Struct Definition},
+  url    = {https://github.com/torvalds/linux/blob/master/include/linux/sched.h},
 }
 
 @misc{linux_vdso,
-  author      = {Linux Foundation},
-  title       = {Linux Virtual Dynamic Shared Object},
-  url         = {https://www.man7.org/linux/man-pages/man7/vdso.7.html},
+  author = {Linux Foundation},
+  title  = {Linux Virtual Dynamic Shared Object},
+  url    = {https://www.man7.org/linux/man-pages/man7/vdso.7.html},
 }
 
-% STANDARDS
+% ==============================================================================
+% Standards
+% ==============================================================================
 
 @manual{iso_c_std,
   title        = {ISO/IEC 9899:2024 Information technology — Programming languages — C (C23)},
@@ -601,7 +602,9 @@ howpublished = {Source Code},
   note         = {IEEE Std 1003.1-2024},
 }
 
+% ==============================================================================
 % DOOM
+% ==============================================================================
 
 @software{idsoftware1993doom,
   author    = {id Software},
@@ -613,10 +616,10 @@ howpublished = {Source Code},
 
 @software{idsoftware1997doomsource,
   author = {id Software},
-  title =  {Doom Source Code Release},
-  year =   {1997},
-  url =    {https://github.com/id-Software/DOOM},
-  note =   {Open source release of the Linux Doom engine},
+  title  = {Doom Source Code Release},
+  year   = {1997},
+  url    = {https://github.com/id-Software/DOOM},
+  note   = {Open source release of the Linux Doom engine},
 }
 
 @misc{doomgeneric,
@@ -626,17 +629,25 @@ howpublished = {Source Code},
   note   = {GitHub repository},
 }
 
-% OTHER
+% ==============================================================================
+% Other
+% ==============================================================================
+
+@misc{critbit,
+  author = {Adam Langley},
+  title  = {Crit-bit Trees},
+  url    = {https://github.com/agl/critbit/blob/4bb69901a9813de05331bd3afc5085e00050f701/critbit.pdf},
+}
 
 @misc{malloc-impl,
   author = {mshr-h},
-  title = {A Simple malloc Implementation in C},
-  url = {https://gist.github.com/mshr-h/9636fa0adcf834103b1b},
-  note = {GitHub Gist},
+  title  = {A Simple malloc Implementation in C},
+  url    = {https://gist.github.com/mshr-h/9636fa0adcf834103b1b},
+  note   = {GitHub Gist},
 }
 
 @misc{confused_deputy_problem,
-   author = {Wikipedia},
-   title =  {Confused deputy problem},
-   url =    {https://en.wikipedia.org/wiki/Confused_deputy_problem},
- }
+  author = {Wikipedia},
+  title  = {Confused deputy problem},
+  url    = {https://en.wikipedia.org/wiki/Confused_deputy_problem},
+}

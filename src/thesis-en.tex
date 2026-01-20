@@ -4031,7 +4031,7 @@ The shell demonstrates the operating system's multitasking capabilities through 
 \begin{itemize}
     \item \textbf{exec <file> (or ./<file>)}: Loads and executes an ELF64 binary. The shell invokes the \texttt{exec} system call and immediately calls \texttt{wait(pid)}, blocking the shell's execution until the child process terminates.
 
-    \item \textbf{exe\_async <file> (or ./<file> &)}: The shell does not wait for the child process, allowing the user to continue issuing commands while the background process executes. This validates the scheduler's ability to timeshare the CPU between the interactive shell and compute-intensive background tasks.
+    \item \textbf{exe\_async <file> (or ./<file> \&)}: The shell does not wait for the child process, allowing the user to continue issuing commands while the background process executes. This validates the scheduler's ability to timeshare the CPU between the interactive shell and compute-intensive background tasks.
 
     \item \textbf{kill <pid>}: Sends a termination signal to a specific process. This invokes the \texttt{kill} system call to forcibly terminate the target application and reclaim its resources.
 \end{itemize}
