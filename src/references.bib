@@ -150,7 +150,7 @@ url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/
   title   = {UEFI ACPI Specification},
   version = {6.3},
   year    = {2019},
-  month   = {January},
+  month   = {1},
   url     = {https://uefi.org/sites/default/files/resources/ACPI_6_3_final_Jan30.pdf},
 }
 
@@ -196,6 +196,12 @@ url     = {https://www.intel.com/content/www/us/en/developer/articles/technical/
   author  = {OsDev community},
   title   = {OsDev - TSC},
   url     = {https://wiki.osdev.org/TSC},
+}
+
+@manual{osdev-psf,
+  author  = {OsDev community},
+  title   = {OsDev - PC Screen Font},
+  url     = {https://wiki.osdev.org/PC_Screen_Font},
 }
 
 %% Bootloader
@@ -261,7 +267,6 @@ url     = {https://www.gnu.org/software/grub/manual/multiboot2/multiboot.html},
 }
 
 % CRIT-BIT TREE
-
 @misc{critbit,
 author  = {Adam Langley},
 title   = {Crit-bit Trees},
@@ -370,7 +375,6 @@ url     = {https://github.com/agl/critbit/blob/4bb69901a9813de05331bd3afc5085e00
 }
 
 % FAT SPEC
-
 @techreport{fat-spec,
 author       = {Microsoft Corporation},
 title        = {FAT32 File System Specification: FAT: General Overview of On-Disk Format},
@@ -385,7 +389,6 @@ url          = {https://www.cs.fsu.edu/~cop4610t/assignments/project3/spec/fatsp
 }
 
 % EXT2 SPEC
-
 @techreport{ext2-spec,
 author       = {Filesystems Group},
 title        = {The Second Extended File System},
@@ -396,13 +399,12 @@ note         = {Complete specification of ext2 file system design, inode structu
 }
 
 % ISO9660 SPEC
-
 @techreport{iso9660-spec,
 author       = {ECMA International},
 title        = {Volume and file structure of CD-ROM for information interchange},
 organization = {ECMA International},
 year         = {2025},
-month        = {December},
+month        = {12},
 edition      = {6th},
 url          = {https://ecma-international.org/wp-content/uploads/ECMA-119_6th_edition_december_2025.pdf},
 note         = {ISO 9660 standard for CD-ROM and DVD-ROM file system specification.},
@@ -510,6 +512,7 @@ howpublished = {Source Code},
 }
 
 % LINUX
+
 @misc{linux_lkm,
   author = {Wikipedia},
   title  = {Lodabable Kernel Module},
@@ -598,7 +601,39 @@ howpublished = {Source Code},
   note         = {IEEE Std 1003.1-2024},
 }
 
+% DOOM
+
+@software{idsoftware1993doom,
+  author    = {id Software},
+  title     = {Doom},
+  year      = {1993},
+  publisher = {GT Interactive Software},
+  note      = {Video game for MS-DOS},
+}
+
+@software{idsoftware1997doomsource,
+  author = {id Software},
+  title =  {Doom Source Code Release},
+  year =   {1997},
+  url =    {https://github.com/id-Software/DOOM},
+  note =   {Open source release of the Linux Doom engine},
+}
+
+@misc{doomgeneric,
+  author = {ozkl},
+  title  = {doomgeneric: A port of Doom to a generic platform},
+  url    = {https://github.com/ozkl/doomgeneric},
+  note   = {GitHub repository},
+}
+
 % OTHER
+
+@misc{malloc-impl,
+  author = {mshr-h},
+  title = {A Simple malloc Implementation in C},
+  url = {https://gist.github.com/mshr-h/9636fa0adcf834103b1b},
+  note = {GitHub Gist},
+}
 
 @misc{confused_deputy_problem,
    author = {Wikipedia},

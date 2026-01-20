@@ -714,7 +714,7 @@ In this context, the Operating System does not "discover" memory. The kernel cod
 
 To allow a single kernel binary to support multiple board configurations without hardcoding, architectures such as ARM64 and RISC-V utilize the \textbf{Flattened Device Tree}. The bootloader passes a pointer to a binary structure (the DTB Blob) which describes the hardware topology, including physical memory ranges and reserved regions.
 
-The DTB format encodes the device tree into a linear, pointerless data structure. It consists of a fixed-size header followed by three variable-sized blocks:
+The DTB format encodes the device tree into a linear, pointerless data structure, as illustrated in Figure~\ref{fig:dtb_structure}. It consists of a fixed-size header followed by three variable-sized blocks:
 \begin{enumerate}
     \item \textbf{Memory Reservation Block}: Lists physical memory ranges that the kernel must not overwrite (e.g., firmware runtime data).
     \item \textbf{Structure Block}: Describes the device nodes and properties in a linear tree format using token-based tags.
@@ -2077,7 +2077,7 @@ Entry:
 
 \subsubsection{CPU Feature Detection}
 
-Before attempting the Long Mode transition, Loader32 verifies that the CPU supports the required features. This is accomplished through the CPUID instruction \cite{Intel-CPUID}:
+Before attempting the Long Mode transition, Loader32 verifies that the CPU supports the required features. This is accomplished through the CPUID instruction \cite{Intel-CPUID}, as shown in Listing~\ref{lst:check_longmode}:
 
 \begin{lstlisting}[style=nasmstyle, caption={Long Mode Detection (checks.nasm)}, label={lst:check_longmode}]
 EXTENDED_FUNCTIONS_THRESHOLD equ 0x80000000
@@ -2105,7 +2105,7 @@ CheckLongMode:
 
 \subsubsection{Memory Management Initialization}
 
-Before enabling paging, Loader32 initializes a temporary bootstrap Physical Memory Manager (PMM) and Virtual Memory Manager (VMM). The memory map obtained from the Multiboot2 information structure is parsed to identify available physical memory regions. Loader32 then creates an \textbf{identity mapping} of the first 10 gigabytes of physical memory using 1GB pages:
+Before enabling paging, Loader32 initializes a temporary bootstrap Physical Memory Manager (PMM) and Virtual Memory Manager (VMM). The memory map obtained from the Multiboot2 information structure is parsed to identify available physical memory regions. Loader32 then creates an \textbf{identity mapping} of the first 10 gigabytes of physical memory using 1GB pages, as demonstrated in Listing~\ref{lst:loader32_mmap}:
 
 \begin{lstlisting}[caption={Identity Mapping Setup (main.cpp)}, label={lst:loader32_mmap}]
 MemoryManagers SetupMemoryManagement(MultibootInfo &multiboot_info) {
@@ -2132,7 +2132,7 @@ The identity mapping ensures that code continues to execute correctly after pagi
 
 \subsubsection{Long Mode Enablement}
 
-The transition to Long Mode follows the sequence defined in the Intel Software Developer's Manual \cite{Intel-ControlRegisters}:
+The transition to Long Mode follows the sequence defined in the Intel Software Developer's Manual \cite{Intel-ControlRegisters}, as shown in Listing~\ref{lst:enable_longmode}:
 
 \begin{lstlisting}[style=nasmstyle, caption={Enabling Long Mode and Paging (enables.nasm)}, label={lst:enable_longmode}]
 LONG_MODE_BIT equ 1 << 8
@@ -2167,7 +2167,7 @@ EnablePaging:
 
 \subsubsection{Loading Loader64 as an ELF Module}
 
-A critical responsibility of Loader32 is loading the next stage. Loader64 is provided to GRUB as a separate Multiboot2 module. Loader32 locates this module, parses it as an ELF64 executable, allocates memory for its segments, and performs dynamic relocation:
+A critical responsibility of Loader32 is loading the next stage. Loader64 is provided to GRUB as a separate Multiboot2 module. Loader32 locates this module, parses it as an ELF64 executable, allocates memory for its segments, and performs dynamic relocation (Listing~\ref{lst:load_loader64}):
 
 \begin{lstlisting}[caption={Loading Loader64 Module (main.cpp)}, label={lst:load_loader64}]
 static u64 LoadNextStageModule(MultibootInfo &multiboot_info, 
@@ -2198,7 +2198,7 @@ static u64 LoadNextStageModule(MultibootInfo &multiboot_info,
 
 \subsubsection{64-bit GDT and Mode Transition}
 
-Before jumping to 64-bit code, a 64-bit Global Descriptor Table must be loaded. The GDT defines the code and data segments for Long Mode:
+Before jumping to 64-bit code, a 64-bit Global Descriptor Table must be loaded. The GDT defines the code and data segments for Long Mode (Listing~\ref{lst:gdt64}):
 
 \begin{lstlisting}[style=nasmstyle, caption={64-bit GDT Definition (gdt.nasm)}, label={lst:gdt64}]
 section .data
@@ -2225,7 +2225,7 @@ GDT64:
         dq GDT64
 \end{lstlisting}
 
-The final transition performs a far jump to flush the CPU pipeline and begin executing 64-bit code:
+The final transition performs a far jump to flush the CPU pipeline and begin executing 64-bit code (Listing~\ref{lst:transition64}):
 
 \begin{lstlisting}[style=nasmstyle, caption={Transition to 64-bit Mode (transition\_64.nasm)}, label={lst:transition64}]
     ; Save kernel entry address and loader data pointer
@@ -2262,7 +2262,7 @@ Loader64 executes in 64-bit Long Mode but faces a unique challenge: it is loaded
 
 \subsubsection{Position-Independent Compilation}
 
-Loader64 is compiled as a Position-Independent Executable (PIE). The CMake configuration specifies:
+Loader64 is compiled as a Position-Independent Executable (PIE). The CMake configuration is shown in Listing~\ref{lst:loader64_cmake}:
 
 \begin{lstlisting}[language=cmake, caption={Loader64 CMake Configuration}, label={lst:loader64_cmake}]
 set_target_properties(alkos.boot.loader.64 PROPERTIES 
@@ -2274,7 +2274,7 @@ target_link_options(alkos.boot.loader.64 PRIVATE
 )
 \end{lstlisting}
 
-This ensures all code uses RIP-relative addressing. The entry point demonstrates this:
+This ensures all code uses RIP-relative addressing. The entry point demonstrates this (Listing~\ref{lst:loader64_entry}):
 
 \begin{lstlisting}[style=nasmstyle, caption={Loader64 Entry Point with RIP-Relative Addressing (entry.nasm)}, label={lst:loader64_entry}]
 section .text
@@ -2302,7 +2302,7 @@ Entry:
 
 \subsubsection{State Restoration from Loader32}
 
-Loader32 passes its PMM and VMM state to Loader64 via a \texttt{TransitionData} structure. Loader64 deserializes this state to continue memory management:
+Loader32 passes its PMM and VMM state to Loader64 via a \texttt{TransitionData} structure. Loader64 deserializes this state to continue memory management, as shown in Listing~\ref{lst:transition_data}:
 
 \begin{lstlisting}[caption={TransitionData Deserialization (main.cpp)}, label={lst:transition_data}]
 static auto InitializeLoaderEnvironment(const TransitionData *transition_data) {
@@ -2323,7 +2323,7 @@ static auto InitializeLoaderEnvironment(const TransitionData *transition_data) {
 
 \subsubsection{Kernel Loading at Higher-Half Address}
 
-The kernel ELF is linked to execute at virtual address \texttt{0xFFFFFFFE00000000}. Loader64 allocates virtual memory at this address and loads the kernel segments:
+The kernel ELF is linked to execute at virtual address \texttt{0xFFFFFFFE00000000}. Loader64 allocates virtual memory at this address and loads the kernel segments (Listing~\ref{lst:kernel_load}):
 
 \begin{lstlisting}[caption={Higher-Half Kernel Loading (main.cpp)}, label={lst:kernel_load}]
 // Kernel virtual address (upper 33 bits set)
@@ -2349,7 +2349,7 @@ static u64 LoadKernelIntoMemory(MultibootInfo &multiboot_info,
 
 \subsubsection{Direct Memory Mapping}
 
-To allow the kernel to access physical memory directly, Loader64 creates a \textbf{direct memory mapping}, a large region of virtual address space that maps linearly to physical memory:
+To allow the kernel to access physical memory directly, Loader64 creates a \textbf{direct memory mapping}, a large region of virtual address space that maps linearly to physical memory (Listing~\ref{lst:direct_map}):
 
 \begin{lstlisting}[caption={Direct Memory Mapping Setup (main.cpp)}, label={lst:direct_map}]
 static constexpr u64 kDirectMemMapAddrStart = 0xFFFF800000000000ULL;
@@ -2372,7 +2372,7 @@ This mapping allows the kernel to convert any physical address \texttt{P} to the
 
 \subsubsection{Kernel Arguments Preparation}
 
-Before transferring control to the kernel, Loader64 collects essential system information into a \texttt{KernelArguments} structure:
+Before transferring control to the kernel, Loader64 collects essential system information into a \texttt{KernelArguments} structure (Listing~\ref{lst:kernel_args}):
 
 \begin{lstlisting}[caption={Kernel Arguments Preparation (main.cpp)}, label={lst:kernel_args}]
 struct PACK alignas(64) KernelArguments {
@@ -2417,7 +2417,7 @@ struct PACK alignas(64) KernelArguments {
 }
 \end{lstlisting}
 
-The final transition to the kernel is a simple jump:
+The final transition to the kernel is a simple jump (Listing~\ref{lst:enter_kernel}):
 
 \begin{lstlisting}[style=nasmstyle, caption={Kernel Entry (transition.nasm)}, label={lst:enter_kernel}]
 ; void EnterKernel(u64 kernel_entry, KernelArguments *args)
@@ -2471,7 +2471,7 @@ Figure \ref{fig:memory_layout} illustrates the virtual memory layout established
 
 \subsection{Architecture Initialization}
 
-After the kernel receives control, the first architecture-specific function executed is \texttt{arch::ArchInit}. This function enables additional CPU features that were not safe to enable during the bootloader phase:
+After the kernel receives control, the first architecture-specific function executed is \texttt{arch::ArchInit}. This function enables additional CPU features that were not safe to enable during the bootloader phase, as shown in Listing~\ref{lst:arch_init}:
 
 \begin{lstlisting}[caption={Architecture Initialization (init.cpp)}, label={lst:arch_init}]
 namespace arch {
@@ -2680,7 +2680,7 @@ As previously mentioned, the OS utilizes the interrupt mechanism to perform task
 
 To switch contexts, we must ensure the current thread's state is preserved in a \textbf{Unified Interrupt Frame} (Figure \ref{fig:unifiedstackframe}) on its kernel stack. Additionally, a valid frame must exist for the target thread. If a thread has run previously, it will have saved its frame naturally during its last preemption. However, for a new thread that has never executed, this frame must be constructed manually. 
 
-We assume that all threads begin execution in kernel space before eventually jumping to user space. Since all interrupt handling occurs within the kernel, the interrupt frame always resides on the kernel stack. Therefore, we can initialize the kernel stack of the new thread with a fabricated frame before the context switch. The initialization procedure is as follows:
+We assume that all threads begin execution in kernel space before eventually jumping to user space. Since all interrupt handling occurs within the kernel, the interrupt frame always resides on the kernel stack. Therefore, we can initialize the kernel stack of the new thread with a fabricated frame before the context switch. The initialization procedure is shown in Listing~\ref{lst:threadStack}:
 
 \begin{lstlisting}[caption={Thread stack initialization}, label={lst:threadStack}]
 void InitializeThreadStack(void **stack, const Sched::Task &task)
@@ -2719,7 +2719,7 @@ With both stack frames prepared, the context switch logic is straightforward: sw
 
 \subsection{Jumping to Userspace}
 
-Transitioning to userspace is performed similarly to a thread context switch. We construct an artificial interrupt frame, but in this case, the code segment and stack segment within the frame are set to the user space selectors, and the stack pointer is set to the user space stack. The implementation is shown below:
+Transitioning to userspace is performed similarly to a thread context switch. We construct an artificial interrupt frame, but in this case, the code segment and stack segment within the frame are set to the user space selectors, and the stack pointer is set to the user space stack. The C++ implementation is shown in Listing~\ref{lst:userSpaceJump}, and the corresponding NASM code is shown in Listing~\ref{lst:userSpaceJumpNasm}:
 
 \begin{lstlisting}[caption={Userspace Jump C++ code}, label={lst:userSpaceJump}]
 extern "C" void cdecl_JumpToUserSpaceEntry(void *addr, IsrStackFrame *frame)
@@ -2797,7 +2797,7 @@ The architecture-specific code is responsible for detecting available hardware a
 
 \subsection{Clocks}
 
-Clock Drivers are defined by the following structure:
+Clock Drivers are defined by the structure shown in Listing~\ref{lst:clockDriver}:
 
 \begin{lstlisting}[caption={Clock Driver Structure}, label={lst:clockDriver}]
 struct alignas(arch::kCacheLineSizeBytes) ClockRegistryEntry : data_structures::RegistryEntry {
@@ -2830,7 +2830,7 @@ The High Precision Event Timer (HPET) also offers high precision and is generall
 
 \subsection{Event Clocks}
 
-Event Clock Drivers are defined by the following structure:
+Event Clock Drivers are defined by the structure shown in Listing~\ref{lst:eventClockDriver}:
 
 \begin{lstlisting}[caption={Event Clock Driver Structure}, label={lst:eventClockDriver}]
 struct PACK EventClockFlags {
@@ -2960,6 +2960,7 @@ When a VFS operation (e.g., \texttt{CreateFile}) is invoked, the module executes
     \item \textbf{Path Translation}: The absolute system path is translated into a path relative to the mount point root.
     \item \textbf{Delegation}: The operation is delegated to the corresponding method of the specific filesystem driver.
 \end{enumerate}
+An example implementation is shown in Listing~\ref{lst:vfsModuleCreateFile}.
 
 \begin{lstlisting}[caption={VfsModule CreateFile Implementation}, label={lst:vfsModuleCreateFile}]
 Result<> internal::VfsModule::CreateFile(const Path &path)
@@ -2978,7 +2979,7 @@ Result<> internal::VfsModule::CreateFile(const Path &path)
 
 \subsubsection{Filesystem Interface}
 
-The \texttt{vfs::Filesystem} struct acts as a uniform interface that all concrete filesystem drivers must expose. It contains function pointers for various file and directory manipulations, alongside metadata about the filesystem. Each function pointer accepts a \texttt{void* ctx} argument, allowing the generic VFS layer to pass the concrete driver instance.
+The \texttt{vfs::Filesystem} struct acts as a uniform interface that all concrete filesystem drivers must expose (Listing~\ref{lst:vfsFilesystem}). It contains function pointers for various file and directory manipulations, alongside metadata about the filesystem. Each function pointer accepts a \texttt{void* ctx} argument, allowing the generic VFS layer to pass the concrete driver instance.
 
 \begin{lstlisting}[caption={vfs::Filesystem Structure}, label={lst:vfsFilesystem}]
 struct Filesystem {
@@ -3015,7 +3016,7 @@ private:
 
 Each filesystem driver implements the logic required for a specific filesystem type (e.g., FAT12, FAT16, FAT32). The driver interprets the raw data structures on the storage device and performs the requested operations. For instance, the FAT32 driver handles the manipulation of the File Allocation Table, directory entries, and cluster chains according to the FAT32 specification (for details, see \cite{fat-spec}).
 
-To implement these drivers efficiently, we employ the Curiously Recurring Template Pattern (CRTP) \cite{crtp}. Each driver class inherits from a templated base class that provides common functionality, while the derived class implements format-specific details. This approach enables static polymorphism, reducing the runtime overhead typically associated with virtual function calls.
+To implement these drivers efficiently, we employ the Curiously Recurring Template Pattern (CRTP) \cite{crtp}. Each driver class inherits from a templated base class that provides common functionality, while the derived class implements format-specific details (Listing~\ref{lst:fatCrtp}). This approach enables static polymorphism, reducing the runtime overhead typically associated with virtual function calls.
 
 \begin{lstlisting}[caption={FAT Driver CRTP Base Class}, label={lst:fatCrtp}]
 template <template <typename> typename T, typename IO>
@@ -3052,7 +3053,7 @@ private:
 };
 \end{lstlisting}
 
-Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT entries differs between FAT12 and FAT32/16) and provides a static \texttt{IsValid(IO \&io)} method to probe whether a given I/O device contains a valid instance of that filesystem.
+Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT entries differs between FAT12 and FAT32/16, as shown in Listing~\ref{lst:fat12GetFatEntry}) and provides a static \texttt{IsValid(IO \&io)} method to probe whether a given I/O device contains a valid instance of that filesystem.
 
 \begin{lstlisting}[caption={Fat12 GetFATEntry Implementation}, label={lst:fat12GetFatEntry}]
     NODISCARD FORCE_INLINE_F ClusterNumT GetFATEntry_(ClusterNumT cluster) const
@@ -3121,7 +3122,7 @@ The file descriptor system provides a hierarchical structure to handle file I/O 
 As depicted in Figure \ref{fig:fd_architecture}, the system comprises three main tables:
 
 \subsubsection{FdTable (Per-Process)}
-Each process maintains its own \texttt{FdTable}, which is an array mapping integer file descriptors to \texttt{RefPtr<OpenFileEntry>} objects.
+Each process maintains its own \texttt{FdTable}, which is an array mapping integer file descriptors to \texttt{RefPtr<OpenFileEntry>} objects (Listing~\ref{lst:fdTableAllocate}).
 
 \begin{lstlisting}[caption={FdTable Allocation}, label={lst:fdTableAllocate}]
 FdResult<fd_t> FdTable::Allocate(data_structures::RefPtr<OpenFileEntry> global_entry)
@@ -3140,7 +3141,7 @@ FdResult<fd_t> FdTable::Allocate(data_structures::RefPtr<OpenFileEntry> global_e
 
 \subsubsection{OpenFileTable (Global)}
 
-The \texttt{OpenFileTable} is a system-wide pool of \texttt{OpenFileEntry} objects. Each entry represents a unique "open" instance of a resource (file or pipe), maintaining dynamic state such as the current read/write offset, access flags (e.g., Read/Write), and a handle to the underlying resource. Multiple file descriptors from different processes can point to the same \texttt{OpenFileEntry}, allowing them to share the cursor position.
+The \texttt{OpenFileTable} is a system-wide pool of \texttt{OpenFileEntry} objects. Each entry represents a unique "open" instance of a resource (file or pipe), maintaining dynamic state such as the current read/write offset, access flags (e.g., Read/Write), and a handle to the underlying resource. Multiple file descriptors from different processes can point to the same \texttt{OpenFileEntry}, allowing them to share the cursor position (Listing~\ref{lst:openFileTableOpenFile}).
 
 \begin{lstlisting}[caption={OpenFileTable Creation}, label={lst:openFileTableOpenFile}]
 FdResult<data_structures::RefPtr<OpenFileEntry>> OpenFileTable::OpenFile(File *file, OpenMode flags)
@@ -3171,7 +3172,7 @@ FdResult<data_structures::RefPtr<OpenFileEntry>> OpenFileTable::OpenFile(File *f
 The \texttt{FileHandle} utilizes a \texttt{NonOwningTaggedPtr} to hold either a pointer to a \texttt{File} object or a \texttt{Pipe} instance, enabling the \texttt{OpenFileEntry} to manage both cases seamlessly.
 
 \subsubsection{FileTable (Global)}
-The \texttt{FileTable} manages unique \texttt{File} objects system-wide. Each \texttt{File} object acts as the in-memory representation of a physical file on the filesystem, storing static attributes such as the path and file size. This ensures that a file on the VFS has a single representation in memory, regardless of how many times it has been opened.
+The \texttt{FileTable} manages unique \texttt{File} objects system-wide (Listing~\ref{lst:fileTableGetOrCreate}). Each \texttt{File} object acts as the in-memory representation of a physical file on the filesystem, storing static attributes such as the path and file size. This ensures that a file on the VFS has a single representation in memory, regardless of how many times it has been opened.
 
 \begin{lstlisting}[caption={FileTable GetOrCreate}, label={lst:fileTableGetOrCreate}]
 FdResult<data_structures::RefPtr<File>> FileTable::GetOrCreate(const vfs::Path &path)
@@ -3202,7 +3203,7 @@ FdResult<data_structures::RefPtr<File>> FileTable::GetOrCreate(const vfs::Path &
 \end{lstlisting}
 
 \subsubsection{FdManager}
-The \texttt{FdManager} integrates these three tables and exposes file descriptor operations (e.g., \texttt{Open}, \texttt{Close}, \texttt{Read}). When a process requests to open a file, the \texttt{FdManager} coordinates the interaction: it validates existence via the VFS module, retrieves the \texttt{File} object, creates a new entry in the \texttt{OpenFileTable}, and finally assigns a file descriptor in the process's \texttt{FdTable}.
+The \texttt{FdManager} integrates these three tables and exposes file descriptor operations (e.g., \texttt{Open}, \texttt{Close}, \texttt{Read}). When a process requests to open a file, the \texttt{FdManager} coordinates the interaction: it validates existence via the VFS module, retrieves the \texttt{File} object, creates a new entry in the \texttt{OpenFileTable}, and finally assigns a file descriptor in the process's \texttt{FdTable} (Listing~\ref{lst:fdManagerOpen}).
 
 \begin{lstlisting}[caption={FdManager Open Implementation}, label={lst:fdManagerOpen}]
 FdResult<fd_t> FdManager::Open(const vfs::Path &path, OpenMode flags)
@@ -3242,7 +3243,7 @@ The scheduling module is the final core component of the operating system, relyi
 
 \subsection{Process Structure}
 
-The process structure is defined as follows:
+The process structure is defined in Listing~\ref{lst:processStruct}:
 
 \begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
 struct PACK Pid {
@@ -3445,7 +3446,7 @@ A collection of bitfields that determine how the scheduler manages the thread:
 
 \subsubsection{Thread State}
 
-Describes the current status of the thread. This state tracking allows the kernel to monitor each thread individually and verify system integrity, as only specific state transitions are permitted. The thread state transitions graph is defined as follows:
+Describes the current status of the thread. This state tracking allows the kernel to monitor each thread individually and verify system integrity, as only specific state transitions are permitted. The thread state transitions are illustrated in Figure~\ref{fig:thread-states}.
 
 \newgeometry{top=1cm, bottom=1.5cm, left=1cm, right=1cm} 
 
@@ -3483,7 +3484,7 @@ Before initializing the scheduling module, the operating system creates three es
 
 \subsection{Intrusive Data Structures}
 
-Since threads frequently migrate between different linked lists and data structures, allocating and freeing list nodes for every operation introduces significant overhead. To address this, the system employs intrusive data structures. Instead of allocating a node that contains a pointer to the object, the node structure is embedded directly within the object itself. Operations on the lists are performed by simply modifying the fields of the object.
+Since threads frequently migrate between different linked lists and data structures, allocating and freeing list nodes for every operation introduces significant overhead. To address this, the system employs intrusive data structures (Listing~\ref{lst:intrusiveNodes}). Instead of allocating a node that contains a pointer to the object, the node structure is embedded directly within the object itself. Operations on the lists are performed by simply modifying the fields of the object.
 
 \begin{lstlisting}[caption={Intrusive Nodes}, label={lst:intrusiveNodes}]
 template <class T, int kIntrusiveLevel>
@@ -3555,7 +3556,7 @@ The following scheduling policies have been implemented:
 
 \textbf{Multi-Level Feedback Queue (MLFQ) Scheduling Policy} -- policy that segregates threads into distinct queues according to their workload characteristics. The policy penalizes CPU-bound threads by demoting them to lower priorities, whereas I/O-bound threads are elevated to higher priorities, thereby favoring interactive performance. To prevent the starvation of low-priority tasks, a periodic reset mechanism promotes all threads to the highest priority queue every 100ms. Within each queue, threads are managed using \textbf{Red-Black trees}, sorted by a key that combines user-defined priority and aggregated CPU burst times (the amount of time a thread spends executing on the CPU before it either completes, requires I/O operations, or is interrupted by the operating system). This ensures that each thread in the given queue receives a fair share of CPU time.
 
-\noindent These policies establish a hierarchy defined by the following enumeration:
+\noindent These policies establish a hierarchy defined by the enumeration shown in Listing~\ref{lst:policyHierarchy}:
 
 \begin{lstlisting}[caption={Scheduling Policy Hierarchy}, label={lst:policyHierarchy}]
 // PO > P1 > .. > P4
@@ -3584,7 +3585,7 @@ Each policy is designated for a specific group of tasks:
 \subsubsection{Policies Abstraction}
 \label{subsec:policies}
 
-The policy abstraction is defined as follows:
+The policy abstraction is shown in Listing~\ref{lst:policyStruct}:
 
 \begin{lstlisting}[caption={Policy Abstraction}, label={lst:policyStruct}]
 struct Policy {
@@ -3786,7 +3787,323 @@ The available system calls are grouped into logical categories:
 
 
 \section{Example Programs}
-TODO ADAM
+
+To validate the functionality of the kernel and its subsystems, a set of userspace applications was developed. these programs serve as integration tests, verifying the interactions between the system call interface, the C standard library, drivers, and the kernel core. Each program targets specific subsystems and features of the operating system.
+
+\subsection{Hello World}
+
+The \texttt{hello\_world} program serves as the verification of the system call interface, standard I/O operations, and filesystem functionality.
+
+\subsubsection{System Call Interface Verification}
+
+The application calls \texttt{printf}, which internally buffers data and invokes the \texttt{write} system call. The successful appearance of text on the debug terminal confirms that we successfully transitioned from user space to kernel space and back, validating that the syscall dispatcher correctly routes requests to the appropriate kernel handlers (Listing~\ref{lst:hello_stdout}).
+
+\begin{lstlisting}[caption={Hello World Standard Output Test}, label={lst:hello_stdout}]
+// userspace/programs/hello_world/main.cpp
+
+extern "C" int main()
+{
+    printf(
+        "\n----------------------------------\n"
+        "Hello from User Space via Syscall!\n"
+        "----------------------------------\n"
+    );
+    
+    // ... file operations
+    return 0;
+}
+\end{lstlisting}
+
+\subsubsection{File I/O Verification}
+
+Beyond standard output, the program performs a sequence of file manipulations to test the underlying filesystem driver and the VFS layer. The application attempts to open, write to, seek within, and read from a filepath \texttt{/docs/greet.txt}.
+
+This sequence validates path resolution, file descriptor table management in the kernel, and the read/write logic of the filesystem driver (Listing~\ref{lst:hello_fileio}).
+
+\begin{lstlisting}[caption={File I/O Verification Logic}, label={lst:hello_fileio}]
+    // Open an existing file with read/write permissions
+    FILE *fp = fopen("/docs/greet.txt", "r+");
+    if (!fp) {
+        printf("Failed to open /docs/greet.txt for reading!\n");
+        return 1;
+    }
+
+    // Test writing to the filesystem
+    int written = fprintf(fp, "Hello AlkOS from User Space!");
+    
+    // Test Seeking
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        printf("Failed to seek to start of /docs/greet.txt!\n");
+        fclose(fp);
+        return 1;
+    }
+
+    // Test Reading back the data
+    char buffer[128];
+    size_t bytes_read = fread(buffer, 1, sizeof(buffer) - 1, fp);
+    buffer[bytes_read] = '\0';
+
+    printf("Read from file: '%s'\n", buffer);
+    fclose(fp);
+\end{lstlisting}
+
+\subsection{Graphics Test Program}
+
+The \texttt{gui\_test} application demonstrates the capability of the kernel to provide userspace processes with access to video hardware in a controlled manner. The resulting output is shown in Figure \ref{fig:gui_test}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{res/gui_test.png}
+    \caption{The graphics test application rendering a dynamic pattern.}
+    \label{fig:gui_test}
+\end{figure}
+
+\subsubsection{Video Session Initialization}
+
+The application begins by invoking the \texttt{create\_graphic\_session} system call (Listing~\ref{lst:gui_init}). This request instructs the kernel's window manager to allocate a physical memory buffer acting as a backbuffer for the process. The kernel then maps this physical memory into the virtual address space of the process and returns a \texttt{GuiBufferInfo} structure.
+
+\begin{lstlisting}[caption={Initializing Graphical Session}, label={lst:gui_init}]
+// userspace/programs/gui_test/main.cpp
+
+extern "C" int main()
+{
+    GuiBufferInfo info = {};
+    
+    // Syscall to allocate and map framebuffer
+    __platform_create_graphic_session(&info);
+
+    if (info.buffer_ptr == nullptr) {
+        return 1;
+    }
+
+    // Cast void* to raw pixel array
+    u32 *fb = static_cast<u32 *>(info.buffer_ptr);
+    const auto &fmt = info.format;
+    
+    // ... rendering loop
+}
+\end{lstlisting}
+
+\subsubsection{Direct Framebuffer Manipulation}
+
+Once the session is established, the application treats the video buffer as a linear array of pixels. It implements a rendering loop that generates a moving pattern by calculating pixel colors based on coordinates and a time-variable offset (Listing~\ref{lst:gui_render}).
+
+\begin{lstlisting}[caption={Software Rendering Loop}, label={lst:gui_render}]
+    while (true) {
+        for (size_t y = 0; y < info.height; ++y) {
+            for (size_t x = 0; x < info.width; ++x) {
+                size_t index = (y * (info.pitch / 4)) + x;
+
+                u8 r = (x + color_offset) & 0xFF;
+                u8 g = (y + color_offset) & 0xFF;
+                u8 b = (x + y) & 0xFF;
+
+                // Pack pixel using format info provided by kernel
+                u32 pixel = 0;
+                pixel |= (static_cast<u32>(r) & ((1 << fmt.red_mask_size) - 1)) << fmt.red_pos;
+                pixel |= (static_cast<u32>(g) & ((1 << fmt.green_mask_size) - 1)) << fmt.green_pos;
+                pixel |= (static_cast<u32>(b) & ((1 << fmt.blue_mask_size) - 1)) << fmt.blue_pos;
+
+                fb[index] = pixel;
+            }
+        }
+        // ...
+    }
+\end{lstlisting}
+
+\subsubsection{Double Buffering and Synchronization}
+
+To prevent screen tearing, AlkOS employs a double-buffering strategy. The user application writes to its private backbuffer. To display the frame, the application calls `blit()` (Listing~\ref{lst:gui_sync}). This system call triggers the kernel's window manager to copy the contents of the user's backbuffer to the physical video memory if its session is currently active.
+
+\begin{lstlisting}[caption={Frame Synchronization}, label={lst:gui_sync}]
+        // Blit to screen
+        __platform_blit();
+
+        color_offset += 1;
+
+        // Frame limiting
+        NanoSleep(16'000'000); // ~60 FPS
+    }
+\end{lstlisting}
+
+\subsection{Shell}
+
+The Shell is a more complex userspace program implemented, integrating the input subsystem, graphics subsystem, and process management. Its basic UI is shown in Figure \ref{fig:shell_welcome}.
+
+\subsubsection{Graphical Console Subsystem}
+
+The shell provides a text-based command-line interface. This is achieved through the \texttt{GraphicsConsole} class, which renders text onto a graphical surface using the PSF2 font format \cite{osdev-psf}. The console handles text rendering and cursor management.
+
+\subsubsection{Command Line Interpreter}
+
+The shell implements a Read-Eval-Print Loop (REPL). It reads input from \texttt{stdin}, which is connected to a kernel pipe fed by the keyboard driver. The \texttt{ProcessCommand} method processes the input string and dispatches execution (Listing~\ref{lst:shell_process}).
+
+\begin{lstlisting}[caption={Shell Command Processing}, label={lst:shell_process}]
+// userspace/programs/shell/shell.cpp
+
+void Shell::ProcessCommand()
+{
+    // ... string view parsing ...
+
+    if (cmd == "help") {
+        CmdHelp();
+    } else if (cmd == "clear") {
+        CmdClear();
+    } else if (cmd == "ls") {
+        CmdLs(args);
+    } else if (cmd == "cat") {
+        CmdCat(args);
+    // ... other commands ...
+    } else if (cmd == "exec") {
+        CmdExec(args);
+    } else if (cmd == "kill") {
+        CmdKill(args);
+    } else {
+        console_.Write("Unknown command: ");
+        console_.PutChar('\n');
+    }
+}
+\end{lstlisting}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{res/shell_welcome.png}
+    \caption{The shell interface displaying the welcome message.}
+    \label{fig:shell_welcome}
+\end{figure}
+
+\subsubsection{Built-in Commands}
+
+The shell includes a suite of internal commands, which are handled directly within the \texttt{Shell::ProcessCommand} routine without spawning new processes.
+
+\begin{itemize}
+    \item \textbf{help}: Displays a list of available commands and their usage syntax (Figure \ref{fig:shell_help}).
+    
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=\textwidth]{res/shell_help.png}
+        \caption{The shell interface displaying the help message and available commands.}
+        \label{fig:shell_help}
+    \end{figure}
+    
+    \item \textbf{clear}: Resets the graphical console state. It invokes the \texttt{painter\_.Clear()} method to fill the framebuffer with the background color and resets the cursor position to $(0,0)$.
+    
+    \item \textbf{echo <text>}: Prints the provided text to the console.
+
+    \item \textbf{shutdown / reboot}: These commands invoke the \texttt{power} system call with \texttt{kShutdown} or \texttt{kReboot} actions, triggering ACPI state transitions to power off or reset the physical machine.
+\end{itemize}
+
+\subsubsection{File System Utilities}
+
+The shell maintains a current working directory state and provides utilities to navigate and inspect the filesystem.
+
+\begin{itemize}
+    \item \textbf{pwd}: Prints the full absolute path of the current working directory.
+    
+    \item \textbf{cd <path>}: Changes the current working directory. The shell resolves the provided path (handling relative paths and parent references like \texttt{..}) and verifies the destination exists and is a directory using the \texttt{file\_info} syscall before updating its internal state.
+
+    \item \textbf{ls [path]}: Lists the contents of a directory. It calls the \texttt{read\_directory} syscall to retrieve directory entries. The output logic includes highlighting: directories are rendered in blue to visually distinguish them from regular files (Figure \ref{fig:shell_ls}).
+    
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=\textwidth]{res/shell_ls.png}
+        \caption{Execution of the \texttt{ls} command showing the root directory structure.}
+        \label{fig:shell_ls}
+    \end{figure}
+
+    \item \textbf{cat <file>}: Displays the contents of a file. It uses standard C library functions (\texttt{fopen}, \texttt{fread}) to open the target file and print its content to the console. This command verifies the read functionality of the filesystem driver (Figure \ref{fig:shell_cat}).
+    
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=\textwidth]{res/shell_cat.png}
+        \caption{The \texttt{cat} command displaying the contents of a text file from the FAT16 partition.}
+        \label{fig:shell_cat}
+    \end{figure}
+\end{itemize}
+
+\subsubsection{Process Execution and Control}
+
+The shell demonstrates the operating system's multitasking capabilities through commands that wrap process management system calls.
+
+\begin{itemize}
+    \item \textbf{exec <file> (or ./<file>)}: Loads and executes an ELF64 binary. The shell invokes the \texttt{exec} system call and immediately calls \texttt{wait(pid)}, blocking the shell's execution until the child process terminates.
+
+    \item \textbf{exe\_async <file> (or ./<file> &)}: The shell does not wait for the child process, allowing the user to continue issuing commands while the background process executes. This validates the scheduler's ability to timeshare the CPU between the interactive shell and compute-intensive background tasks.
+
+    \item \textbf{kill <pid>}: Sends a termination signal to a specific process. This invokes the \texttt{kill} system call to forcibly terminate the target application and reclaim its resources.
+\end{itemize}
+
+\subsection{Doom}
+
+To demonstrate the capability of the AlkOS userspace and its standard library compatibility, we undertook the task of porting \textit{Doom}~\cite{idsoftware1993doom} (1993). In the realm of systems programming, getting Doom to run is often considered the de facto "Hello World" for operating systems, proving that the scheduler, memory management, file system, and video subsystem function cohesively. A screenshot of the port running on AlkOS is shown in Figure \ref{fig:doom_gameplay}.
+
+We utilized \textbf{Doomgeneric}~\cite{doomgeneric}, a source port specifically designed to be portable. It strips away the complex, operating-system-specific dependencies (such as sound drivers, networking, or windowing) and exposes a minimal interface that the target OS must implement.
+
+It is important to note that while the Doom engine is open source since 1997 \cite{idsoftware1997doomsource}, the game data (levels, graphics, sounds) is stored in \textbf{.WAD} files, which remain under copyright. To execute the game on AlkOS, a valid \texttt{.WAD} file must be placed in the \texttt{/doom} directory of the rootfs overlay. This can be the \texttt{DOOM1.WAD} from the shareware version or the full \texttt{DOOM.WAD} from a retail copy. The engine supports games based on the same technology, such as \textit{Doom II} or \textit{Heretic}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{res/doom_gameplay.png}
+    \caption{Doom gameplay on AlkOS running at 800x600 scaled resolution.}
+    \label{fig:doom_gameplay}
+\end{figure}
+
+\subsubsection{The Doomgeneric Interface}
+
+The integration of \textit{Doomgeneric} requires the implementation of a small set of functions defined in \texttt{doomgeneric.h}. These functions handle video output, input processing, and timing. The key functions that must be provided are:
+
+\begin{itemize}
+    \item \texttt{DG\_Init}: Initializes the video system and prepares input handling.
+    \item \texttt{DG\_DrawFrame}: Called by the game loop when a frame is ready to be presented to the screen.
+    \item \texttt{DG\_SleepMs}: Pauses execution to regulate the game loop timing.
+    \item \texttt{DG\_GetTicksMs}: Returns the monotonic system time in milliseconds, used for game logic timing like delta time calculations.
+    \item \texttt{DG\_GetKey}: Retrieves pending input events.
+\end{itemize}
+
+In our implementation (\texttt{doomgeneric\_alkos.c}), these functions wrap the AlkOS system calls. For instance, \texttt{DG\_GetTicksMs} utilizes \texttt{get\_clock\_value} to retrieve high-resolution timing, and \texttt{DG\_DrawFrame} invokes the \texttt{blit} syscall to trigger framebuffer updates.
+
+\subsubsection{Video Output and Scaling}
+
+The original resolution of Doom is $320 \times 200$ pixels. Modern framebuffers usually operate at significantly higher resolutions (e.g., $1024 \times 768$ or $1920 \times 1080$). Displaying a raw $320 \times 200$ image on such a screen would result in a tiny window. Consequently, software scaling is required.
+
+\paragraph{Scaling Strategy}
+A naive integer scaling approach (e.g., simply multiplying pixels by an integer factor) used in this port was not taking advantage of the available screen and resulted in wasted screen space. To address this, we restored and integrated legacy Doom scaling algorithms that support \textbf{Squash} and \textbf{Stretch} modes.
+
+We implemented an automatic mode selection algorithm in \texttt{doomgeneric.c}. Upon initialization, the game inspects the dimensions of the framebuffer allocated by the window manager and calculates the optimal scaling factor ($1\times$ to $5\times$) and select mode (Stretch or Squash) to maximize screen usage:
+\begin{itemize}
+    \item \textbf{Stretch Mode}: Used when the vertical resolution allows for aspect ratio correction by stretching the height.
+    \item \textbf{Squash Mode}: Used when horizontal compression is required to fit the aspect ratio.
+    \item \textbf{Special Case}: Resolution $800 \times 600$ trigger optimized path ($3\times$ squash with $50\%$ pixel blending) to reduce visual artifacts.
+\end{itemize}
+
+\paragraph{Pixel Format}
+The internal rendering engine of Doom operates in an 8-bit indexed color mode, utilizing a 256-color palette. However, the linear framebuffer provided by the kernel operates in a true color mode. To bridge this gap, we implemented a color conversion routine within the screen update loop. During the scaling process, each 8-bit pixel index is resolved against the current palette to obtain its RGB components. These components are then packed according to the specific red, green, and blue field positions defined by the framebuffer metadata. This ensures correct color reproduction regardless of the specific pixel format utilized by the underlying hardware.
+
+\paragraph{Buffer Optimization}
+\textit{Doomgeneric} renders the game to an internal buffer, and then we copy it again to the window manager's buffer. To maximize performance, we modified the \texttt{i\_video.c} rendering path to remove one layer of indirection. We allow the scaling routines to write directly into the framebuffer obtained via the \texttt{create\_graphic\_session} syscall. The scaling is performed in-place during the screen update phase.
+
+\subsubsection{Input Event Mapping}
+
+Doom expects a queue of input events (key presses and releases) using its own internal key codes. AlkOS, however, exposes a polling-based interface via the \texttt{GetKeyState} syscall, which returns the instantaneous state of a \texttt{VirtualKey} (keyboard layout agnostic key codes).
+
+To bridge this gap, we implemented a translation layer in \texttt{doomgeneric\_alkos.c}. The system maintains an array of previous key states for all keys relevant to the game (movement, action, and menu keys). During every frame tick, the wrapper polls the current state of these keys using the kernel API. By comparing the current state with the previous state, we synthesize "Press" and "Release" events and push them into Doom's internal event queue.
+
+We also utilized a lookup table to translate \texttt{VirtualKey} enum (e.g., \texttt{VK\_LeftCtrl}) into Doom's internal key codes (e.g., \texttt{KEY\_FIRE}), ensuring correct mapping for gameplay actions.
+
+\subsubsection{Porting Process}
+
+The process of porting \textit{Doom} revealed several shortcomings in the existing \texttt{libc} implementation, which required a subsequent extension of its functionality. Although the \textit{Doomgeneric} is designed to be largely operating-system-agnostic, portions of its codebase implicitly assume the presence of a runtime environment with at least partial POSIX compliance. In particular, commonly used facilities such as string manipulation routines and directory handling interfaces were expected to be available. The following sections outline the key areas where the \texttt{libc} was enhanced to meet these requirements.
+
+\paragraph{Memory Management}
+Doom relies heavily on dynamic memory allocation for level geometry, textures, and game objects (\texttt{Z\_Malloc}). Our \texttt{libc} initially lacked a heap allocator. We implemented a standard \texttt{malloc}, \texttt{free}, \texttt{calloc}, and \texttt{realloc} suite based on a linked-list memory control block strategy \cite{malloc-impl}. This required adding a new system call, \texttt{get\_heap\_start}, which allows the userspace allocator to locate the valid heap region assigned by the kernel's VMM.
+
+\paragraph{String Manipulation}
+The Doom engine, particularly the WAD management system, relies on case-insensitive string comparisons to locate resources (e.g., finding "doom.wad" when the file is named "DOOM.WAD"). We implemented POSIX-compliant \texttt{strcasecmp} and \texttt{strncasecmp} functions to support this behavior.
+
+\paragraph{Standard I/O}
+To support loading data from the file system, we expanded the \texttt{stdio} implementation to include \texttt{fopen}, \texttt{fread}, \texttt{fseek}, and \texttt{ftell}, backed by the underlying syscalls (\texttt{open}, \texttt{read}, \texttt{seek}). This allowed the Doom engine to seamlessly load WAD files from the root filesystem using standard I/O semantics. Also \texttt{create\_directory} needed to be implemented to create the \texttt{saves/} directory for saving game progress. \\
+
+By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
 % TODO: extension
 % \section{Performance Analysis}
@@ -3819,7 +4136,12 @@ TODO: JAKUB
 ABI & Application Binary Interface \\
 API & Application Programming Interface \\
 APIC & Advanced Programmable Interrupt Controller \\
+CFS & Completly Fair Scheduler \\
+COW & Copy On Write \\
 CRTP & Curiously Recurring Template Pattern \\
+DMA & Direct Memory Access \\
+EEVDF & Earliest Eligible Virtual Deadline First \\
+GDT & Global Descriptor Table \\
 IDT & Interrupt Descriptor Table \\
 IPC & Inter-Process Communication \\
 ISR & Interrupt Service Routine \\
@@ -3829,10 +4151,15 @@ MLFQ & Multi-Level Feedback Queue \\
 MMIO & Memory-Mapped I/O \\
 MMU & Memory Management Unit \\
 OS & Operating System \\
+PCP & Per-CPU Pagessets \\
 PIC & Programmable Interrupt Controller \\
 PID & Process IDentifier \\
 PIT & Programmable Interval Timer \\
+PMM & Physical Memory Manager \\
+POSIX & Portable Operating System Interface \\
+REPL & Read-Eval-Print Loop \\
 RTC & Real-Time Clock \\
+SMP & Symmetric MultiProcessing \\
 TID & Thread IDentifier \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
@@ -3857,6 +4184,8 @@ LBA & Linear Block Addressing \\
 AHCI & Advanced Host Controller Interface \\
 SATA & Serial Advanced Technology Attachment \\
 NVMe & Non-Volatile Memory Express \\
+VMM & Virtual Memory Manager \\
+WAD & Where's All the Data \\
 \end{tabular}
 \\
 \thispagestyle{empty}
