@@ -393,68 +393,6 @@ TODO: ADAM
 \subsection{Emulation}
 TODO: KRYCZKA
 
-\subsection{Root Filesystem (Rootfs)}
-
-The root filesystem constitutes the fundamental userspace environment of an operating system. It provides the configuration files and userspace programs (e.g., a shell) that render the system usable and interactive. In the context of operating system development, the construction of a rootfs is a structured process that transforms source code and static resources into a binary filesystem image that can be parsed and mounted by the kernel.
-
-Conceptually, the root filesystem construction process can be decomposed into four sequential phases, each responsible for a distinct transformation step within the build pipeline:
-\begin{itemize}
-    \item \textbf{Staging and Hierarchy Construction:} Creation of a temporary directory tree on the host system that reflects the intended structure of the target filesystem.
-    \item \textbf{Artifact Compilation and Population:} Cross-compilation of userspace programs followed by their installation into the corresponding locations within the staging directory.
-    \item \textbf{Overlay:} Integration of static configuration files and resources into the staging area to complement the compiled executables.
-    \item \textbf{Filesystem Image Creation:} Conversion of the fully populated staging directory into a single binary image adhering to a chosen filesystem format.
-\end{itemize}
-An overview of this pipeline is illustrated in Figure \ref{fig:rootfs_pipeline}.
-
-\begin{figure}[htbp]
-    \centering
-    \includesvg[width=\textwidth]{res/rootfs-pipeline.svg}
-    \caption{Rootfs creation pipeline}
-    \label{fig:rootfs_pipeline}
-\end{figure}
-
-\subsubsection{Staging and Hierarchy Construction}
-
-Rootfs creation begins with a staging phase, during which the build system generates a temporary directory tree on the host system. This tree mirrors the intended layout of the target operating system's filesystem and serves as an intermediate representation prior to image generation.
-
-For early-stage operating systems, strict adherence to comprehensive standards such as the Linux Filesystem Hierarchy Standard (FHS), which mandates directories such as \texttt{/usr}, \texttt{/var}, and \texttt{/opt}, is often unnecessary. Consequently, a simplified directory structure is typically adopted, for example:
-\begin{itemize}
-\item \textbf{Binaries Directory (\texttt{/bin}):} Contains executable programs compiled for the target architecture.
-\item \textbf{Configuration Directory (\texttt{/cfg} or \texttt{/etc}):} Stores text-based system configuration files.
-\item \textbf{Library Directory (\texttt{/lib}):} Holds shared libraries when dynamic linking is supported.
-\item \textbf{Drivers Directory (\texttt{/drv}):} Contains kernel-loadable drivers.
-\end{itemize}
-The staging directory is recreated for each build, ensuring reproducibility and eliminating residual artifacts from previous compilation runs.
-
-\subsubsection{Artifact Compilation and Population}
-
-After establishing the directory hierarchy, the staging area must be populated with executable content. Userspace applications are compiled using a cross-compilation toolchain and linked against standard libraries compatible with the kernel's Application Binary Interface (ABI).
-
-A well-designed build system automates this process and enforces correct dependency ordering. In particular, building the kernel should implicitly trigger the compilation of userspace programs. The resulting binaries are then installed into the appropriate locations within the staging directory (e.g., \texttt{/bin}). This automation minimizes the risk of inconsistencies, such as a kernel attempting to execute outdated userspace binaries that rely on obsolete system calls.
-
-\subsubsection{Configuration Overlays}
-
-Executable binaries alone are insufficient for a functional operating system; configuration data and static resources are also required. These include configuration files, initialization scripts, and other static assets.
-
-A common approach to managing such data is the use of a configuration overlay. In this model, the source repository contains a predefined directory tree of static files. During the build process, this tree is recursively merged into the staging directory, augmenting the compiled binaries. This separation of code and configuration promotes flexibility, as system behavior can be modified (for example, by adjusting startup parameters) without recompilation of userspace programs.
-
-\subsubsection{Filesystem Image Synthesis}
-
-Once the staging directory has been fully populated, it must be transformed into a single binary image conforming to a specific filesystem format, such as FAT, EXT2, or an archive-based formats.
-
-In academic and hobbyist operating system projects, simpler filesystems such as FAT are frequently preferred over more sophisticated journaling filesystems. FAT offers broad host-side tool support, simplifying inspection and debugging, and its relatively simple on-disk structures reduce driver implementation complexity.
-
-Image synthesis is typically performed using host-side utilities (e.g., \texttt{mtools} and \texttt{mkfs.fat}). These tools determine the required image size, format a blank image file, and populate it with the contents of the staging directory. The output is a filesystem image ready for deployment alongside the kernel.
-
-\subsubsection{The Initial Ramdisk and the Bootstrapping Problem}
-
-A fundamental challenge in early operating system development is the so-called “chicken-and-egg” problem associated with storage drivers. In order to mount a root filesystem from persistent storage devices such as NVMe or SATA, the kernel must already possess functioning disk drivers. However, these drivers are commonly stored within the root filesystem itself.
-
-This problem is addressed through the use of an \textbf{Initial Ramdisk (initrd)}. The bootloader loads the entire image into main memory alongside the kernel and passes its memory location as a boot parameter. The kernel can then expose this memory region as a block device and mount it as the root filesystem (\texttt{/}) during early initialization. This approach allows the system to complete its initialization sequence before transitioning to a more permanent storage-backed root filesystem.
-
-\subsection{Compiling Userspace Programs}
-TODO ADAM
-
 \section{General Design Considerations}
 TODO: JAKUB
 
@@ -1482,10 +1420,127 @@ TODO: JAKUB
 
 \section{Host Environment -- Working OS}
 
-\subsection{Rootfs}
-TODO: ADAM
+\subsection{Root Filesystem (Rootfs)}
+\label{subsec:rootfs}
+
+The root filesystem constitutes the fundamental userspace environment of an operating system. It provides the configuration files and userspace programs (e.g., a shell) that render the system usable and interactive. In the context of operating system development, the construction of a rootfs is a structured process that transforms source code and static resources into a binary filesystem image that can be parsed and mounted by the kernel.
+
+Conceptually, the root filesystem construction process can be decomposed into four sequential phases, each responsible for a distinct transformation step within the build pipeline:
+\begin{itemize}
+    \item \textbf{Staging and Hierarchy Construction:} Creation of a temporary directory tree on the host system that reflects the intended structure of the target filesystem.
+    \item \textbf{Artifact Compilation and Population:} Cross-compilation of userspace programs followed by their installation into the corresponding locations within the staging directory.
+    \item \textbf{Overlay:} Integration of static configuration files and resources into the staging area to complement the compiled executables.
+    \item \textbf{Filesystem Image Creation:} Conversion of the fully populated staging directory into a single binary image adhering to a chosen filesystem format.
+\end{itemize}
+An overview of this pipeline is illustrated in Figure \ref{fig:rootfs_pipeline}.
+
+\begin{figure}[htbp]
+    \centering
+    \includesvg[width=\textwidth]{res/rootfs-pipeline.svg}
+    \caption{Rootfs creation pipeline}
+    \label{fig:rootfs_pipeline}
+\end{figure}
+
+\subsubsection{Staging and Hierarchy Construction}
+
+Rootfs creation begins with a staging phase, during which the build system generates a temporary directory tree on the host system. This tree mirrors the intended layout of the target operating system's filesystem and serves as an intermediate representation prior to image generation.
+
+For early-stage operating systems, strict adherence to comprehensive standards such as the Linux Filesystem Hierarchy Standard (FHS), which mandates directories such as \texttt{/usr}, \texttt{/var}, and \texttt{/opt}, is often unnecessary. Consequently, a simplified directory structure is typically adopted, for example:
+\begin{itemize}
+\item \textbf{Binaries Directory (\texttt{/bin}):} Contains executable programs compiled for the target architecture.
+\item \textbf{Configuration Directory (\texttt{/cfg} or \texttt{/etc}):} Stores text-based system configuration files.
+\item \textbf{Library Directory (\texttt{/lib}):} Holds shared libraries when dynamic linking is supported.
+\item \textbf{Drivers Directory (\texttt{/drv}):} Contains kernel-loadable drivers.
+\end{itemize}
+The staging directory is recreated for each build, ensuring reproducibility and eliminating residual artifacts from previous compilation runs.
+
+\subsubsection{Artifact Compilation and Population}
+
+After establishing the directory hierarchy, the staging area must be populated with executable content. Userspace applications are compiled using a cross-compilation toolchain and linked against standard libraries compatible with the kernel's Application Binary Interface (ABI).
+
+A well-designed build system automates this process and enforces correct dependency ordering. In particular, building the kernel should implicitly trigger the compilation of userspace programs. The resulting binaries are then installed into the appropriate locations within the staging directory (e.g., \texttt{/bin}). This automation minimizes the risk of inconsistencies, such as a kernel attempting to execute outdated userspace binaries that rely on obsolete system calls.
+
+\subsubsection{Configuration Overlays}
+
+Executable binaries alone are insufficient for a functional operating system; configuration data and static resources are also required. These include configuration files, initialization scripts, and other static assets.
+
+A common approach to managing such data is the use of a configuration overlay. In this model, the source repository contains a predefined directory tree of static files. During the build process, this tree is recursively merged into the staging directory, augmenting the compiled binaries. This separation of code and configuration promotes flexibility, as system behavior can be modified (for example, by adjusting startup parameters) without recompilation of userspace programs.
+
+\subsubsection{Filesystem Image Synthesis}
+
+Once the staging directory has been fully populated, it must be transformed into a single binary image conforming to a specific filesystem format, such as FAT, EXT2, or an archive-based formats.
+
+In academic and hobbyist operating system projects, simpler filesystems such as FAT are frequently preferred over more sophisticated journaling filesystems. FAT offers broad host-side tool support, simplifying inspection and debugging, and its relatively simple on-disk structures reduce driver implementation complexity.
+
+Image synthesis is typically performed using host-side utilities (e.g., \texttt{mtools} and \texttt{mkfs.fat}). These tools determine the required image size, format a blank image file, and populate it with the contents of the staging directory. The output is a filesystem image ready for deployment alongside the kernel.
+
+\subsubsection{The Initial Ramdisk and the Bootstrapping Problem}
+
+A fundamental challenge in early operating system development is the so-called “chicken-and-egg” problem associated with storage drivers. In order to mount a root filesystem from persistent storage devices such as NVMe or SATA, the kernel must already possess functioning disk drivers. However, these drivers are commonly stored within the root filesystem itself.
+
+This problem is addressed through the use of an \textbf{Initial Ramdisk (initrd)}. The bootloader loads the entire image into main memory alongside the kernel and passes its memory location as a boot parameter. The kernel can then expose this memory region as a block device and mount it as the root filesystem (\texttt{/}) during early initialization. This approach allows the system to complete its initialization sequence before transitioning to a more permanent storage-backed root filesystem.
+
 \subsection{Compiling Userspace Programs}
-TODO: ADAM
+
+The compilation of userspace applications for a custom operating system differs fundamentally from standard application development on a host machine. Standard host toolchains are configured to target the host environment, automatically linking against its standard library and adhering to its specific runtime initialization model. Consequently, generating binaries for a new operating system requires adaptation of the build system to target the new environment. This section outlines the necessary components and configurations needed to compile userspace programs for a custom OS.
+
+\subsubsection{Executable Format}
+
+A standardized executable container format must be selected to serve as a formal contract between the compiler toolchain and the kernel loader. The Executable and Linkable Format (ELF) is the standard for Unix-like systems and custom operating system projects due to its extensibility and broad toolchain support.
+
+ELF binaries utilize \emph{program headers} to describe contiguous regions of the file known as \emph{segments}. The kernel loader parses these headers to determine:
+\begin{itemize}
+\item \textbf{Load addresses:} The virtual memory addresses at which segments are mapped.
+\item \textbf{Memory footprint:} The distinction between file size and memory size, allowing for the automatic zero-initialization of uninitialized data regions (BSS).
+\item \textbf{Access permissions:} The hardware-level protection attributes (read, write, execute) required for each segment.
+\end{itemize}
+
+For early-stage operating systems, \textbf{static linking} is often the preferred strategy. This approach embeds all library code directly into the executable, avoiding the complexity of implementing a dynamic linker and shared object support within the kernel. Furthermore, compiling as Position Independent Executables (PIE) enables the kernel to load programs at arbitrary memory addresses, a prerequisite for advanced security features such as Address Space Layout Randomization (ASLR).
+
+\subsubsection{Memory Layout}
+
+To enforce the given memory layout, a custom linker script is required. This script groups program sections according to their protection requirements, enabling the kernel to utilize hardware-level security mechanisms such as the NX (No-Execute) bit on the x86\_64 platform. A standard userspace memory layout comprises the following sections in order of increasing virtual address:
+\begin{enumerate}
+\item \textbf{.text}: Executable code; marked read-only and executable.
+\item \textbf{.rodata}: Constants and string literals; marked read-only and non-executable.
+\item \textbf{.data}: Initialized global variables; marked read-write and non-executable.
+\item \textbf{.bss}: Uninitialized global variables; these occupy no storage space in the binary but are allocated in virtual memory at runtime.
+\end{enumerate}
+
+For example, on the x86\_64 architecture adhering to the System V ABI, the \textbf{.text} section typically originates at virtual address \texttt{0x400000} to prevent bugs associated with null pointer dereferences. Subsequent sections are aligned to page boundaries (commonly 4KiB). The userspace stack is conventionally located near the upper boundary of the user address space and grows downward, while the heap is initialized immediately following the \textbf{.bss} section and grows upward.
+
+\subsubsection{Runtime Initialization}
+
+The final stage of the compilation pipeline is the definition of the program entry point and the runtime initialization sequence. While application logic begins within the \texttt{main()} function, the kernel does not invoke this function directly. Instead, the linker is configured to use a dedicated entry symbol, conventionally named \texttt{\_start}.
+
+The code located at \texttt{\_start}, known as the \emph{C Runtime Startup} (CRT0), is a routine linked into every userspace application. Its purpose is to establish the execution environment expected by high-level languages:
+\begin{enumerate}
+\item \textbf{Stack alignment:} Ensuring compliance with ABI alignment requirements (e.g., 16-byte alignment for SIMD instructions).
+\item \textbf{Environment initialization:} Retrieving command-line arguments (\texttt{argv}) passed by the kernel.
+\item \textbf{Global lifetime management:} Invoking constructors for global/static objects before \texttt{main()} and destructors after \texttt{main()} returns.
+\item \textbf{Process termination:} Capturing the return value of \texttt{main()} and invoking the system call to ensure controlled process termination.
+\end{enumerate}
+This startup sequence ensures that userspace applications execute within a consistent, initialized environment and terminate in a predictable manner.
+
+\subsubsection{OS-Specific Toolchain Adaptation}
+
+While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86\_64-elf}) is sufficient for compiling the kernel itself, it presents limitations for userspace development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively (e.g., via a target like \texttt{x86\_64-alkos}). This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts.
+
+\paragraph{System Root (Sysroot)}
+
+The sysroot is a directory hierarchy on the host machine that mirrors the target operating system's root filesystem. It organizes system headers (e.g., \texttt{sysroot/usr/include}) and compiled libraries (e.g., \texttt{sysroot/usr/lib}) according to standard conventions.
+
+By configuring the cross-compiler with the \texttt{\text{-}\text{-}with-sysroot} option, the toolchain anchors its search paths to this directory. This ensures that inclusion directives, such as \texttt{\#include <stdio.h>}, resolve exclusively to the headers of the custom operating system's standard library, thereby isolating the build process from the host environment.
+
+\paragraph{Implicit Linker Configuration}
+
+An OS-specific toolchain further simplifies the linking phase by implicitly managing runtime dependencies. In a raw compilation setup, the developer must explicitly specify the C runtime startup object (\texttt{crt0.o}), the initialization and finalization objects (\texttt{crti.o}, \texttt{crtbegin.o}, \texttt{crtend.o}, \texttt{crtn.o}), and the appropriate standard library linkage for every userspace program.
+
+In contrast, a customized toolchain encapsulates this configuration internally. Upon invocation, the compiler automatically injects the necessary object files and links against the correct version of the system library. This abstraction allows developers to compile userspace applications with minimal command-line arguments.
+
+\subsubsection{Build System Integration}
+
+The compilation of userspace programs can be automated and synchronized with the kernel build process. The build system manages the dependency graph, ensuring that changes to the system library trigger recompilation of user applications. The resulting binaries are then automatically staged for inclusion in the system image, as described in Section~\ref{subsec:rootfs}.
 
 % ==================================================================
 
@@ -1644,7 +1699,7 @@ The \texttt{fork()} mechanism is rooted in historical design decisions. While co
 
 \section{Minix 3}
 
-Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, Minix 3 relocates the majority of operating system components - including device drivers, file systems, memory management mechanisms, and scheduling services - into user-space processes. As a result, the kernel's responsibilities are strictly minimized to functions such as message passing, interrupt handling, and low-level scheduling. Currently, the system supports two hardware architectures: x86 and ARM.
+Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, Minix 3 relocates the majority of operating system components --- including device drivers, file systems, memory management mechanisms, and scheduling services --- into userspace processes. As a result, the kernel's responsibilities are strictly minimized to functions such as message passing, interrupt handling, and low-level scheduling. Currently, the system supports two hardware architectures: x86 and ARM.
 
 This architectural approach provides several notable advantages. By isolating critical system services in user space, Minix 3 significantly improves fault tolerance, as failures in individual components do not lead to the compromise of the entire system. Moreover, these components can be restarted independently, enabling efficient recovery from faults instead of system-wide crashes. The resulting modularity also simplifies system maintenance and evolution, since services may be updated, replaced, or extended without requiring recompilation of the kernel.
 
@@ -1716,7 +1771,7 @@ This architectural approach provides several notable advantages. By isolating cr
 \end{figure}
 
 \subsection{Scheduler}
-Adhering to the microkernel philosophy, Minix 3 separates scheduling policy from the low-level context switching mechanism. While the kernel remains responsible for the mechanics of context switching and interrupt handling, scheduling decisions are delegated to a dedicated user-space server, referred to as the \texttt{Sched} server.
+Adhering to the microkernel philosophy, Minix 3 separates scheduling policy from the low-level context switching mechanism. While the kernel remains responsible for the mechanics of context switching and interrupt handling, scheduling decisions are delegated to a dedicated userspace server, referred to as the \texttt{Sched} server.
 
 The scheduler employs a multi-level priority round-robin algorithm \cite{minix_sched}. The system maintains sixteen priority queues organized hierarchically. Kernel tasks occupy the highest priority levels, followed by device drivers, system servers, and user applications. The lowest priority queue is reserved exclusively for idle tasks. At any scheduling decision point, the scheduler selects the next runnable process from the highest non-empty priority queue.
 
@@ -1733,13 +1788,13 @@ Minix 3 provides an abstraction layer over platform-specific timing hardware. On
 \subsubsection{Timers and Alarms}
 The kernel maintains a \texttt{clock\_timers} queue to manage synchronous timers and alarms \cite{minix_kernel_clock}. Upon receipt of a hardware timer interrupt, the \texttt{timer\_int\_handler} routine is executed. If the expiration time of the next scheduled timer in the \texttt{clock\_timers} queue has been reached, the kernel executes the associated callback function. 
 
-In the case of system alarms, this callback is the \texttt{cause\_alarm} function \cite{minix_do_setalarm}. This function sends a notification message from the Clock Task to the requesting process (e.g., the Process Manager or Scheduler), informing it that the requested time interval has elapsed. This mechanism allows user-space servers to perform periodic tasks, such as the scheduler's queue balancing.
+In the case of system alarms, this callback is the \texttt{cause\_alarm} function \cite{minix_do_setalarm}. This function sends a notification message from the Clock Task to the requesting process (e.g., the Process Manager or Scheduler), informing it that the requested time interval has elapsed. This mechanism allows userspace servers to perform periodic tasks, such as the scheduler's queue balancing.
 
 \subsubsection{Real-Time Clock (RTC)}
-Persistent wall-clock time is provided by a dedicated user-space driver, \texttt{readclock}. This driver interfaces directly with the CMOS Real-Time Clock (RTC) to retrieve the current date and time. During system initialization, this information is communicated to the Process Manager to establish the system's initial time reference \cite{minix_readclock}.
+Persistent wall-clock time is provided by a dedicated userspace driver, \texttt{readclock}. This driver interfaces directly with the CMOS Real-Time Clock (RTC) to retrieve the current date and time. During system initialization, this information is communicated to the Process Manager to establish the system's initial time reference \cite{minix_readclock}.
 
 \subsection{Memory Management}
-Memory management in Minix 3 is primarily handled by the user-space Virtual Memory (VM) server. The kernel retains control over the hardware Memory Management Unit (MMU) and address space switching but delegates higher-level memory policies to the VM server.
+Memory management in Minix 3 is primarily handled by the userspace Virtual Memory (VM) server. The kernel retains control over the hardware Memory Management Unit (MMU) and address space switching but delegates higher-level memory policies to the VM server.
 
 \subsubsection{VM Server}
 The VM server is responsible for memory region allocation, page table administration, and page fault handling. It implements a region-based memory model in which a process address space is divided into contiguous regions with defined access permissions (read, write, and execute). To efficiently manage free and allocated memory regions, the VM server uses \textbf{AVL trees} \cite{minix_vm}.
@@ -1769,7 +1824,7 @@ IPC in Minix 3 is governed by these strict policies:
 \begin{enumerate}
     \item \textbf{Access Control:} Processes may exchange messages only with explicitly authorized peers.
     \item \textbf{Hierarchical Communication:} Message flow generally follows the system's layered architecture (Layer 4 $\rightarrow$ Layer 3 $\rightarrow$ Layer 2).
-    \item \textbf{User-Space Isolation:} User processes are prohibited from communicating directly with one another or with the kernel.
+    \item \textbf{Userspace Isolation:} User processes are prohibited from communicating directly with one another or with the kernel.
 \end{enumerate}
 
 \subsubsection{System Call Implementation}
@@ -3409,7 +3464,7 @@ TODO: JAKUB
 
 \section{User's Manual}
 
-This section describes the usage of the AlkOS build environment and documents the public interfaces available to user-space applications. It outlines the build and execution workflow, the integration of user programs, and the system call interface provided by the operating system.
+This section describes the usage of the AlkOS build environment and documents the public interfaces available to userspace applications. It outlines the build and execution workflow, the integration of user programs, and the system call interface provided by the operating system.
 
 \subsection{Building and Running the OS}
 
@@ -3442,7 +3497,7 @@ The build and execution workflow consists of three sequential stages:
     Here, \texttt{<platform>} denotes the target architecture (e.g., \texttt{x86\_64}), \texttt{<build\_type>} specifies either \texttt{Debug} or \texttt{Release}. A complete list of options can be obtained using the \texttt{\text{-}\text{-}help} flag.
 
     \item \textbf{Compilation and Execution:}
-    In the final stage, the kernel and all registered user-space applications are compiled, the root filesystem image and bootable ISO are generated, and the operating system is launched using the QEMU emulator. This process can be initiated with the command:
+    In the final stage, the kernel and all registered userspace applications are compiled, the root filesystem image and bootable ISO are generated, and the operating system is launched using the QEMU emulator. This process can be initiated with the command:
     \begin{verbatim}
     ./scripts/alkos_cli.bash --run
     \end{verbatim}
@@ -3452,11 +3507,11 @@ In the event of errors occurring at any stage of the process, the scripts may be
 
 \subsection{Developing Userspace Applications}
 
-AlkOS supports user-space applications written in C and C++. These applications are integrated into the operating system at build time and included directly in the generated root filesystem.
+AlkOS supports userspace applications written in C and C++. These applications are integrated into the operating system at build time and included directly in the generated root filesystem.
 
 \subsubsection{Project Structure}
 
-User-space programs reside in the \texttt{userspace/programs/} directory. Each application is placed in its own subdirectory and must include all relevant source files along with a \texttt{CMakeLists.txt} configuration file. A minimal example of a user application is shown in Listing \ref{lst:minimalUserAppStructure}.
+Userspace programs reside in the \texttt{userspace/programs/} directory. Each application is placed in its own subdirectory and must include all relevant source files along with a \texttt{CMakeLists.txt} configuration file. A minimal example of a user application is shown in Listing \ref{lst:minimalUserAppStructure}.
 
 \begin{lstlisting}[caption={Minimal User Application Structure}, label={lst:minimalUserAppStructure}]
 // userspace/programs/my_app/main.cpp
@@ -3470,7 +3525,7 @@ extern "C" int main() {
 
 \subsubsection{Build System Integration}
 
-To include a user-space application in the build process, it must be registered with the CMake-based build system. AlkOS provides the helper macro \texttt{alkos\_register\_userspace\_app}, which automatically configures compiler flags and links the application against the custom C and C++ standard libraries (\texttt{libc} and \texttt{libc++}). An example registration is shown in Listing \ref{lst:userAppCMakeRegistration}.
+To include a userspace application in the build process, it must be registered with the CMake-based build system. AlkOS provides the helper macro \texttt{alkos\_register\_userspace\_app}, which automatically configures compiler flags and links the application against the custom C and C++ standard libraries (\texttt{libc} and \texttt{libc++}). An example registration is shown in Listing \ref{lst:userAppCMakeRegistration}.
 
 {
     \renewcommand{\lstlistingname}{CMake Snippet}
@@ -3511,7 +3566,7 @@ Certain low-level system interactions are beyond the scope of the standard C lib
 
 \subsection{Syscalls}
 
-The system call interface represents the controlled boundary between user-space applications executing in Ring 3 and the kernel executing in Ring 0. On the \texttt{x86\_64} architecture, AlkOS utilizes the \texttt{int 0x80} software interrupt mechanism to invoke system calls.
+The system call interface represents the controlled boundary between userspace applications executing in Ring 3 and the kernel executing in Ring 0. On the \texttt{x86\_64} architecture, AlkOS utilizes the \texttt{int 0x80} software interrupt mechanism to invoke system calls.
 
 \subsubsection{Calling Convention}
 
@@ -3640,6 +3695,9 @@ USB & Universal Serial Bus \\
 IPC & Inter Process Communication \\
 FAT & File Allocation Table \\
 FHS & Filesystem Hierarchy Standard \\
+ELF & Executable and Linkable Format \\
+ASLR & Address Space Layout Randomization \\
+SIMD & Single Instruction, Multiple Data \\
 \end{tabular}
 \\
 \thispagestyle{empty}
