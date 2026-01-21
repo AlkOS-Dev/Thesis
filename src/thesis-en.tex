@@ -386,10 +386,62 @@ This chapter outlines the development sequence of the kernel's most critical com
 Before proceeding to writing actual kernel code we must first do some preparation on our development tools and development environemnts. Below we can find brief description of needed things.
 
 \subsection{Cross-Compilation Toolchain}
-TODO: ADAM
+\label{subsec:theory_toolchain}
+
+The development process begins with the establishment of a cross-compilation toolchain targeting a generic, os-independent architecture (e.g., \texttt{x86\_64-elf}). Using a compiler provided by the host system may lead to issues, as such compilers typically assume that the generated code will execute within an operating system environment. These assumptions are invalid during development, where no such infrastructure exists initially.
+
+For this reason, the cross-compiler is built from source, allowing it to be configured and, if necessary, patched to accommodate the specific requirements of kernel and userspace development. A complete cross-compilation toolchain typically consists of a cross-compiler (e.g., GCC or Clang), a binary utilities suite (including the assembler and linker), and optionally a cross-debugger such as GDB or LLDB. Although any suitable cross-compiler may be used to build an operating system, GCC is generally preferred due to extensive support within the operating systems development community. For a detailed guide to building a GCC-based cross-compilation toolchain, refer to \cite{osdev-gcc-cross-compiler}.
+
+At later stages of development, particularly when building userspace applications, an extended version of the toolchain is required. This toolchain must be capable of automatically linking against our C standard library and including system headers. The process of adapting the toolchain to recognize the new operating system as a valid target is discussed in Subsection~\ref{subsubsec:os-specific-toolchain}.
+
+Two distinct build environments are used throughout the system's development. In a \textbf{hosted} environment, programs are compiled with the expectation that a mature operating system is present, providing runtime services such as program startup routine, system call interface, and system libraries. In contrast, a \textbf{freestanding} environment makes no assumptions about the existence of such, requiring all runtime support to be provided explicitly by the program or the operating system itself.
+
+Kernel components and early system initialization code are built in a freestanding environment, as they execute before any operating system services are available. Userspace programs, on the other hand, are compiled in a hosted environment once the operating system and its runtime infrastructure have been established. The required runtime libraries are provided by the operating system (see Subsection~\ref{subsec:theory_libc_libcpp}).
 
 \subsection{Building Machinery}
-TODO: ADAM
+
+The construction of an operating system kernel requires the coordinated build of components, including loaders, the kernel, third-party libraries, and userspace applications. Managing this through manual compiler invocations or ad-hoc shell scripts does not scale and frequently results in maintenance issues. Consequently, the design of a robust build infrastructure is essential for efficient development. We outline several key considerations for establishing such a system.
+
+\subsubsection{Selection of Build Tools}
+
+Build automation tools can be broadly categorized according to their level of abstraction. Low-level build systems (e.g., Make or Ninja) provide fine-grained control over compilation rules and dependency graphs. While this approach offers flexibility, it often becomes difficult to maintain as project complexity grows.
+
+Meta-build systems, by contrast, operate at a higher level of abstraction. They allow developers to describe build targets, dependencies, and configuration options declaratively, and subsequently generate the necessary low-level build files for a chosen backend. For OS development, meta-build systems are generally preferred due to their scalability and maintainability. Examples of popular meta-build systems include CMake, Meson, and Premake.
+
+\subsubsection{Toolchain Integration}
+
+As required by the freestanding development model described in Section \ref{subsec:theory_toolchain}, the build system must be configured to use the previously established cross-compilation toolchain. This is typically achieved through the use of \textbf{toolchain configuration files} which act as an adapter layer. 
+
+A toolchain configuration file must fulfill two primary functions:
+\begin{enumerate}
+\item \textbf{System override:} It must define the target operating system as "Generic" (or an equivalent bare-metal designation). This prevents the build system from attempting to link against the host's standard libraries or searching the host's system paths for headers.
+\item \textbf{Binary mapping:} It maps abstract compiler roles (e.g., C Compiler, Assembler, Linker) to the absolute paths of the specific cross-toolchain binaries compiled during the environment preparation phase.
+\end{enumerate}
+
+This architectural decoupling ensures that the build logic remains agnostic of the underlying hardware. Retargeting the operating system to a new architecture (e.g., transitioning from \texttt{x86\_64} to \texttt{aarch64}) entails only the substitution of the active toolchain file, without requiring modifications to the project's build scripts or source code structure.
+
+\subsubsection{Configuration Management}
+
+Operating systems frequently require compile-time configuration to enable, disable or parametrize subsystems such as debugging facilities, or experimental scheduling policies. As the project evolves, configuration options may become duplicated across multiple layers of the system, leading to inconsistencies and maintenance challenges.
+
+To avoid this issue, the build system should enforce a \textbf{single source of truth} (SSOT) for configuration data. One effective strategy is to define the configuration schema using a structured data format such as YAML, JSON or TOML. A generation step then can derive three synchronized artifacts from this schema:
+\begin{enumerate}
+    \item \textbf{Source Header File:} Defines compile-time constants or definitions that allow the kernel source code to adapt its behavior based on the active configuration.
+    \item \textbf{Build System Configuration:} Provides variables and conditions that control which source files, libraries, or features are included during compilation.
+    \item \textbf{Scripts Configuration:} Supplies runtime scripts or tools with the necessary parameters to operate in accordance with the build configuration.
+\end{enumerate}
+
+\subsubsection{Compilation Profiles}
+
+The build system must support compilation profiles to accommodate different phases of the development lifecycle. These profiles are typically expressed as predefined sets of compiler and linker flags:
+
+\begin{itemize}
+    \item \textbf{Debug Profile:} Optimized for observability and correctness. Compiler optimizations are generally disabled to preserve a close correspondence between source code and generated machine instructions, simplifying debugging. Debug symbols are enabled, and additional safety mechanisms such as stack protection or sanitizers may be included to detect errors early.
+    
+    \item \textbf{Release Profile:} Optimized for performance and efficiency. Higher optimization levels are enabled to increase performance and reduce code size. However, optimizations must be carefully selected in a kernel context. For instance, on x86-64 systems, automatic vectorization should be disabled, as the use of SIMD registers requires saving and restoring additional processor state during interrupts and context switches, incurring significant overhead.
+\end{itemize}
+
+In addition to general optimization settings, architecture-specific constraints must be enforced explicitly. On x86-64, the System~V ABI permits the use of a so-called \textbf{red zone}, a fixed region below the stack pointer that leaf functions (functions that do not call other functions) may use without adjusting the stack pointer. In kernel mode, interrupts may overwrite this region, leading to memory corruption. As a result, the red zone must be explicitly disabled.
 
 \subsection{Emulation}
 TODO: KRYCZKA
@@ -409,7 +461,8 @@ TODO: KRYCZKA
 \section{Target Environment}
 TODO: JAKUB
 
-\subsection{Implementation of Libc and Libc++}
+\subsection{Implementation of Standard Library}
+\label{subsec:theory_libc_libcpp}
 TODO: ADAM
 
 \subsection{Bootloader}
@@ -1680,8 +1733,9 @@ The code located at \texttt{\_start}, known as the \emph{C Runtime Startup} (CRT
 This startup sequence ensures that userspace applications execute within a consistent, initialized environment and terminate in a predictable manner.
 
 \subsubsection{OS-Specific Toolchain Adaptation}
+\label{subsubsec:os-specific-toolchain}
 
-While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86\_64-elf}) is sufficient for compiling the kernel itself, it presents limitations for userspace development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively (e.g., via a target like \texttt{x86\_64-alkos}). This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts.
+While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86\_64-elf}) is sufficient for compiling the kernel itself, it presents limitations for userspace development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively  (e.g., via a target like \texttt{x86\_64-alkos}) \cite{osdev-os-specific-toolchain}. This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts. From this point onward, one should provide its own toolchain source code (or patches), alongside the OS source code, instead of relying on an upstream one.
 
 \paragraph{System Root (Sysroot)}
 
@@ -4151,6 +4205,8 @@ EEVDF & Earliest Eligible Virtual Deadline First \\
 ELF & Executable and Linkable Format \\
 FAT & File Allocation Table \\
 FHS & Filesystem Hierarchy Standard \\
+GCC & GNU Compiler Collection \\
+GDB & GNU Debugger \\
 GDT & Global Descriptor Table \\
 IDT & Interrupt Descriptor Table \\
 IPC & Inter-Process Communication \\
@@ -4177,6 +4233,7 @@ RTC & Real-Time Clock \\
 SATA & Serial Advanced Technology Attachment \\
 SIMD & Single Instruction, Multiple Data \\
 SMP & Symmetric MultiProcessing \\
+SSOT & Single Source Of Truth \\
 TID & Thread IDentifier \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
