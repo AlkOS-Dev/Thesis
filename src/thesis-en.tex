@@ -291,7 +291,7 @@
 \title
 \end{center}
 
-TODO
+TODO: KRYCZKA
 
 \end{abstract}
 }
@@ -336,44 +336,51 @@ TODO
 \addcontentsline{toc}{chapter}{Introduction}
 
 \section{Scope of the Thesis} 
-TODO: JAKUB
 
-\section{Limitations and Assumptions}
-TODO: JAKUB
-TODO: KRYCZKA, ADAM, JAKUB
+The main goal of our thesis which was formed initially is to implement function scheduler and have some runnable tasks, each in separate address space. In details we assumed:
 
-\subsection{Minimal requirements}
 \begin{itemize}
-  \item avx
-  \item osxsave
-  \item swapgs
-  \item invariant tsc
-  \item HPET
-  \item APIC
-  \item acpi
-  \item 64bit LAPIC
-  \item mmu
-  \item genreal purpose os
+    \item Bootloading -- we can startup our system on bare metal
+    \item Virtual memory support -- we have virtual memory management (we can allocate the space for the tasks)
+    \item Preemptive scheduling -- we can preempt running task
+    \item At least simple scheduling algorithm -- round robin
+    \item At least single core
+    \item x86_64 Archtiecture
+    \item General purpose scheduling 
+    \item Monolithic design
 \end{itemize}
 
-\subsection{Known Limitations}
-\label{subsec:limitations}
+The requirements are kind of foggy, as at the starting point we were not sure how much effort it will take to complete the project
+
+\subsection{Functional Requirements}
+
+Based on that view we extracted following requirements:
 
 \begin{itemize}
-  \item max process name = 128
-  \item max processes = 4096
-  \item max threads = 8192
-\end{itemize}
-
-Functionalities:
-\begin{itemize}
-  \item aaa
+    \item req1
 \end{itemize}
 
 \section{Work Division -- Code} 
-TODO: KRYCZKA, ADAM, JAKUB
+
+In our case work division was pretty straightforward, as the conecpt has so many complex and separated problems, that we decided do divide mostly by those problems:
+
+\subsubsection{Jakub Lisowski}
+
+Problem of scheduling, life management of processes and threads, context switching, scheduling algorithms, sleeping and timer devices.
+
+\subsubsection{Adam Ogieniewski}
+TODO: ADAM CHECK
+
+Problem of storage and filesystem (abstraction and actual implementation of fat fs family), libc, system interface (syscalls and libc extension) and hardware interaction via ACPI and other drivers.
+
+\subsubsection{Łukasz Kryczka}
+TODO: KRYCZKA CHECK
+
+Problem of virtual memory, memory management, allocation, memory initialization and management of address spaces.
+
 \section{Work Division -- Thesis}
-TODO: KRYCZKA, ADAM, JAKUB
+
+Work division in case of thesis looks similarly as code word divison. We splitted the work based on the experience, knowledge and work done in the project by each individual. The effort of each person was mostly equal.
 
 % ==================================================================
 
@@ -4418,6 +4425,37 @@ TODO: JAKUB
 
 \section{Achieved Functionalities} 
 TODO: JAKUB
+
+\section{Limitations and Assumptions}
+TODO: JAKUB
+TODO: KRYCZKA, ADAM, JAKUB
+
+\begin{itemize}
+    \item aaa
+  \end{itemize}
+
+\subsection{Minimal requirements}
+\begin{itemize}
+  \item avx
+  \item osxsave
+  \item swapgs
+  \item invariant tsc
+  \item HPET
+  \item APIC
+  \item acpi
+  \item 64bit LAPIC
+  \item mmu
+  \item genreal purpose os
+\end{itemize}
+
+\subsection{Known Limitations}
+\label{subsec:limitations}
+
+\begin{itemize}
+  \item max process name = 128
+  \item max processes = 4096
+  \item max threads = 8192
+\end{itemize}
 
 \section{Future Work}
 TODO: KRYCZKA, ADAM, JAKUB
