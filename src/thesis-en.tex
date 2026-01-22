@@ -409,8 +409,118 @@ TODO: KRYCZKA
 \section{Target Environment}
 TODO: JAKUB
 
-\subsection{Implementation of Libc and Libc++}
-TODO: ADAM
+\subsection{Implementation of the Standard Library}
+\label{subsec:theory_libc_libcpp}
+
+A C standard library, commonly referred to as \texttt{libc}, is a collection of pre-written code that provides a set of fundamental functionalities to userspace applications. These functionalities include, but are not limited to, input/output operations, string manipulation, memory management, mathematical computations, and system call wrappers. The standard library serves as an intermediary layer between user applications and the underlying operating system, abstracting away low-level details and providing a consistent programming interface.
+
+\subsubsection{Language and Interface}
+
+Although historically associated with the C programming language, the implementation of a standard library is not inherently tied to C. Modern systems programming languages may be used to implement the library's internal logic, provided that a C-compatible Application Binary Interface (ABI) is exposed. Most high-level languages support interoperability with C, so we can leverage the advanced language features to implement the standard library without sacrificing compatibility with C programs.
+
+\subsubsection{Development Methodologies}
+
+When developing an operating system, two principal approaches exist for providing a standard library: using an existing implementation or developing one from scratch.
+
+\paragraph{Using Existing Libraries}
+
+Several open-source \texttt{libc} implementations are explicitly designed for portability. Notable examples include \textbf{Newlib}, which is widely adopted in embedded systems, and \textbf{mlibc}, which targets hobbyist operating systems. Integrating such libraries typically involves the implementation of required syscalls. The kernel developer supplies backend implementations for a set of low-level system calls, while the library itself provides higher-level functionality such as formatted output or mathematical routines. This approach substantially reduces development effort and enables the early execution of complex userspace software.
+
+\paragraph{Implementation from Scratch}
+
+Alternatively, the standard library may be developed specifically for the operating system. This approach offers full control over memory usage, performance characteristics, and integration with kernel-specific features. However, it introduces significant complexity. Comparative studies of existing C standard libraries demonstrate substantial variation in performance, memory footprint, and standards compliance, even among mature implementations \cite{libc_comparison}. Achieving conformance with the language standard requires careful handling of numerous corner cases, including floating-point behavior, complex string formatting semantics, and locale support. Even minor deviations from the specified behavior can lead to subtle incompatibilities when porting third-party software.
+
+\subsubsection{Userspace vs. Kernel Variants}
+
+Standard library functionality is required in both user space and kernel space; however, these environments impose fundamentally different constraints. Userspace code executes without privileges and relies on system call interface, whereas kernel code executes in a privileged context, invokes kernel services directly rather than through system calls, and must comply with constraints imposed by the kernel execution environment, such as interrupt safety. As a result, a single, uniform library implementation is insufficient.
+
+To address this, the library is split into a userspace variant (\texttt{libc}) and a kernel variant (\texttt{libk}), each compiled with different configuration flags and assumptions. This separation enforces correct usage and prevents kernel code from accidentally relying on functionality that is unavailable or unsafe in kernel context.
+
+\subsubsection{Program Initialization and the C Runtime (CRT)}
+\label{subsubsec:theory_crt}
+
+In addition to exposing user-facing APIs, the runtime environment must be initialized before control is transferred to the program’s entry function. Userspace programs do not begin execution at \texttt{main}; instead, execution starts at a library-provided entry point, conventionally named \texttt{\_start}, which is supplied by a startup object file \cite{osdev_crt}.
+
+This initialization sequence is realized through coordinated interaction between the linker, compiler, and standard library, and typically involves a set of well-defined object files:
+
+\begin{itemize}
+    \item \textbf{\texttt{crt0.o} (C Runtime 0):} Defines the \texttt{\_start} symbol and performs early initialization tasks such as stack alignment, optional setup of stack protection mechanisms, and preparation of program arguments before invoking \texttt{main}. Upon return, it transfers control to \texttt{exit}.
+    
+    \item \textbf{\texttt{crti.o} and \texttt{crtn.o}:} Provide the prologue and epilogue for the \texttt{.init} and \texttt{.fini} sections, respectively. Code in \texttt{.init} executes before \texttt{main}, while code in \texttt{.fini} executes after program termination.
+    
+    \item \textbf{\texttt{crtbegin.o} and \texttt{crtend.o}:} Supplied by the compiler toolchain, these objects manage registration of global constructors and destructors.
+\end{itemize}
+
+The overall control flow of the C runtime initialization and termination process is illustrated in Figure~\ref{fig:crt-init-flow}.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.8cm, % Adjusted distance for better fit
+        % Standard block style
+        block/.style={
+            rectangle, 
+            draw=black!70, 
+            rounded corners=3pt, 
+            minimum width=6cm, 
+            minimum height=0.9cm, 
+            align=center, 
+            fill=gray!10,
+            font=\small
+        },
+        % Highlight user code differently
+        userblock/.style={
+            block,
+            fill=white,
+            thick
+        },
+        arrow/.style={-Latex, thick},
+        label_text/.style={font=\scriptsize\ttfamily}
+    ]
+
+        % 1. Entry from Kernel
+        \node (loader) [block, fill=gray!30] {\textbf{Process Creation}}
+
+        % 2. Entry Point
+        \node (start) [block, below=of loader] {\texttt{\_start}\\ \scriptsize (\texttt{crt0.o})};
+
+        % 3. Initialization Phase
+        \node (init) [block, below=of start] {\texttt{.init} section prologue\\ \scriptsize (\texttt{crti.o})};
+        \node (ctors) [block, below=of init] {Global Constructors\\ \scriptsize (\texttt{crtbegin.o})};
+
+        % 4. User Main
+        \node (main) [userblock, below=of ctors] {\textbf{\texttt{main()}}\\ \scriptsize (User Application)};
+
+        % 5. Exit Trigger
+        \node (exit_func) [block, below=of main] {\texttt{exit()}\\ \scriptsize (\texttt{libc})};
+
+        % 6. Termination Phase
+        \node (dtors) [block, below=of exit_func] {Global Destructors\\ \scriptsize (\texttt{crtend.o})};
+        \node (fini) [block, below=of dtors] {\texttt{.fini} section epilogue\\ \scriptsize (\texttt{crtn.o})};
+
+        % 7. System Exit
+        \node (syscall) [block, below=of fini, fill=gray!30] {\textbf{Process Termination}\\ \scriptsize (Syscall)};
+
+        % Arrows
+        \draw[arrow] (loader) -- (start);
+        \draw[arrow] (start) -- (init);
+        \draw[arrow] (init) -- (ctors);
+        \draw[arrow] (ctors) -- (main);
+        \draw[arrow] (main) -- (exit_func);
+        \draw[arrow] (exit_func) -- (dtors);
+        \draw[arrow] (dtors) -- (fini);
+        \draw[arrow] (fini) -- (syscall);
+
+        % Annotations (Right side brackets/text)
+        \node [right=0.2cm of init, font=\scriptsize, align=left, color=gray!80!black] {Initialization\\(pre-main)};
+        \node [right=0.2cm of dtors, font=\scriptsize, align=left, color=gray!80!black] {Finalization\\(post-main)};
+
+    \end{tikzpicture}
+    \caption{Control flow of C runtime (CRT) initialization and termination}
+    \label{fig:crt-init-flow}
+\end{figure}
+
+Failure to link these components in the correct order results in an incomplete runtime environment, in which global constructors are not executed and program behavior becomes undefined --- particularly for C++ applications or code relying on constructor or destructor attributes.
 
 \subsection{Bootloader}
 \label{subsec:theory_bootloader}
@@ -1668,16 +1778,7 @@ While the exact virtual base address of the \textbf{.text} section is platform- 
 
 \subsubsection{Runtime Initialization}
 
-The final stage of the compilation pipeline is the definition of the program entry point and the runtime initialization sequence. While application logic begins within the \texttt{main()} function, the kernel does not invoke this function directly. Instead, the linker is configured to use a dedicated entry symbol, conventionally named \texttt{\_start}.
-
-The code located at \texttt{\_start}, known as the \emph{C Runtime Startup} (CRT0), is a routine linked into every userspace application. Its purpose is to establish the execution environment expected by high-level languages:
-\begin{enumerate}
-\item \textbf{Stack alignment:} Ensuring compliance with ABI alignment requirements (e.g., 16-byte alignment for SIMD instructions).
-\item \textbf{Environment initialization:} Retrieving command-line arguments (\texttt{argv}) passed by the kernel.
-\item \textbf{Global lifetime management:} Invoking constructors for global/static objects before \texttt{main()} and destructors after \texttt{main()} returns.
-\item \textbf{Process termination:} Capturing the return value of \texttt{main()} and invoking the system call to ensure controlled process termination.
-\end{enumerate}
-This startup sequence ensures that userspace applications execute within a consistent, initialized environment and terminate in a predictable manner.
+Userspace programs require a well-defined runtime initialization sequence to prepare the execution environment before control is transferred to the program's \texttt{main} function. This sequence is typically provided by the C runtime (CRT), which is described in detail in Section~\ref{subsubsec:theory_crt}.
 
 \subsubsection{OS-Specific Toolchain Adaptation}
 
