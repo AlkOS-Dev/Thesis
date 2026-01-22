@@ -1364,11 +1364,11 @@ Preemptive scheduling is the standard for modern general-purpose operating syste
 \subsubsection{SMP Scheduling}
 Symmetric Multiprocessing (SMP) scheduling extends these concepts to systems with multiple processor cores. In this environment, the scheduler must not only decide \textit{which} task to run next but also \textit{where} to run it.
 
-\subsection{Discovering External Devices and System Capabilities}
+\section{Discovering External Devices and System Capabilities}
 
 Upon the successful initialization of the fully functional memory management subsystem, the kernel can proceed to discover external devices and implement subsystems for capabilities such as storage, input, and networking. It is not necessary to support an exhaustive list of peripherals to achieve a minimal working kernel. Therefore, this section covers only the absolute minimum set of devices required to support the scheduler and execute user-space programs.
 
-\subsubsection{Discovery and Abstraction (Drivers)}
+\subsection{Discovery and Abstraction (Drivers)}
 
 Device discovery strategies vary fundamentally between hardware architectures, necessitating platform-specific implementations that feed into a unified kernel abstraction. 
 
@@ -1402,7 +1402,7 @@ Regardless of whether a device is found via PCI enumeration, ACPI tables, or Dev
 
 This structure must define crucial operations for the specific device type alongside data describing its functionality, allowing the kernel to select the most appropriate driver either through user configuration or automatic selection algorithms.
 
-\subsubsection{Core Local Storage}
+\subsection{Core Local Storage}
 
 Implementing an SMP kernel necessitates an infrastructure for accessing core-local data early in the boot process to facilitate future scalability and prevent extensive refactoring. This initialization must occur after memory setup and CPU topology discovery, as structures must be allocated for each core individually. 
 
@@ -1410,19 +1410,19 @@ Fundamentally, Core Local Storage (CLS) enables the kernel to maintain state uni
 
 On the x86-64 architecture, this is typically implemented using the \texttt{GS} or \texttt{FS} segment registers. Since the full 64-bit base address cannot be loaded into these segment selectors directly, the kernel must utilize Model Specific Registers (specifically \texttt{IA32\_GS\_BASE} or \texttt{IA32\_KERNEL\_GS\_BASE}) to map the per-core structure to the logical address space. The \texttt{SWAPGS}\cite{osdev-gs} instruction is then employed during interrupt entry and exit to switch between user-space and kernel-space thread-local storage transparently.
 
-\subsubsection{Core Identification}
+\subsection{Core Identification}
 
 A critical design challenge in this domain is the identification of the executing core. While mostly all processors provide unique hardware identifiers (e.g., APIC ID on x86, MPIDR on ARM, or Hart ID on RISC-V), these values are intrinsically tied to the physical topology of the silicon. Consequently, they are often non-contiguous, sparse, or hierarchical, rendering them unsuitable for directly indexing internal kernel arrays. To address this, an operating system typically implements a mapping layer during hardware discovery, assigning a dense, sequential \textbf{Logical ID} (ranging from 0 to $N-1$) to each active core. Generally speaking another abstraction is handy here.
 
-\subsubsection{Timing Design}
+\subsection{Timing Design}
 
 To support the preemptive scheduling model, the kernel requires a robust timing infrastructure to track execution time. Before discussing timing devices, a fundamental design decision must be made regarding the kernel type: \texttt{tickless} or \texttt{ticking}. Ticking kernels rely on a global constant defining the frequency of periodic timing interrupts. These values typically operate with millisecond granularity, as higher frequencies would degrade system performance. In contrast, tickless kernels do not define periodic interrupts. Instead, they schedule the next timing event based on immediate requirements, such as the sleep schedule or the time slice of the currently running process. It is important to note that ticking kernels also require higher granularity interrupts if support for \texttt{nanosleep} is needed \ref{subsec:linux-timing}.
 
-\subsubsection{Clocks}
+\subsection{Clocks}
 
 The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue. On AMD64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio, obviously from the set of supported ones.
 
-\subsubsection{Event Clocks}
+\subsection{Event Clocks}
 \label{subsec:event_clocks}
 
 At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. Crucially, to implement preemption as discussed in Section \ref{sec:scheduling_approaches}, these devices are required to forcibly interrupt the currently running task when its time slice expires.
@@ -1443,23 +1443,23 @@ An example of device availability schemes by architecture is as follows:
 
 Most modern architectures support both local and high-precision timers. For example, on AMD64 with SMP, the presence of local LAPIC Timers \cite{IntelManual-APIC} (high precision, one-shot) is guaranteed, significantly simplifying the implementation.
 
-\subsubsection{Keyboard}
+\subsection{Keyboard}
 
 Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21}\cite{osdev-ps22} if are available on our device (is quite popular on embedded systems). Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec}\cite{osdev-usb}.
 
-\subsection{File Systems}
+\section{File Systems}
 
 Once the kernel has established memory management and basic device communication, the next major milestone is the management of persistent data. In a raw hardware context, storage devices (Hard Disk Drives, SSDs, NVMe drives) present themselves as vast, linear arrays of blocks (typically 512~B or 4~KiB) accessed via Linear Block Addressing (LBA).
 
 Operating directly on raw sectors is impractical for a general-purpose operating system. To manage code (executables) and data effectively, the kernel requires an abstraction layer that transforms this linear physical storage into a hierarchical structure. This is the role of the File System. In the context of OS development, three primary challenges arise: defining a unified interface for disparate storage formats, abstracting the physical access to storage media, and bootstrapping the initial file system to load userspace programs.
 
-\subsubsection{Virtual File System (VFS)}
+\subsection{Virtual File System (VFS)}
 
 A non-trivial kernel must support multiple file system formats (e.g., FAT32 \cite{fat-spec} for UEFI compatibility, Ext2 \cite{ext2-spec} for Linux compatibility, or ISO9660 \cite{iso9660-spec} for optical media). Implementing system calls like \texttt{open()} or \texttt{read()} separately for each format would lead to a combinatorial explosion of code paths and tight coupling between the kernel core and specific driver implementations.
 
 To resolve this, modern kernels implement a \textbf{Virtual File System} (VFS). The VFS is a kernel subsystem that provides a unified abstract interface for file operations. It defines generic structures --- such as file metadata, directory entries and mounted filesystems --- and a set of operations that concrete file system drivers must implement. By using function pointer table, the VFS decouples the high-level system calls from low-level storage details.
 
-\subsubsection{Block Device Abstraction}
+\subsection{Block Device Abstraction}
 
 While the VFS abstracts the logical format of data (files and directories), the kernel must also abstract the physical location of that data. A file system driver, such as FAT32, contains logic to manipulate File Allocation Tables and directory clusters, but it should not contain logic for communicating with a SATA controller, or managing TCP/IP packets.
 
@@ -1514,7 +1514,7 @@ This abstraction allows specific storage drivers to transparently fulfill reques
 
 By implementing this layer, the exact same FAT32 code can handle a USB stick, a partition in memory, or a remote disk over the network without modification.
 
-\subsubsection{The Bootstrapping Problem and Initrd}
+\subsection{The Bootstrapping Problem and Initrd}
 
 A "chicken-and-egg" problem exists during the early boot process. To load a userspace program (like a shell), the kernel needs a file system driver. However, on a microkernel or a modular monolithic kernel, file system drivers and disk drivers might technically reside on the disk itself. Furthermore, writing an NVMe or AHCI (SATA) driver and a full partition parser is a massive undertaking that blocks the development of other kernel features.
 
@@ -1529,14 +1529,14 @@ Because the bootloader handles the disk I/O to load this image, the kernel does 
 
 This approach isolates the development of other subsystems from the complexities of physical storage hardware, serving as a critical bridge to a self-hosting system.
 
-\subsection{Screen Drawing}
+\section{Screen Drawing}
 TODO: KRYCZKA
 
-\subsection{Scheduling}
+\section{Scheduling}
 
 With all requisite low-level components implemented, the development process transitions to the design and implementation of the scheduling subsystem. The initial step involves defining the data structures representing the units of execution. We begin by establishing the concept of a Process.
 
-\subsubsection{Process}
+\subsection{Process}
 
 The fundamental unit for resource management is the process. This object represents the execution environment for the threads operating within it. Consequently, it must act as a container for all resources shared between these threads. At a minimum, a process structure must manage:
 
@@ -1561,7 +1561,7 @@ At this stage, it is prudent to prepare data structures that allow for efficient
 
 In a production environment, this structure would naturally include additional fields for management purposes, such as synchronization primitives, statistics, configuration flags, and a state enumeration for lifecycle management.
 
-\subsubsection{Thread}
+\subsection{Thread}
 
 The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution - the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer. Although same thing may be archieved with different solution
 
@@ -1619,6 +1619,8 @@ struct Thread {
 };
 \end{lstlisting}
 
+\subsection{Context}
+
 \subsubsection{Context Creation}
 \label{subsec:context-init}
 
@@ -1655,7 +1657,7 @@ ContextSwitch:
     iretq                   ; Restore state using interrupts mechanism
 \end{lstlisting}
 
-\subsubsection{Scheduler Internal Synchronization}
+\subsection{Scheduler Internal Synchronization}
 
 When designing the scheduler and internal kernel mechanisms, appropriate synchronization strategies are paramount to ensure data consistency. Furthermore, synchronization primitives must be used wisely to minimize latency, guarding only the critical sections. The two primary categories of synchronization required are:
 
@@ -1664,7 +1666,7 @@ When designing the scheduler and internal kernel mechanisms, appropriate synchro
 \item \textbf{SMP Synchronization} -- In a multiprocessor environment, concurrent access to shared data by multiple cores necessitates rigorous protection. For short critical sections, spinlocks \cite{spinlock} or memory barriers \cite{barriers} are suitable. However, for complex scenarios requiring extended waits, blocking locks (utilizing wait queues \ref{subsec:wait_queue}) are required.
 \end{itemize}
 
-\subsubsection{Scheduler}
+\subsection{Scheduler}
 
 With thread and process management structures established, the final component required is the mechanism responsible for selecting the next task for execution during preemption or voluntary yielding. The primary responsibility of the scheduler is to track the execution state of threads and determine the optimal task to run according to a specific policy. The complexity of the implementation is largely dictated by the chosen scheduling paradigm (Section \ref{sec:scheduling_approaches}).
 
@@ -1726,14 +1728,14 @@ void TimerHandler() {
 
 This simple model may suffice for an SMP system if implemented as a core-local scheduler, provided a load-balancing mechanism is available to redistribute tasks between cores.
 
-\subsubsection{Blocking - Wait Queues}
+\subsection{Blocking - Wait Queues}
 \label{subsec:wait_queue}
 
 Regardless of the scheduling algorithm employed, a mechanism is required to block threads and defer their execution until specific events occur, such as acquiring a lock, joining a thread, or awaiting I/O. This necessitates the management of multiple queues distributed throughout the kernel codebase, in contrast to the centralized run queues of the scheduler.
 
 To distinguish between runnable and waiting threads, a specific \texttt{BLOCKED} state is assigned to tasks residing in a wait queue. This distinction simplifies resource management and structure cleanup. Intrusive data structures (Section \ref{subsec:intrusive}) are particularly advantageous in this context due to their efficient removal properties. The entity owning the wait queue is responsible for waking threads (transitioning them from the wait queue back to the scheduler's run queue) when the event occurs. Conversely, the task itself initiates the blocking process when it reaches a synchronization point.
 
-\subsubsection{Sleep}
+\subsection{Sleep}
 
 To implement sleeping functionality, two primary operations must be introduced: transitioning a task into a sleeping state and waking it upon the expiration of the requested duration. The first operation is relatively straightforward, similar to blocking on a synchronization primitive, the thread is removed from the scheduler's run queues, inserted into a dedicated sleeping data structure, and its state is updated to reflect that it is sleeping. The second operation is significantly more complex, as it requires determining the appropriate mechanism and timing for waking tasks.
 
@@ -1743,7 +1745,7 @@ For kernels utilizing a periodic tick, handling sleep operations with granularit
 
 In contrast, for a tickless kernel where interrupts are scheduled dynamically, the implementation is more intricate. This approach requires maintaining an execution timeline, typically implemented using a priority queue to sort tasks by their wake-up timestamps. For high-precision sleep (e.g., \texttt{nanosleep}), hardware constraints become a critical factor. If the requested sleep duration is smaller than the overhead required to interact with the timing module or reconfigure the hardware timer, busy-waiting may be a more efficient alternative. Designing such a framework requires careful consideration of timing constraints, such as the time consumed by timer reconfiguration and ensuring that the calculated wake-up time has not already passed during the configuration process. Additionally, whenever the timer is reprogrammed, the system must ensure that any tasks scheduled to wake up before the new interrupt time are correctly handled.
 
-\subsection{User Space}
+\section{User Space}
 
 With the foundational kernel components established, the development process transitions to enabling the execution of unprivileged tasks created by the user. To facilitate the execution of user-space programs, several key mechanisms and components must be implemented:
 
@@ -1756,7 +1758,7 @@ With the foundational kernel components established, the development process tra
     \item \textbf{Compilation Toolchain} -- The extension and configuration of the compiler to support targeting the specific operating system.
 \end{itemize}
 
-\subsubsection{Syscalls}
+\subsection{Syscalls}
 \label{subsubsec:syscalls}
 
 System calls (syscalls) are the primary interface through which userspace applications request services from the operating system kernel. Modern processors enforce a strict separation between unprivileged applications and the operating system kernel to ensure stability and security. This privilege separation is architecturally defined: x86-64 uses Protection Rings (Ring 3 for users, Ring 0 for kernel) \cite{IntelManual-Protection-Rings}, ARM64 uses Exception Levels (EL0 for users, EL1 for kernel) \cite{ARM-Arch-Ref-Exception-Levels}, and RISC-V uses Privilege Modes (User Mode and Supervisor Mode) \cite{RISCV-Priv-Spec-Privilege-Levels}.
@@ -1816,7 +1818,7 @@ The syscall interface is the primary attack surface of the kernel. The kernel mu
 
 For high-frequency operations where even the minimal syscall overhead is too high (e.g., querying the system time), Linux employs \textbf{vDSO} (virtual Dynamic Shared Object). This mechanism maps a read-only page of kernel memory containing specific data and code into the user process. The application can then execute a standard function call to read this data without ever triggering a context switch or entering kernel mode \cite{linux_vdso}.
 
-\subsubsection{Libc System Headers}
+\subsection{Libc System Headers}
 
 Although the system call interface constitutes the fundamental mechanism for interaction with the kernel, it operates at a level of abstraction that is unsuitable for general-purpose application development. In practice, application programmers do not invoke syscalls directly via assembly instructions. Instead, they rely on the \texttt{libc}, whose header files define the API between userspace software and the operating system.
 
@@ -1835,7 +1837,7 @@ Custom operating systems frequently introduce features that fall outside the sco
 
 It is considered best practice to place operating system-specific extensions within a clearly separated namespace, for example under a dedicated directory such as \texttt{<alkos/...>}. This approach enables applications developed specifically for the target operating system to access unique kernel features.
 
-\subsubsection{Conversion to User Space}
+\subsection{Conversion to User Space}
 TODO: JAKUB
 
 \section{Host Environment -- Working OS}
