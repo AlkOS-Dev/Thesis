@@ -386,10 +386,62 @@ This chapter outlines the development sequence of the kernel's most critical com
 Before proceeding to writing actual kernel code we must first do some preparation on our development tools and development environemnts. Below we can find brief description of needed things.
 
 \subsection{Cross-Compilation Toolchain}
-TODO: ADAM
+\label{subsec:theory_toolchain}
+
+The development process begins with the establishment of a cross-compilation toolchain targeting a generic, os-independent architecture (e.g., \texttt{x86\_64-elf}). Using a compiler provided by the host system may lead to issues, as such compilers typically assume that the generated code will execute within an operating system environment. These assumptions are invalid during development, where no such infrastructure exists initially.
+
+For this reason, the cross-compiler is built from source, allowing it to be configured and, if necessary, patched to accommodate the specific requirements of kernel and userspace development. A complete cross-compilation toolchain typically consists of a cross-compiler (e.g., GCC or Clang), a binary utilities suite (including the assembler and linker), and optionally a cross-debugger such as GDB or LLDB. Although any suitable cross-compiler may be used to build an operating system, GCC is generally preferred due to extensive support within the operating systems development community. For a detailed guide to building a GCC-based cross-compilation toolchain, refer to \cite{osdev-gcc-cross-compiler}.
+
+At later stages of development, particularly when building userspace applications, an extended version of the toolchain is required. This toolchain must be capable of automatically linking against our C standard library and including system headers. The process of adapting the toolchain to recognize the new operating system as a valid target is discussed in Subsection~\ref{subsubsec:os-specific-toolchain}.
+
+Two distinct build environments are used throughout the system's development. In a \textbf{hosted} environment, programs are compiled with the expectation that a mature operating system is present, providing runtime services such as program startup routine, system call interface, and system libraries. In contrast, a \textbf{freestanding} environment makes no assumptions about the existence of such, requiring all runtime support to be provided explicitly by the program or the operating system itself.
+
+Kernel components and early system initialization code are built in a freestanding environment, as they execute before any operating system services are available. Userspace programs, on the other hand, are compiled in a hosted environment once the operating system and its runtime infrastructure have been established. The required runtime libraries are provided by the operating system (see Subsection~\ref{subsec:theory_std}).
 
 \subsection{Building Machinery}
-TODO: ADAM
+
+The construction of an operating system kernel requires the coordinated build of components, including loaders, the kernel, third-party libraries, and userspace applications. Managing this through manual compiler invocations or ad-hoc shell scripts does not scale and frequently results in maintenance issues. Consequently, the design of a robust build infrastructure is essential for efficient development. We outline several key considerations for establishing such a system.
+
+\subsubsection{Selection of Build Tools}
+
+Build automation tools can be broadly categorized according to their level of abstraction. Low-level build systems (e.g., Make or Ninja) provide fine-grained control over compilation rules and dependency graphs. While this approach offers flexibility, it often becomes difficult to maintain as project complexity grows.
+
+Meta-build systems, by contrast, operate at a higher level of abstraction. They allow developers to describe build targets, dependencies, and configuration options declaratively, and subsequently generate the necessary low-level build files for a chosen backend. For OS development, meta-build systems are generally preferred due to their scalability and maintainability. Examples of popular meta-build systems include CMake, Meson, and Premake.
+
+\subsubsection{Toolchain Integration}
+
+As required by the freestanding development model described in Section \ref{subsec:theory_toolchain}, the build system must be configured to use the previously established cross-compilation toolchain. This is typically achieved through the use of \textbf{toolchain configuration files} which act as an adapter layer. 
+
+A toolchain configuration file must fulfill two primary functions:
+\begin{enumerate}
+\item \textbf{System override:} It must define the target operating system as "Generic" (or an equivalent bare-metal designation). This prevents the build system from attempting to link against the host's standard libraries or searching the host's system paths for headers.
+\item \textbf{Binary mapping:} It maps abstract compiler roles (e.g., C Compiler, Assembler, Linker) to the absolute paths of the specific cross-toolchain binaries compiled during the environment preparation phase.
+\end{enumerate}
+
+This architectural decoupling ensures that the build logic remains agnostic of the underlying hardware. Retargeting the operating system to a new architecture (e.g., transitioning from \texttt{x86\_64} to \texttt{aarch64}) entails only the substitution of the active toolchain file, without requiring modifications to the project's build scripts or source code structure.
+
+\subsubsection{Configuration Management}
+
+Operating systems frequently require compile-time configuration to enable, disable or parametrize subsystems such as debugging facilities, or experimental scheduling policies. As the project evolves, configuration options may become duplicated across multiple layers of the system, leading to inconsistencies and maintenance challenges.
+
+To avoid this issue, the build system should enforce a \textbf{single source of truth} (SSOT) for configuration data. One effective strategy is to define the configuration schema using a structured data format such as YAML, JSON or TOML. A generation step then can derive three synchronized artifacts from this schema:
+\begin{enumerate}
+    \item \textbf{Source Header File:} Defines compile-time constants or definitions that allow the kernel source code to adapt its behavior based on the active configuration.
+    \item \textbf{Build System Configuration:} Provides variables and conditions that control which source files, libraries, or features are included during compilation.
+    \item \textbf{Scripts Configuration:} Supplies runtime scripts or tools with the necessary parameters to operate in accordance with the build configuration.
+\end{enumerate}
+
+\subsubsection{Compilation Profiles}
+
+The build system must support compilation profiles to accommodate different phases of the development lifecycle. These profiles are typically expressed as predefined sets of compiler and linker flags:
+
+\begin{itemize}
+    \item \textbf{Debug Profile:} Optimized for observability and correctness. Compiler optimizations are generally disabled to preserve a close correspondence between source code and generated machine instructions, simplifying debugging. Debug symbols are enabled, and additional safety mechanisms such as stack protection or sanitizers may be included to detect errors early.
+    
+    \item \textbf{Release Profile:} Optimized for performance and efficiency. Higher optimization levels are enabled to increase performance and reduce code size. However, optimizations must be carefully selected in a kernel context. For instance, on x86-64 systems, automatic vectorization should be disabled, as the use of SIMD registers requires saving and restoring additional processor state during interrupts and context switches, incurring significant overhead.
+\end{itemize}
+
+In addition to general optimization settings, architecture-specific constraints must be enforced explicitly. On x86-64, the System~V ABI permits the use of a so-called \textbf{red zone}, a fixed region below the stack pointer that leaf functions (functions that do not call other functions) may use without adjusting the stack pointer. In kernel mode, interrupts may overwrite this region, leading to memory corruption. As a result, the red zone must be explicitly disabled.
 
 \subsection{Emulation}
 TODO: KRYCZKA
@@ -409,8 +461,118 @@ TODO: KRYCZKA
 \section{Target Environment}
 TODO: JAKUB
 
-\subsection{Implementation of Libc and Libc++}
-TODO: ADAM
+\subsection{Implementation of the Standard Library}
+\label{subsec:theory_std}
+
+A C standard library, commonly referred to as \texttt{libc}, is a collection of pre-written code that provides a set of fundamental functionalities to userspace applications. These functionalities include, but are not limited to, input/output operations, string manipulation, memory management, mathematical computations, and system call wrappers. The standard library serves as an intermediary layer between user applications and the underlying operating system, abstracting away low-level details and providing a consistent programming interface.
+
+\subsubsection{Language and Interface}
+
+Although historically associated with the C programming language, the implementation of a standard library is not inherently tied to C. Modern systems programming languages may be used to implement the library's internal logic, provided that a C-compatible Application Binary Interface (ABI) is exposed. Most high-level languages support interoperability with C, so we can leverage the advanced language features to implement the standard library without sacrificing compatibility with C programs.
+
+\subsubsection{Development Methodologies}
+
+When developing an operating system, two principal approaches exist for providing a standard library: using an existing implementation or developing one from scratch.
+
+\paragraph{Using Existing Libraries}
+
+Several open-source \texttt{libc} implementations are explicitly designed for portability. Notable examples include \textbf{Newlib}, which is widely adopted in embedded systems, and \textbf{mlibc}, which targets hobbyist operating systems. Integrating such libraries typically involves the implementation of required syscalls. The kernel developer supplies backend implementations for a set of low-level system calls, while the library itself provides higher-level functionality such as formatted output or mathematical routines. This approach substantially reduces development effort and enables the early execution of complex userspace software.
+
+\paragraph{Implementation from Scratch}
+
+Alternatively, the standard library may be developed specifically for the operating system. This approach offers full control over memory usage, performance characteristics, and integration with kernel-specific features. However, it introduces significant complexity. Comparative studies of existing C standard libraries demonstrate substantial variation in performance, memory footprint, and standards compliance, even among mature implementations \cite{libc_comparison}. Achieving conformance with the language standard requires careful handling of numerous corner cases, including floating-point behavior, complex string formatting semantics, and locale support. Even minor deviations from the specified behavior can lead to subtle incompatibilities when porting third-party software.
+
+\subsubsection{Userspace vs. Kernel Variants}
+
+Standard library functionality is required in both user space and kernel space; however, these environments impose fundamentally different constraints. Userspace code executes without privileges and relies on system call interface, whereas kernel code executes in a privileged context, invokes kernel services directly rather than through system calls, and must comply with constraints imposed by the kernel execution environment, such as interrupt safety. As a result, a single, uniform library implementation is insufficient.
+
+To address this, the library is split into a userspace variant (\texttt{libc}) and a kernel variant (\texttt{libk}), each compiled with different configuration flags and assumptions. This separation enforces correct usage and prevents kernel code from accidentally relying on functionality that is unavailable or unsafe in kernel context.
+
+\subsubsection{Program Initialization and the C Runtime (CRT)}
+\label{subsubsec:theory_crt}
+
+In addition to exposing user-facing APIs, the runtime environment must be initialized before control is transferred to the program’s entry function. Userspace programs do not begin execution at \texttt{main}; instead, execution starts at a library-provided entry point, conventionally named \texttt{\_start}, which is supplied by a startup object file \cite{osdev_crt}.
+
+This initialization sequence is realized through coordinated interaction between the linker, compiler, and standard library, and typically involves a set of well-defined object files:
+
+\begin{itemize}
+    \item \textbf{\texttt{crt0.o} (C Runtime 0):} Defines the \texttt{\_start} symbol and performs early initialization tasks such as stack alignment, optional setup of stack protection mechanisms, and preparation of program arguments before invoking \texttt{main}. Upon return, it transfers control to \texttt{exit}.
+    
+    \item \textbf{\texttt{crti.o} and \texttt{crtn.o}:} Provide the prologue and epilogue for the \texttt{.init} and \texttt{.fini} sections, respectively. Code in \texttt{.init} executes before \texttt{main}, while code in \texttt{.fini} executes after program termination.
+    
+    \item \textbf{\texttt{crtbegin.o} and \texttt{crtend.o}:} Supplied by the compiler toolchain, these objects manage registration of global constructors and destructors.
+\end{itemize}
+
+The overall control flow of the C runtime initialization and termination process is illustrated in Figure~\ref{fig:crt-init-flow}.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.8cm, % Adjusted distance for better fit
+        % Standard block style
+        block/.style={
+            rectangle, 
+            draw=black!70, 
+            rounded corners=3pt, 
+            minimum width=6cm, 
+            minimum height=0.9cm, 
+            align=center, 
+            fill=gray!10,
+            font=\small
+        },
+        % Highlight user code differently
+        userblock/.style={
+            block,
+            fill=white,
+            thick
+        },
+        arrow/.style={-Latex, thick},
+        label_text/.style={font=\scriptsize\ttfamily}
+    ]
+
+        % 1. Entry from Kernel
+        \node (loader) [block, fill=gray!30] {\textbf{Process Creation}};
+
+        % 2. Entry Point
+        \node (start) [block, below=of loader] {\texttt{\_start}\\ \scriptsize (\texttt{crt0.o})};
+
+        % 3. Initialization Phase
+        \node (init) [block, below=of start] {\texttt{.init} section prologue\\ \scriptsize (\texttt{crti.o})};
+        \node (ctors) [block, below=of init] {Global Constructors\\ \scriptsize (\texttt{crtbegin.o})};
+
+        % 4. User Main
+        \node (main) [userblock, below=of ctors] {\textbf{\texttt{main()}}\\ \scriptsize (User Application)};
+
+        % 5. Exit Trigger
+        \node (exit_func) [block, below=of main] {\texttt{exit()}\\ \scriptsize (\texttt{libc})};
+
+        % 6. Termination Phase
+        \node (dtors) [block, below=of exit_func] {Global Destructors\\ \scriptsize (\texttt{crtend.o})};
+        \node (fini) [block, below=of dtors] {\texttt{.fini} section epilogue\\ \scriptsize (\texttt{crtn.o})};
+
+        % 7. System Exit
+        \node (syscall) [block, below=of fini, fill=gray!30] {\textbf{Process Termination}\\ \scriptsize (Syscall)};
+
+        % Arrows
+        \draw[arrow] (loader) -- (start);
+        \draw[arrow] (start) -- (init);
+        \draw[arrow] (init) -- (ctors);
+        \draw[arrow] (ctors) -- (main);
+        \draw[arrow] (main) -- (exit_func);
+        \draw[arrow] (exit_func) -- (dtors);
+        \draw[arrow] (dtors) -- (fini);
+        \draw[arrow] (fini) -- (syscall);
+
+        % Annotations (Right side brackets/text)
+        \node [right=0.2cm of init, font=\scriptsize, align=left, color=gray!80!black] {Initialization\\(pre-main)};
+        \node [right=0.2cm of dtors, font=\scriptsize, align=left, color=gray!80!black] {Finalization\\(post-main)};
+
+    \end{tikzpicture}
+    \caption{Control flow of C runtime (CRT) initialization and termination}
+    \label{fig:crt-init-flow}
+\end{figure}
+
+Failure to link these components in the correct order results in an incomplete runtime environment, in which global constructors are not executed and program behavior becomes undefined --- particularly for C++ applications or code relying on constructor or destructor attributes.
 
 \subsection{Bootloader}
 \label{subsec:theory_bootloader}
@@ -1668,20 +1830,12 @@ While the exact virtual base address of the \textbf{.text} section is platform- 
 
 \subsubsection{Runtime Initialization}
 
-The final stage of the compilation pipeline is the definition of the program entry point and the runtime initialization sequence. While application logic begins within the \texttt{main()} function, the kernel does not invoke this function directly. Instead, the linker is configured to use a dedicated entry symbol, conventionally named \texttt{\_start}.
-
-The code located at \texttt{\_start}, known as the \emph{C Runtime Startup} (CRT0), is a routine linked into every userspace application. Its purpose is to establish the execution environment expected by high-level languages:
-\begin{enumerate}
-\item \textbf{Stack alignment:} Ensuring compliance with ABI alignment requirements (e.g., 16-byte alignment for SIMD instructions).
-\item \textbf{Environment initialization:} Retrieving command-line arguments (\texttt{argv}) passed by the kernel.
-\item \textbf{Global lifetime management:} Invoking constructors for global/static objects before \texttt{main()} and destructors after \texttt{main()} returns.
-\item \textbf{Process termination:} Capturing the return value of \texttt{main()} and invoking the system call to ensure controlled process termination.
-\end{enumerate}
-This startup sequence ensures that userspace applications execute within a consistent, initialized environment and terminate in a predictable manner.
+Userspace programs require a well-defined runtime initialization sequence to prepare the execution environment before control is transferred to the program's \texttt{main} function. This sequence is typically provided by the C runtime (CRT), which is described in detail in Section~\ref{subsubsec:theory_crt}.
 
 \subsubsection{OS-Specific Toolchain Adaptation}
+\label{subsubsec:os-specific-toolchain}
 
-While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86\_64-elf}) is sufficient for compiling the kernel itself, it presents limitations for userspace development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively (e.g., via a target like \texttt{x86\_64-alkos}). This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts.
+While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86\_64-elf}) is sufficient for compiling the kernel itself, it presents limitations for userspace development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively  (e.g., via a target like \texttt{x86\_64-alkos}) \cite{osdev-os-specific-toolchain}. This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts. From this point onward, one should provide its own toolchain source code (or patches), alongside the OS source code, instead of relying on an upstream one.
 
 \paragraph{System Root (Sysroot)}
 
@@ -4151,6 +4305,8 @@ EEVDF & Earliest Eligible Virtual Deadline First \\
 ELF & Executable and Linkable Format \\
 FAT & File Allocation Table \\
 FHS & Filesystem Hierarchy Standard \\
+GCC & GNU Compiler Collection \\
+GDB & GNU Debugger \\
 GDT & Global Descriptor Table \\
 IDT & Interrupt Descriptor Table \\
 IPC & Inter-Process Communication \\
@@ -4177,6 +4333,7 @@ RTC & Real-Time Clock \\
 SATA & Serial Advanced Technology Attachment \\
 SIMD & Single Instruction, Multiple Data \\
 SMP & Symmetric MultiProcessing \\
+SSOT & Single Source Of Truth \\
 TID & Thread IDentifier \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
