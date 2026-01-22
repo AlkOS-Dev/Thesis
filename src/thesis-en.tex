@@ -399,6 +399,7 @@ TODO: KRYCZKA
 TODO: JAKUB
 
 \subsection{Intrusive Data Structures}
+\label{subsec:intrusive}
 TODO: JAKUB
 
 \subsection{Ref-counting}
@@ -1174,15 +1175,32 @@ Finally, the PMM must respect the physical limitations of the hardware. Not all 
 
 A common solution is to partition the physical address space into disjoint \textbf{regions} or \textbf{zones}, each managed by a separate allocator instance. Allocation requests carry metadata (flags or capabilities) indicating which regions are acceptable. The allocator attempts the preferred region first and falls back to others only if permitted. Critically, a request for DMA-capable memory \textit{cannot} fall back to high memory-the hardware simply cannot address those frames.
 
-For an in-depth treatment of allocation algorithms, fragmentation theory, and experimental methodology, the comprehensive survey by Wilson et al.~\cite{wilson1995survey} remains an essential reference.
-
-
-\subsubsection{Virtual Memory Management}
-TODO: KRYCZKA
-\subsubsection{Virtual Address Space}
-TODO: KRYCZKA
 \subsubsection{Kernel Space Allocation API}
 TODO: KRYCZKA
+
+\section{Scheduling Design}
+\label{sec:scheduling_approaches}
+
+Before going further, a fundamental design decision must be made regarding the characteristics of our scheduling algorithm. The choice of scheduling paradigm dictates the complexity of the kernel, the synchronization mechanisms required, and the hardware dependencies.
+
+\subsubsection{Cooperative Scheduling}
+In a cooperative scheduling model, the operating system never forcibly pauses a running task. Instead, the currently executing thread retains control of the CPU until it voluntarily yields execution (e.g., via a specific \texttt{yield()} system call) or blocks on an I/O operation.
+
+\begin{itemize}
+    \item \textbf{Advantages:} Implementation simplicity. Since context switches occur only at known, controlled points, race conditions are significantly rarer, and complex locking mechanisms are often unnecessary. 
+    \item \textbf{Disadvantages:} A single malicious or poorly written program (e.g., one entering an infinite loop) can freeze the entire system, as the kernel never regains control to schedule other tasks.
+\end{itemize}
+
+\subsubsection{Preemptive Scheduling}
+Preemptive scheduling is the standard for modern general-purpose operating systems. In this model, the kernel assigns a specific time slice to each task. If a task does not yield voluntarily before its time expires, the hardware generates an interrupt (driven by an Event Clock \ref{subsec:event_clocks}), returning control to the kernel. The scheduler then forcibly saves the current task's state and switches to another.
+
+\begin{itemize}
+    \item \textbf{Advantages:} Responsiveness and stability. No single task can monopolize the CPU, ensuring that the system remains responsive even if a user program hangs.
+    \item \textbf{Disadvantages:} High complexity. Because a task can be interrupted at any instruction, the kernel must employ rigorous synchronization primitives (mutexes, spinlocks) to protect shared data structures from race conditions.
+\end{itemize}
+
+\subsubsection{SMP Scheduling}
+Symmetric Multiprocessing (SMP) scheduling extends these concepts to systems with multiple processor cores. In this environment, the scheduler must not only decide \textit{which} task to run next but also \textit{where} to run it.
 
 \subsection{Discovering External Devices and System Capabilities}
 
@@ -1236,15 +1254,16 @@ A critical design challenge in this domain is the identification of the executin
 
 \subsubsection{Timing Design}
 
-Before discussing timing devices, a fundamental design decision must be made regarding the kernel type: \texttt{tickless} or \texttt{ticking}. Ticking kernels rely on a global constant defining the frequency of periodic timing interrupts. These values typically operate with millisecond granularity, as higher frequencies would degrade system performance. In contrast, tickless kernels do not define periodic interrupts. Instead, they schedule the next timing event based on immediate requirements, such as the sleep schedule or the time slice of the currently running process. It is important to note that ticking kernels also require higher granularity interrupts if support for \texttt{nanosleep} is needed \ref{subsec:linux-timing}.
+To support the preemptive scheduling model, the kernel requires a robust timing infrastructure to track execution time. Before discussing timing devices, a fundamental design decision must be made regarding the kernel type: \texttt{tickless} or \texttt{ticking}. Ticking kernels rely on a global constant defining the frequency of periodic timing interrupts. These values typically operate with millisecond granularity, as higher frequencies would degrade system performance. In contrast, tickless kernels do not define periodic interrupts. Instead, they schedule the next timing event based on immediate requirements, such as the sleep schedule or the time slice of the currently running process. It is important to note that ticking kernels also require higher granularity interrupts if support for \texttt{nanosleep} is needed \ref{subsec:linux-timing}.
 
 \subsubsection{Clocks}
 
 The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue. On AMD64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio, obviously from the set of supported ones.
 
 \subsubsection{Event Clocks}
+\label{subsec:event_clocks}
 
-At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. 
+At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. Crucially, to implement preemption as discussed in Section \ref{sec:scheduling_approaches}, these devices are required to forcibly interrupt the currently running task when its time slice expires.
 
 The first consideration is sleep granularity. A standard precision of approximately one millisecond is achievable on nearly every architecture using simple periodic interrupts. However, implementing high-precision nanosecond or microsecond sleep requires timer devices capable of extremely rapid reconfiguration. The minimum time interval between consecutive events is strictly limited by the hardware configuration latency. The kernel cannot schedule an interrupt to occur sooner than the time required to program the device. Older timing hardware often requires slow I/O port interactions, rendering them unsuitable for high-precision scheduling, whereas modern devices utilize faster interfaces. Additionally, it is common for a single hardware component to serve a dual purpose, acting as both a timekeeping source (Clock) and an interrupt generator (Event Clock).
 
@@ -1353,6 +1372,10 @@ TODO: KRYCZKA
 
 \subsection{Scheduling}
 
+Finally having all previous components implemented we can proceed to designing and implementing our scheduling components. First we have to define structures for our tasks. We will start with a concept of Process.
+
+\subsubsection{Process}
+
 The fundamental unit for resource management is the process. This object represents the execution environment for the threads operating within it. Consequently, it must act as a container for all resources shared between these threads. At a minimum, a process structure must manage:
 
 \begin{itemize}
@@ -1365,7 +1388,7 @@ While additional resources may be required to implement features such as Inter-P
 At this stage, it is prudent to prepare data structures that allow for efficient querying of processes, facilitating operations such as termination, joining, or IPC. It is important to note that the creation and destruction of processes are computationally expensive operations. They require building page tables, mapping the kernel address space, and allocating memory for bookkeeping structures. To mitigate latency, some of this workload, particularly during destruction, can be deferred to dedicated kernel worker threads, allowing the system to return control to the caller more rapidly.
 
 \noindent The minimal stuct may look like this:
-\begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
+\begin{lstlisting}[caption={Process Structure}, label={lst:exampleProcessStruct}]
     struct Process {
         /* Process resources */
         data_structures::DoubleLinkedList<VMemArea *> area_list;
@@ -1455,10 +1478,8 @@ Once multiple tasks are established, the system can perform context switching. A
 \end{itemize}
 
 \noindent Based on AMD64 assembly, the implementation resembles the following:
-\begin{lstlisting}[style=nasmstyle, caption={Assembly ISR wrapper}, label={lst:isr_asm}]
-; c_decl
-; void ContextSwitch(Thread* thread)
-;   RDI = thread
+\begin{lstlisting}[style=nasmstyle, caption={Context Switch Pseudocode}, label={lst:context_switch_example}]
+; RDI must store a pointer to next thread structure
 ContextSwitch:
     sub rsp, _context_switch_stack_space_ext     ; Allocate space for saving registers.
     push_all_regs                                ; Save the state
@@ -1469,23 +1490,85 @@ ContextSwitch:
 
     pop_all_regs            ; Restore registers of NEW thread's stack
     add rsp, _all_reg_size  ; Deallocate register save space.
-    iretq                   ; Load next thread's RIP from its stack
+    iretq                   ; Restore state using interrupts mechanism
 \end{lstlisting}
+
+\subsubsection{Scheduler Internal Synchronization}
+
+When designing a scheduler or any internal kernel code we must be aware what type of synchronization do we need. Additionally we always should keep in mind that synchronization must be also efficient so we should guard only essentials.
+
+\begin{itemize}
+    \item Interrupt Synchronization - if we are implementing preemptive scheduler interrupt may change the context at any point. If not we also should consider this type of synchronization. If interrupt may execute same code as syscall  execution or kernel thread then we are still faced with races.
+    \item SMP Synchronization - if multiple cores may access the data simultaneously we must be guared from simultaneous access. For simple critical sections we may use primitives like barriers \cite{barriers} or spinlocks \cite{spinlock}. But for more complicated scenarios we still needs some mutex-like mechanisms for that we must use blocking locks, which will utilize wait queues \ref{subsec:wait_queue}.
+\end{itemize}
 
 \subsubsection{Scheduler}
 
-Having thread and process management done last thing to implement we need some machinery to pick best suitable task to run next on preemption or during yielding. And that is the main responsiblity of the scheduler to track the execution of the threads and always pick most suitable tasks to run. There are multiple approaches to design the the scheduler itself and multiple algorithms picking the task. There Are various of thinkg we have to consider between creating the design. First of all, ideally we would like our scheduler to split the cpu time equally between the threads and in other hand it should good responsiveness for the user. It is not possible to reach in real life but we can decide what to prioritize. Secondly the scheduler should prioritize the tasks as some things are more important than others. For example sound driver or block device driver threads may need to be executed before other only because to ensure consitency for the users. 
+Having thread and process management done last thing to implement we need some machinery to pick best suitable task to run next on preemption or during yielding. And that is the main responsiblity of the scheduler to track the execution of the threads and always pick most suitable tasks to run. The difficulty of scheduler implementation will mostly depend on which approach we are working with \ref{sec:scheduling_approaches}.
 
-\subsubsection{SMP Scheduling}
-TODO: JAKUB
+The simplest option to implement is single core non-preemptive (cooperative) scheduler. In this case we dont have to worry about synchronization inside the scheduler at all as only scenario its internals are invoked is on yield (we have single core and no preemption). Also sleeping mechanism my be simplified here, as the task cannot be preempted we could only wake up tasks during yield calls and dont bother with timing at all.
 
-\subsubsection{Synchronization}
-TODO: JAKUB
+Much more difficult to implement is preemptive scheduler as we are now additionally responsible for how to distribute the cpu time with bigger flexibility, the latency depends on us in bigger scale and we have to guard oursefles from interrupts that may change the context at any point. The scheduler also should be more precise for sleeping mechanism and ensure to execute sleeping tasks more accuratly.
 
-\subsubsection{Sleep}
-TODO: JAKUB
+Finally implementing the scheduling for SMP systems will not change the difficulty drastically compare to preemptive and cooperative gap. The only new challange here is to ensure synchronization is done properly between the cores. Spinlocks are sufficient here. We can additionally improve the performance by introducing core-local schedulers and some global load balancer mechanism instead of single global scheduler. In this case we dont need any smp synchronization inside the scheduler, we only need synchronized task migration protocol between the cores if some core is under or orver utilized.
+
+First we have to decide on scheduling algorithms we will use. We may want to optimize our scheduler in various ares, which mostly include:
+
+\begin{itemize}
+    \item minimazing latency
+    \item minimzaing wait time
+    \item maximizing throughput
+    \item maximizing fairness
+\end{itemize}
+
+We cannot make a scheduler which is ideal in all of this fields, instead we should find a good enough solution for our main purpose. Secondly the scheduler should prioritize the tasks as some things are more important than others. For example sound driver or block device driver threads may need to be executed before other only because to ensure consitency for the users. Some solutions introduce cooperative policies for that case (For example \texttt{SCHED\_FIFO} from linux \ref{subsec:linux-scheduler}). Generally it is good idea to allow the tasks to work on cooperative mode only if there is no more important task to do. It is crucial for some use cases like video graphics or sound drivers to deliver the results no matter what else we do, as it directly maps on user the experience. 
+
+To present the concept on example we will show simplest  preemptive scheduler possible: that is periodic single core round robin scheduler:
+
+We have to maintain single queue of tasks to execute. New tasks are added to the end, and picked up from the front. Each constatn time (e.g. 10ms) the task is interrupted, added to the end of queue and next task is picked from the fron. In pseudo code it may look like that:
+
+\begin{lstlisting}[caption={Round Robin Pseudo Code}, label={lst:rr_pseudo_code}]
+
+#define SCHED_PERIOD_TICK 10
+
+struct Scheduler {
+    LinkedList<Task*> tasks{};
+} g_Scheduler;
+
+extern void InitializeTimingModule(void (*handler)(), int period_ms);
+extern void ContextSwitch(Task* task);
+extern void LockInterrupts();
+extern void UnlockInterrupts();
+extern Task* GetCurrentRunningTask();
+
+void AddTask(Task* task) {
+    g_Scheduler->tasks.push_back();
+}
+
+Task* GetNext() {
+    g_Scheduler->tasks.pop_front();
+}
+
+void Yield() {
+    LockInterrupts();
+    AddTask(GetCurrentRunningTask());
+    ContextSwitch(GetNext());
+    UnlockInterrupts();
+}
+
+void TimerHandler() {TODO: JAKUB
+    InitializeTimingModule(TimerHandler, SCHED_PERIOD_TICK);
+}
+\end{lstlisting}
+
+It may be even enough for SMP system as core local scheduler, assuming that load balancing could take some tasks from local tasks field.
 
 \subsubsection{Blocking - Wait Queues}
+\label{subsec:wait_queue}
+
+No matter which type of scheduler we implementing, we need some mechanism to block the thread and deffer the execution unil some event happens. In reality it might be a sleeping lock, thread joining or any other type of synchronization. For this case we need to sustain multiple queues distributed all over the code. In contrast to scheduler queues which are mostly centralized (either core local or globlal). To properly distinguish both cases the task state might be handy solution here to create special state \texttt{BLOCKED} reserved for tasks waiting on some wait-queue. In case of thread removal we will easy know how to cleanup the structures. Here also intrusive structures come in handy with removal property \ref{subsec:intrusive}. The holder of queue is responsible for waking up all the threads waiting on the event (that is moving thread from its wait-queue to scheduler queues) on the other hand usually the task's code itself will put him inside such a queue on some synchronization point. 
+
+\subsubsection{Sleep}
 TODO: JAKUB
 
 \subsection{User Space}
@@ -1772,6 +1855,7 @@ Unlike many other operating systems that distinguish strictly between processes 
 \end{itemize}
 
 \subsection{Scheduler}
+\label{subsec:linux-scheduler}
 
 Linux implements several scheduling policies \cite{linux_policies}\cite{linux_cfs} operating on task priorities. There are two major classes: \textbf{Real Time}, which operates on priorities 1-99, and \textbf{Fair}, which operates on priority 0. Tasks with higher priorities preempt those with lower priorities. Linux provides six policy classes:
 
@@ -2799,6 +2883,7 @@ Prior to the implementation of the Scheduler, and alongside functional memory ma
 The architecture-specific code is responsible for detecting available hardware and registering it within the central timing infrastructure, specifically the \textbf{ClockRegistry} and \textbf{EventClockRegistry}. Subsequently, architecture-agnostic components, such as the \textbf{ACPI} subsystem, may register additional clocks by parsing system description tables. Finally, the architecture-defined functions \texttt{hal::PickSystemClockSource()} and \texttt{hal::PickSystemEventClockSource()} are invoked during the initialization of the timing module to select the optimal sources for each purpose. The infrastructure allows the scheduler to implement either a tick-based or a tickless strategy.
 
 \subsection{Clocks}
+\label{subsec:clocks}
 
 Clock Drivers are defined by the structure shown in Listing~\ref{lst:clockDriver}:
 
