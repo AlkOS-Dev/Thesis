@@ -1735,23 +1735,25 @@ To distinguish between runnable and waiting threads, a specific \texttt{BLOCKED}
 
 \subsubsection{Sleep}
 
-Finially to add sleep we need to add two functionalities to the code: putting the task into the sleep and waking up the task. First is pretty straightforward, similar to blocking we change the location of thread from scheduler queues to sleeping data structure and change the state. In the other the situation is slightly more complicated as we first need to find a proper place where tasks are woken up. In case of cooperative shceduling it simply may be inside function picking next task from the scheduler queues. In other cases we have to manage timing framework and wake up threads carefully to not introduce additional latencies. 
+To implement sleeping functionality, two primary operations must be introduced: transitioning a task into a sleeping state and waking it upon the expiration of the requested duration. The first operation is relatively straightforward, similar to blocking on a synchronization primitive, the thread is removed from the scheduler's run queues, inserted into a dedicated sleeping data structure, and its state is updated to reflect that it is sleeping. The second operation is significantly more complex, as it requires determining the appropriate mechanism and timing for waking tasks.
 
-For ticking kernels sleep with granularity around the tick is pretty straightforward, waking up threads each time we have interrupt is sufficient. Very simple solutions exists for managing this type of sleeping tasks \cite{linux_timer_wheel}.
+In a cooperative scheduling model, the wake-up logic can simply be integrated into the function responsible for selecting the next task. However, in preemptive and high-precision scenarios, the system must actively manage the timing framework to wake threads without introducing unnecessary latency.
 
-For other case where we want to schedule interrupts dynamically the situation is quite complicated. It requires proper sorting of the tasks (creation of timeline), that means some priority queues will be involved here. For nanosleep if the tasks want to sleep for really small value, for example smaller than time needed to interact with the timing module or timer reconfiguration time it might be worth to introduce busy waiting instead. Designing such framework timing constraits must be taken in account, like time spent on the timer configuration or if the time left is not smaller than the reconfiguration time. It might be really tricky and difficult as in some cases we will be fighting with time. Additionally each time we reprogram the timer we should wake up tasks that previous timer should woke up if the value is small enough.
+For kernels utilizing a periodic tick, handling sleep operations with granularity aligned to the tick interval is straightforward. Waking tasks can be performed by iterating through sleeping threads upon every timer interrupt. Efficient algorithms, such as the timer wheel \cite{linux_timer_wheel}, exist to manage this type of coarse-grained sleeping.
+
+In contrast, for a tickless kernel where interrupts are scheduled dynamically, the implementation is more intricate. This approach requires maintaining an execution timeline, typically implemented using a priority queue to sort tasks by their wake-up timestamps. For high-precision sleep (e.g., \texttt{nanosleep}), hardware constraints become a critical factor. If the requested sleep duration is smaller than the overhead required to interact with the timing module or reconfigure the hardware timer, busy-waiting may be a more efficient alternative. Designing such a framework requires careful consideration of timing constraints, such as the time consumed by timer reconfiguration and ensuring that the calculated wake-up time has not already passed during the configuration process. Additionally, whenever the timer is reprogrammed, the system must ensure that any tasks scheduled to wake up before the new interrupt time are correctly handled.
 
 \subsection{User Space}
 
-Finally we have all components to introduce the possibility to run unprivileged tasks create by the typical user. Briefly to enable running user space programs we still need  couple of things:
+With the foundational kernel components established, the development process transitions to enabling the execution of unprivileged tasks created by the user. To facilitate the execution of user-space programs, several key mechanisms and components must be implemented:
 
-\begin{itemize}
-    \item syscalls -- communication with the kernel. Way to escalate the privilege
-    \item user space libraries -- porting the libraries for the kernel
-    \item loading the executable from fs -- the kernel must understand some executable format and properly load the code to the memory
-    \item proper memory protection -- separate address spaces and privilege flags setup
-    \item conversion kernel -> user space -- kernel space bootstrap code at the end should jump to user space and start executing users code
-    \item user space compilation -- extending the compiler and enable compilation targeting our os
+\begin{itemize} 
+    \item \textbf{System Calls} -- A mechanism for communication with the kernel, providing a controlled method for privilege escalation.
+    \item \textbf{User Space Libraries} -- The porting or implementation of standard libraries (such as \texttt{libc}) to run on top of the kernel interface.
+    \item \textbf{Executable Loading} -- A loader capable of parsing a standard executable format (e.g., ELF) and correctly loading the code into memory.
+    \item \textbf{Memory Protection} -- The enforcement of isolation through separate address spaces and the configuration of appropriate page-level privilege flags.
+    \item \textbf{Context Transition} -- A bootstrapping mechanism within the kernel to finalize initialization and jump to user space to begin executing user code.
+    \item \textbf{Compilation Toolchain} -- The extension and configuration of the compiler to support targeting the specific operating system.
 \end{itemize}
 
 \subsubsection{Syscalls}
