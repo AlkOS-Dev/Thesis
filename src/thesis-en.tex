@@ -1240,13 +1240,13 @@ Before discussing timing devices, a fundamental design decision must be made reg
 
 \subsubsection{Clocks}
 
-The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue On AMD64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio.
+The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue. On AMD64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio, obviously from the set of supported ones.
 
 \subsubsection{Event Clocks}
 
 At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. 
 
-The first consideration is sleep granularity. A standard precision of approximately one millisecond is achievable on nearly every architecture using periodic interrupts. However, implementing high-precision nanosecond or microsecond sleep requires timer devices capable of fast, reprogrammable one-shot interrupts (e.g., the LAPIC Timer on AMD64), as handling periodic interrupts at microsecond intervals is technically infeasible.
+The first consideration is sleep granularity. A standard precision of approximately one millisecond is achievable on nearly every architecture using simple periodic interrupts. However, implementing high-precision nanosecond or microsecond sleep requires timer devices capable of extremely rapid reconfiguration. The minimum time interval between consecutive events is strictly limited by the hardware configuration latency. The kernel cannot schedule an interrupt to occur sooner than the time required to program the device. Older timing hardware often requires slow I/O port interactions, rendering them unsuitable for high-precision scheduling, whereas modern devices utilize faster interfaces. Additionally, it is common for a single hardware component to serve a dual purpose, acting as both a timekeeping source (Clock) and an interrupt generator (Event Clock).
 
 Another critical factor is the support for multiple cores. In an SMP environment, it is preferable to utilize timing devices that reside locally on the cores and operate independently, thereby maximizing performance. While most modern architectures provide such devices (e.g., LAPIC Timer on AMD64), some older or embedded SMP platforms may lack them. In such cases, the kernel must utilize a global timer and employ interrupt-driven inter-core communication to simulate local interrupts.
 
@@ -1264,7 +1264,7 @@ Most modern architectures support both local and high-precision timers. For exam
 
 \subsubsection{Keyboard}
 
-Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21}\cite{osdev-ps22} if are available on our device. Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec}\cite{osdev-usb}.
+Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21}\cite{osdev-ps22} if are available on our device (is quite popular on embedded systems). Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec}\cite{osdev-usb}.
 
 \subsection{File Systems}
 
@@ -1378,9 +1378,9 @@ In a production environment, this structure would naturally include additional f
 
 \subsubsection{Thread}
 
-The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution - the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer.
+The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution - the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer. Although same thing may be archieved with different solution
 
-This approach simplifies the architecture significantly and enhances performance. Since the stack is heavily utilized, it is typically cached, eliminating the need to allocate separate memory regions for saving context. Consequently, all context-switching operations are unified to use the stack as the storage medium for the thread's state. When saving context, registers are pushed onto the stack. When initializing a thread, the stack is artificially populated with boot-up values.
+This approach simplifies the architecture significantly and enhances performance. It is worth noting that while certain architectures provide hardware-assisted context switching mechanisms (such as the legacy Hardware Task Switching on x86), these are rarely utilized in modern general-purpose kernels due to performance overhead and portability concerns. Instead, the standard approach is to unify context storage using the stack. Since the stack is heavily utilized, it is typically cached, eliminating the need to allocate separate memory regions for saving context. When saving context, registers are pushed onto the stack. When initializing a thread, the stack is artificially populated with boot-up values.
 
 \noindent A concise initial structure can be defined as follows:
 \begin{lstlisting}[caption={Thread Structure First Iteration}, label={lst:os-tutorial-thread-v0}]
@@ -1441,7 +1441,7 @@ With the context storage mechanism defined, the next step is context initializat
 
 \subsubsection{Context Conversion}
 
-Before a context switch can occur, an initial context must exist. This implies the creation of the first process and the preparation of all associated structures described previously, utilizing the context initialization logic \ref{subsec:context-init}. Several approaches exist to achieve this; for example, the kernel may spawn an initial user-space program (init) responsible for booting other programs, or it may create a kernel-space process to perform further system initialization.
+Before a context switch can occur, an initial context must exist. This implies the creation of the first process and the preparation of all associated structures described previously, utilizing the context initialization logic \ref{subsec:context-init}. Several approaches exist to achieve this. For example, the kernel may spawn an initial user-space program (init) responsible for booting other programs, or it may create a kernel-space process to perform further system initialization.
 
 \subsubsection{Context Switch}
 
@@ -1537,7 +1537,7 @@ Upon entry to the kernel, the raw system call number must be mapped to a specifi
     \item \textbf{Bounds Check:} The kernel verifies that the requested number is less than the total number of supported syscalls.
     \item \textbf{Invocation:} The kernel executes an indirect call to the address stored at \texttt{table[syscall\_number]}.
 \end{enumerate}
-This method guarantees $O(1)$ constant-time performance, ensuring that the latency of invoking a system call remains minimal. This approach requires syscall numbers to be contiguous; gaps in the numbering space are typically handled by null pointers or stub functions in the table.
+This method guarantees $O(1)$ constant-time performance, ensuring that the latency of invoking a system call remains minimal. This approach requires syscall numbers to be contiguous. Gaps in the numbering space are typically handled by null pointers or stub functions in the table.
 
 \paragraph{Security and Validation}
 
@@ -1617,7 +1617,7 @@ A well-designed build system automates this process and enforces correct depende
 
 \subsubsection{Configuration Overlays}
 
-Executable binaries alone are insufficient for a functional operating system; configuration data and static resources are also required. These include configuration files, initialization scripts, and other static assets.
+Executable binaries alone are insufficient for a functional operating system. Configuration data and static resources are also required. These include configuration files, initialization scripts, and other static assets.
 
 A common approach to managing such data is the use of a configuration overlay. In this model, the source repository contains a predefined directory tree of static files. During the build process, this tree is recursively merged into the staging directory, augmenting the compiled binaries. This separation of code and configuration promotes flexibility, as system behavior can be modified (for example, by adjusting startup parameters) without recompilation of userspace programs.
 
@@ -3304,7 +3304,7 @@ As mentioned in the limitations section \ref{subsec:limitations}, the system imp
 
 \subsubsection{Process Flags}
 
-\textbf{KernelSpaceOnly} -- enables the creation of kernel-only threads and processes. These processes do not require a separate user-space address space or user-space stack. This minimization of resource consumption improves performance; additionally, context switching between kernel-only threads does not necessitate switching the address space.
+\textbf{KernelSpaceOnly} -- enables the creation of kernel-only threads and processes. These processes do not require a separate user-space address space or user-space stack. This minimization of resource consumption improves performance. Additionally, context switching between kernel-only threads does not necessitate switching the address space.
 
 \textbf{PreserveFloats} -- indicates that all threads within the process save and restore floating-point registers during context switches by default. Disabling this flag allows the system to omit these potentially expensive operations for threads that do not utilize floating-point arithmetic.
 
