@@ -851,7 +851,7 @@ This goes about the general design, but during initial development system there 
 
 The reliability of an operating system kernel cannot be guaranteed solely through compilation checks or host-based logic verification. While some algorithmic components can be tested in a hosted environment (e.g., on a Linux host), the core kernel functionalities depend heavily on the specific hardware architecture, physical memory layout, and privileged CPU instructions. Consequently, a robust testing framework must be implemented to execute directly within the kernel on the target hardware or emulator.
 
-This in-kernel framework should function similarly to user-space unit testing libraries but operates without the support of an underlying operating system. It allows developers to define test cases for critical subsystems—such as memory allocators, intrusive data structures, and scheduling algorithms and execute them in the actual runtime environment. This approach is the only way to detect architecture-specific issues, such as unaligned memory accesses, incorrect register usage during context switches, or paging faults caused by invalid table entries, which would remain undetected in a hosted simulation.
+This in-kernel framework should function similarly to user-space unit testing libraries but operates without the support of an underlying operating system. It allows developers to define test cases for critical subsystems, such as memory allocators, intrusive data structures, and scheduling algorithms and execute them in the actual runtime environment. This approach is the only way to detect architecture-specific issues, such as unaligned memory accesses, incorrect register usage during context switches, or paging faults caused by invalid table entries, which would remain undetected in a hosted simulation.
 
 A critical design requirement for such a framework is test isolation. In a kernel environment, a failure often results in a system panic, infinite loop, or silent memory corruption that compromises the global state. To prevent side effects from a failed test influencing subsequent assertions (creating false positives or negatives), the framework should ideally ensure a clean state for each test suite. In early development stages, this often necessitates designing tests to be self-contained or implementing mechanisms to reset subsystems between test executions, ensuring that results are deterministic and reproducible.
 
@@ -1224,18 +1224,15 @@ This structure must define crucial operations for the specific device type along
 
 \subsubsection{Core Local Storage}
 
-Implementing an SMP kernel necessitates an infrastructure for accessing core-local data early in the boot process to facilitate future scalability and prevent extensive refactoring. This initialization must occur after memory setup and CPU topology discovery, as structures must be allocated for each core individually. In advanced development stages, numerous per-core structures are required to eliminate locking overhead and enhance performance in critical sections. Furthermore, data strictly correlated with the execution context, such as the currently running thread, must be easily accessible for the core we are runnig on. Consequently, the architecture must provide a mechanism, such as a dedicated register or instruction, to access these unique core-specific areas. On the x86-64 architecture, this is typically implemented using the \texttt{GS} or \texttt{FS} segment registers. Since the full 64-bit base address cannot be loaded into these segment selectors directly, the kernel must utilize Model Specific Registers (specifically \texttt{IA32\_GS\_BASE} or \texttt{IA32\_KERNEL\_GS\_BASE}) to map the per-core structure to the logical address space. The \texttt{SWAPGS}\cite{osdev-gs} instruction is then employed during interrupt entry and exit to switch between user-space and kernel-space thread-local storage transparently.
+Implementing an SMP kernel necessitates an infrastructure for accessing core-local data early in the boot process to facilitate future scalability and prevent extensive refactoring. This initialization must occur after memory setup and CPU topology discovery, as structures must be allocated for each core individually. 
 
-\begin{lstlisting}[caption={Example Core Local Usage}, label={lst:core-local}]
-    void cdecl_UpdateTcbOnSyscallEntry()
-    {
-        const auto thread = hardware::GetCoreLocalTcb();
-        const u64 t       = TimingModule::Get().GetSystemTime().ReadLifeTimeNs();
-        thread->user_time_ns += t - thread->timestamp;
-        thread->timestamp = t;
-        thread->num_syscalls++;
-    };
-\end{lstlisting}
+Fundamentally, Core Local Storage (CLS) enables the kernel to maintain state unique to each processing unit, such as the currently executing thread, scheduler queues, and performance counters, without the contention and latency costs associated with global synchronization primitives. To achieve this efficiently, the hardware architecture must provide a low-latency mechanism to retrieve the address of these structures. While implementation details vary, most modern architectures dedicate a specific register for this purpose. For instance, ARM64 utilizes the specialized \texttt{TPIDR\_EL1}\cite{AArch64-cls} system register, whereas RISC-V reserves the \texttt{tp}\cite{RISCV-registers} (Thread Pointer) general-purpose register by convention.
+
+On the x86-64 architecture, this is typically implemented using the \texttt{GS} or \texttt{FS} segment registers. Since the full 64-bit base address cannot be loaded into these segment selectors directly, the kernel must utilize Model Specific Registers (specifically \texttt{IA32\_GS\_BASE} or \texttt{IA32\_KERNEL\_GS\_BASE}) to map the per-core structure to the logical address space. The \texttt{SWAPGS}\cite{osdev-gs} instruction is then employed during interrupt entry and exit to switch between user-space and kernel-space thread-local storage transparently.
+
+\subsubsection{Core Identification}
+
+A critical design challenge in this domain is the identification of the executing core. While mostly all processors provide unique hardware identifiers (e.g., APIC ID on x86, MPIDR on ARM, or Hart ID on RISC-V), these values are intrinsically tied to the physical topology of the silicon. Consequently, they are often non-contiguous, sparse, or hierarchical, rendering them unsuitable for directly indexing internal kernel arrays. To address this, an operating system typically implements a mapping layer during hardware discovery, assigning a dense, sequential \textbf{Logical ID} (ranging from 0 to $N-1$) to each active core. Generally speaking another abstraction is handy here.
 
 \subsubsection{Timing Design}
 
@@ -1243,7 +1240,7 @@ Before discussing timing devices, a fundamental design decision must be made reg
 
 \subsubsection{Clocks}
 
-The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue, such as a Red-Black tree, which guarantees stability and $O(\log n)$ removal time. On AMD64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio.
+The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue On AMD64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio.
 
 \subsubsection{Event Clocks}
 
@@ -4178,6 +4175,7 @@ USB & Universal Serial Bus \\
 VFS & Virtual File System \\
 VMM & Virtual Memory Manager \\
 WAD & Where's All the Data \\
+CLS & Core Local Storage \\
 \end{supertabular}
 \\
 \thispagestyle{empty}
