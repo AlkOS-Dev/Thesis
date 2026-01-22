@@ -335,52 +335,49 @@ TODO: KRYCZKA
 \markboth{}{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
 
-\section{Scope of the Thesis} 
+\\section{Scope of the Thesis}
 
-The main goal of our thesis which was formed initially is to implement function scheduler and have some runnable tasks, each in separate address space. In details we assumed:
+The primary objective of this thesis, as initially defined, was to implement a functional scheduler capable of executing tasks within isolated address spaces. Specifically, the project aimed to achieve the following technical goals:
 
-\begin{itemize}
-    \item Bootloading -- we can startup our system on bare metal
-    \item Virtual memory support -- we have virtual memory management (we can allocate the space for the tasks)
-    \item Preemptive scheduling -- we can preempt running task
-    \item At least simple scheduling algorithm -- round robin
-    \item At least single core
-    \item x86_64 Archtiecture
-    \item General purpose scheduling 
-    \item Monolithic design
+\begin{itemize} 
+    \item Bootloading -- the ability to start the system on bare metal hardware. 
+    \item Virtual memory support -- implementation of memory management to allocate isolated space for tasks. 
+    \item Preemptive scheduling -- the ability to interrupt a running task to switch context. 
+    \item Implementation of a basic scheduling algorithm -- specifically Round Robin. 
+    \item x86_64 Architecture -- targeting the AMD64 archietcture only. 
+    \item General-purpose scheduling -- designing a scheduler suitable for generic workloads. 
+    \item Monolithic design -- implementing the kernel within a single address space. 
 \end{itemize}
 
-The requirements are kind of foggy, as at the starting point we were not sure how much effort it will take to complete the project
+At the inception of the project, the specific requirements were not rigidly defined, as the complexity and effort required to complete the implementation were initially uncertain.
 
 \subsection{Functional Requirements}
 
-Based on that view we extracted following requirements:
+Based on the initial scope and architectural assumptions, the following functional requirements were derived:
 
-\begin{itemize}
-    \item req1
+\begin{itemize} 
+    \item req1 
 \end{itemize}
 
-\section{Work Division -- Code} 
+\section{Work Division -- Code}
 
-In our case work division was pretty straightforward, as the conecpt has so many complex and separated problems, that we decided do divide mostly by those problems:
+The division of labor regarding the source code was determined by the distinct and complex subsystems inherent to operating system development. Responsibilities were allocated according to specific technical domains:
 
 \subsubsection{Jakub Lisowski}
 
-Problem of scheduling, life management of processes and threads, context switching, scheduling algorithms, sleeping and timer devices.
+Responsible for scheduling, process and thread lifecycle management, context switching, scheduling algorithms, thread sleeping mechanisms, and timer devices.
 
-\subsubsection{Adam Ogieniewski}
-TODO: ADAM CHECK
+\subsubsection{Adam Ogieniewski} TODO: ADAM CHECK
 
-Problem of storage and filesystem (abstraction and actual implementation of fat fs family), libc, system interface (syscalls and libc extension) and hardware interaction via ACPI and other drivers.
+Responsible for storage and filesystem management (including the abstraction layer and implementation of the FAT filesystem family), the standard C library (libc), the system interface (syscalls and libc extensions), and hardware interaction via ACPI and other drivers.
 
-\subsubsection{Łukasz Kryczka}
-TODO: KRYCZKA CHECK
+\subsubsection{Łukasz Kryczka} TODO: KRYCZKA CHECK
 
-Problem of virtual memory, memory management, allocation, memory initialization and management of address spaces.
+Responsible for virtual memory, physical memory management, allocation strategies, memory initialization, and the management of address spaces.
 
 \section{Work Division -- Thesis}
 
-Work division in case of thesis looks similarly as code word divison. We splitted the work based on the experience, knowledge and work done in the project by each individual. The effort of each person was mostly equal.
+The division of work regarding the written thesis mirrors the distribution of coding responsibilities. The content was authored based on each contributor's specific area of implementation, technical expertise, and role within the project. The overall contribution effort was distributed evenly among the authors.
 
 % ==================================================================
 
