@@ -352,6 +352,7 @@ TODO: KRYCZKA, ADAM, JAKUB
   \item acpi
   \item 64bit LAPIC
   \item mmu
+  \item genreal purpose os
 \end{itemize}
 
 \subsection{Known Limitations}
@@ -379,7 +380,7 @@ TODO: KRYCZKA, ADAM, JAKUB
 
 \chapter{Creating an Operating System from Scratch}
 
-This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the monolithic kernel design with memory virtualization, where every module resides within the same address space - the kernel address space.
+This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the general purpose monolithic kernel design with memory virtualization, where every module resides within the same address space - the kernel address space. Given that our work was primarily conducted on x86-64 machines, we will use this architecture as the basis for further discussion.
 
 \section{Host Environment Preparation}
 
@@ -450,6 +451,7 @@ TODO: KRYCZKA
 TODO: JAKUB
 
 \subsection{Intrusive Data Structures}
+\label{subsec:intrusive}
 TODO: JAKUB
 
 \subsection{Ref-counting}
@@ -580,14 +582,14 @@ Failure to link these components in the correct order results in an incomplete r
 The process of bringing a computer from a powered-off state to a fully functional operating system is governed by a rigid chain of physical and logical constraints. At the hardware level, the Central Processing Unit (CPU) functions as a complex state machine. Upon the application of power or a reset signal, the CPU resets its internal registers to default values and sets the Instruction Pointer to a specific, hardcoded physical address known as the \textit{Reset Vector} \cite{IntelManual-Reset}.
 
 \subsubsection{The Memory Paradox and Storage}
-A fundamental challenge in this sequence is the source of the initial instructions. The standard Random Access Memory (RAM), which serves as the primary workspace for modern operating systems, is volatile. It requires active electrical flow to maintain its state. When the system is powered off, the state is lost; upon power-up, the memory cells contain random garbage data. Consequently, the CPU cannot fetch valid instructions from standard RAM immediately after a reset.
+A fundamental challenge in this sequence is the source of the initial instructions. The standard Random Access Memory (RAM), which serves as the primary workspace for modern operating systems, is volatile. It requires active electrical flow to maintain its state. When the system is powered off, the state is lost. Upon power-up, the memory cells contain random garbage data. Consequently, the CPU cannot fetch valid instructions from standard RAM immediately after a reset.
 
 To resolve this, hardware architects map the Reset Vector address to a non-volatile memory region, typically Flash Memory or Read-Only Memory (ROM), which retains data without power.
 
 \subsubsection{Embedded vs. Complex Architectures}
 In simple embedded architectures (e.g., microcontrollers used in automotive braking systems or household appliances), the entire application code is often stored in this non-volatile memory. The memory controller maps this storage directly into the CPU's addressable space. This technique, known as \textbf{Execute In Place (XIP)}, allows the CPU to fetch and execute the developer's code from the very first clock cycle \cite{ARM-CortexM4-Generic-User-Guide}. The developer "owns" the machine from the first nanosecond.
 
-In contrast, more complex architectures (such as ARM-based smartphones or single-board computers like the Raspberry Pi) often store the main operating system on external, complex storage media like SD cards or eMMC chips. The CPU cannot simply memory-map an SD card; it requires a sophisticated software driver to communicate with the storage controller. To bridge this gap, manufacturers embed a tiny, immutable piece of software called the \textbf{BootROM} directly into the silicon. This code initializes the minimal required hardware (often internal SRAM) and loads a secondary bootloader from the external storage into that SRAM, which in turn loads the main software.
+In contrast, more complex architectures (such as ARM-based smartphones or single-board computers like the Raspberry Pi) often store the main operating system on external, complex storage media like SD cards or eMMC chips. The CPU cannot simply memory-map an SD card. It requires a sophisticated software driver to communicate with the storage controller. To bridge this gap, manufacturers embed a tiny, immutable piece of software called the \textbf{BootROM} directly into the silicon. This code initializes the minimal required hardware (often internal SRAM) and loads a secondary bootloader from the external storage into that SRAM, which in turn loads the main software.
 
 \begin{figure}[htbp]
 \centering
@@ -746,9 +748,9 @@ This discovery process is not standardized. It is strictly coupled to the target
 
 On strictly embedded architectures (e.g., ARM Cortex-M or AVR), the physical memory layout is immutable. The location and size of SRAM banks, Flash storage, and peripheral registers are defined by the silicon vendor and do not change. In these environments, runtime discovery is redundant.
 
-The memory map is hardcoded directly into the kernel's source code or linker scripts, matching the specific System-on-Chip (SoC) datasheet \cite{ARM-CortexM4-Generic-User-Guide}. The developer explicitly defines the boundary between kernel code, stack, and heap. As illustrated in Figure \ref{fig:cortex_m4_memory}, the address space is rigid; the kernel assumes ownership of specific addresses immediately upon reset without querying external entities.
+The memory map is hardcoded directly into the kernel's source code or linker scripts, matching the specific System-on-Chip (SoC) datasheet \cite{ARM-CortexM4-Generic-User-Guide}. The developer explicitly defines the boundary between kernel code, stack, and heap. As illustrated in Figure \ref{fig:cortex_m4_memory}, the address space is rigid. The kernel assumes ownership of specific addresses immediately upon reset without querying external entities.
 
-In this context, the Operating System does not "discover" memory. The kernel code assumes these addresses are valid from the first instruction. For example, a Cortex-M4 kernel may be hardcoded to expect code at 0x00000000 and RAM at 0x20000000. If the software is flashed onto a different chip variant, it will simply fault; flexibility is sacrificed for minimizing initialization overhead.
+In this context, the Operating System does not "discover" memory. The kernel code assumes these addresses are valid from the first instruction. For example, a Cortex-M4 kernel may be hardcoded to expect code at 0x00000000 and RAM at 0x20000000. If the software is flashed onto a different chip variant, it will simply fault. Flexibility is sacrificed for minimizing initialization overhead.
 
 \begin{figure}[htbp]
 \centering
@@ -921,7 +923,7 @@ While x86 relies on this dynamic instruction-based discovery, other architecture
 \cite{ARM-Arch-Ref, RISCV-Priv-Spec}
 
 \subsubsection{Feature Enablement}
-Identifying that a feature exists is often insufficient; the kernel must explicitly enable it. To maintain backward compatibility and minimize power consumption, processors often boot with advanced features disabled.
+Identifying that a feature exists is often insufficient. The kernel must explicitly enable it. To maintain backward compatibility and minimize power consumption, processors often boot with advanced features disabled.
 
 A prime example is the Floating Point Unit (FPU) and Vector Extensions (SSE/AVX). On x86-64, even if \texttt{CPUID} reports that AVX is supported, attempting to execute a \texttt{VMOVDQA} instruction will fault unless the kernel has:
 \begin{enumerate}
@@ -938,23 +940,23 @@ This enabling phase is critical not only for allowing instruction execution but 
 
 \subsection{Establishment of Basic Communication}
 
-One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on AMD64 desktop platforms) or implement a basic network stack. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing and as development progresses, it is advisable to disable this communication and associated debug traces via compilation flags. It is crucial to strictly separate debug-only communication from standard output devices, as the former must be disabled in release builds to ensure performance and security.
+One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on AMD64 desktop platforms) or implement a basic network stack. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing and as development progresses, it is advisable to abandon this communication or disable them via compilation flags. 
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=1\textwidth]{res/debug-output.png}
-    \caption{QEMU serial-port Communication}
-    \label{fig:qemu_comms}
-\end{figure}
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=1\textwidth]{res/debug-output.png}
+%     \caption{QEMU serial-port Communication}
+%     \label{fig:qemu_comms}
+% \end{figure}
 
-As shown in Figure \ref{fig:qemu_comms}, alongside typical output to the screen and keyboard input, the kernel transmits text to the QEMU serial port, which is then streamed to the host shell. This approach enables host-side scripts to parse logs, detect bugs or failures, and allow manual inspection of the system state immediately preceding a crash.
+% As shown in Figure \ref{fig:qemu_comms}, alongside typical output to the screen and keyboard input, the kernel transmits text to the QEMU serial port, which is then streamed to the host shell. This approach enables host-side scripts to parse logs, detect bugs or failures, and allow manual inspection of the system state immediately preceding a crash.
 
 \subsection{Enabling Interrupts and Exceptions}
 \label{subsec:os-tutorial-interrupts}
 
 Prior to the implementation of memory management (Section \ref{subsec:os_tutorial_mem}), it is essential to establish a basic interrupt handling mechanism. On most platforms, the exception system relies entirely on interrupt mappings. Consequently, without a functional interrupts, the kernel is unable to display debug information on the designated communication device when an error occurs.
 
-Exception handlers should output a descriptive message detailing the failure. This message must include the CPU state, the source of the exception, the instruction pointer where the error occurred, and, if applicable, an error code explaining the cause. An example of a kernel dump following an exception is presented below:
+Exception handlers should output a descriptive message detailing the failure. This message must include the CPU state, the source of the exception, the instruction pointer where the error occurred, and, if applicable, an error code explaining the cause. An example of a x86-64 kernel dump following an exception is presented below:
 
 \begin{lstlisting}[caption={Example Kernel Panic on Exception}, label={lst:kernel_panic}]
     [ KERNEL PANIC ] Received exception: 0 (Divide Error (#DE))
@@ -986,7 +988,7 @@ Before initializing Memory Management, exception handling is the primary functio
 
 \subsubsection{Design Considerations}
 
-It is important to note that low-level, hardware-compliant interrupt handlers differ significantly from standard compiled functions. They often require specific entry and exit instructions, making the runtime swapping of these functions difficult. A robust solution is to create a low-level assembly wrapper that efficiently performs all architecture-dependent operations before invoking a high-level function responsible for the kernel's logic. However, this approach has limitations. The high-level function is typically hardcoded into the low-level handler, preventing runtime reconfiguration.
+It is important to note that, hardware-compliant interrupt handlers differ significantly from standard compiled functions. They often require specific entry and exit instructions, making the runtime swapping of these functions difficult. A robust solution is to create a low-level assembly wrapper that efficiently performs all architecture-dependent operations before invoking a high-level function responsible for the kernel's logic. However, this approach has limitations. The high-level function is typically hardcoded into the low-level handler, preventing runtime reconfiguration.
 
 To address this, a hardware abstraction layer is required to serve as an intermediary between the architecture-specific wrapper and the high-level kernel logic. This abstraction should manage the low-level tables and facilitate the swapping of handlers at runtime. This can be implemented using an array of abstract handlers mapped to hardware interrupts. Furthermore, devices are mapped to hardware interrupts dynamically during runtime based on user configuration and hardware discovery, necessitating the ability to swap drivers and logic dynamically. Without this modularity, the system would require multiple stages of interrupt initialization, multiple architecture-specific handlers, or complex handlers that query the kernel state to determine valid operations (e.g., a page fault handler checking for virtualization support each time is invoked).
 
@@ -1004,13 +1006,17 @@ Architecture-specific details must also be considered. for example, the AMD64 ar
 
 \subsection{Tracing System}
 
-As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. This can be achieved by allocating a large circular buffer for messages, which is then asynchronously flushed to the output device by a dedicated, low-priority task. Furthermore, to facilitate effective debugging in a multi-threaded and multi-core environment, each log entry should automatically capture essential context metadata, specifically the high-precision timestamp, the current Core ID, and the Process ID.
+As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. This can be achieved by allocating a large circular buffer for messages, which is then asynchronously flushed to the output device by a dedicated, low-priority task. Furthermore, to facilitate effective debugging in a multi-threaded and multi-core environment, each log entry may automatically capture essential context metadata, specifically the high-precision timestamp, the current Core ID, or the Process ID.
 
 This goes about the general design, but during initial development system there is no need to have full tracing system, simple print with formatting is enough to proceed.
 
 \subsection{Testing framework}
 
-Once bidirectional communication with an external system is established and tracing capabilities are active, it is advisable to implement a protocol for verifying code directly on the target system. Such a framework facilitates regression and unit testing, enabling the detection of failures with every code modification. Testing must be conducted on the target architecture, as code that functions correctly on a host Linux environment may fail locally due to missing CPU features, implementation differences in system calls, memory management constraints, or discrepancies in generated assembly. The design must isolate test executions to ensure that the side effects of a failed test do not compromise subsequent ones. Ideally, isolation is achieved by rebooting the system into a testing module after each test. While this method introduces latency, it prevents false positives that would otherwise consume significant development time. Consequently, the framework must be designed to yield reliable and repeatable results.
+The reliability of an operating system kernel cannot be guaranteed solely through compilation checks or host-based logic verification. While some algorithmic components can be tested in a hosted environment (e.g., on a Linux host), the core kernel functionalities depend heavily on the specific hardware architecture, physical memory layout, and privileged CPU instructions. Consequently, a robust testing framework must be implemented to execute directly within the kernel on the target hardware or emulator.
+
+This in-kernel framework should function similarly to user-space unit testing libraries but operates without the support of an underlying operating system. It allows developers to define test cases for critical subsystems, such as memory allocators, intrusive data structures, and scheduling algorithms and execute them in the actual runtime environment. This approach is the only way to detect architecture-specific issues, such as unaligned memory accesses, incorrect register usage during context switches, or paging faults caused by invalid table entries, which would remain undetected in a hosted simulation.
+
+A critical design requirement for such a framework is test isolation. In a kernel environment, a failure often results in a system panic, infinite loop, or silent memory corruption that compromises the global state. To prevent side effects from a failed test influencing subsequent assertions (creating false positives or negatives), the framework should ideally ensure a clean state for each test suite. In early development stages, this often necessitates designing tests to be self-contained or implementing mechanisms to reset subsystems between test executions, ensuring that results are deterministic and reproducible.
 
 \section{Memory Management}
 \label{subsec:os_tutorial_mem}
@@ -1113,7 +1119,7 @@ The bitmap allocator is conceptually the simplest mechanism, often used for \tex
 \label{fig:bitmap_allocator}
 \end{figure}
 
-The primary advantage of bitmaps is space efficiency. To manage 4 GiB of RAM using 4 KiB pages, there are roughly 1 million frames. This requires 1 million bits, or merely 128 KiB of overhead. Furthermore, bitmaps naturally support the allocation of \textit{contiguous} multipage blocks; the allocator simply needs to find a run of $N$ consecutive zeros.
+The primary advantage of bitmaps is space efficiency. To manage 4 GiB of RAM using 4 KiB pages, there are roughly 1 million frames. This requires 1 million bits, or merely 128 KiB of overhead. Furthermore, bitmaps naturally support the allocation of \textit{contiguous} multipage blocks. The allocator simply needs to find a run of $N$ consecutive zeros.
 
 However, the search complexity is linear. To find free memory, the allocator must scan the bitmap. In the worst case (a nearly full system), it may scan the entire map ($O(N)$) before finding a free page or determining that memory is exhausted.
 
@@ -1216,7 +1222,7 @@ Crucially, the address of a block's buddy can be calculated instantly using an X
 \subsubsection{Why Buddy is Insufficient for Real-Time}
 While the Buddy System is efficient ($O(log N)$) and handles external fragmentation well via coalescing, it suffers from significant \textbf{Internal Fragmentation}. Because every request must be rounded up to a power of two, a request for 33 KiB requires a 64 KiB block, wasting 47\% of the allocated memory.
 
-Furthermore, the coalescing logic is restrictive. Two adjacent free blocks of size $2^k$ cannot always be merged; they must be \textit{buddies} (i.e., aligned on a strict $2^{k+1}$ boundary). This can lead to cases where contiguous memory is available but unusable because the blocks are "cousins" rather than "buddies" \cite{wilson1995survey}. These limitations motivate the need for more granular allocators in real-time systems, such as TLSF.
+Furthermore, the coalescing logic is restrictive. Two adjacent free blocks of size $2^k$ cannot always be merged. They must be \textit{buddies} (i.e., aligned on a strict $2^{k+1}$ boundary). This can lead to cases where contiguous memory is available but unusable because the blocks are "cousins" rather than "buddies" \cite{wilson1995survey}. These limitations motivate the need for more granular allocators in real-time systems, such as TLSF.
 
 \subsection{Mechanism: Two-Level Segregated Fit (TLSF)}
 
@@ -1288,7 +1294,7 @@ TLSF is the preferred allocator for real-time kernels because it guarantees wors
 
 \subsection{Advanced Layering: Object Caching (Slab)}
 
-The mechanisms described so far (Buddy, TLSF) manage raw blocks of memory. However, the operating system kernel rarely wants just "64 bytes"; it usually wants a specific object, such as a process control block, a file descriptor, or a synchronization primitive.
+The mechanisms described so far (Buddy, TLSF) manage raw blocks of memory. However, the operating system kernel rarely wants just "64 bytes". Tt usually wants a specific object, such as a process control block, a file descriptor, or a synchronization primitive.
 
 Initializing these objects can be expensive. For example, initializing a kernel mutex involves setting internal flags, initializing wait queues, and perhaps interacting with hardware interrupt controllers. If an object is allocated, initialized, used, destroyed, and freed repeatedly, the CPU spends significant cycles just setting up and tearing down the same state.
 
@@ -1331,15 +1337,32 @@ Finally, the PMM must respect the physical limitations of the hardware. Not all 
 
 A common solution is to partition the physical address space into disjoint \textbf{regions} or \textbf{zones}, each managed by a separate allocator instance. Allocation requests carry metadata (flags or capabilities) indicating which regions are acceptable. The allocator attempts the preferred region first and falls back to others only if permitted. Critically, a request for DMA-capable memory \textit{cannot} fall back to high memory-the hardware simply cannot address those frames.
 
-For an in-depth treatment of allocation algorithms, fragmentation theory, and experimental methodology, the comprehensive survey by Wilson et al.~\cite{wilson1995survey} remains an essential reference.
-
-
-\subsubsection{Virtual Memory Management}
-TODO: KRYCZKA
-\subsubsection{Virtual Address Space}
-TODO: KRYCZKA
 \subsubsection{Kernel Space Allocation API}
 TODO: KRYCZKA
+
+\section{Scheduling Design}
+\label{sec:scheduling_approaches}
+
+Before going further, a fundamental design decision must be made regarding the characteristics of our scheduling algorithm. The choice of scheduling paradigm dictates the complexity of the kernel, the synchronization mechanisms required, and the hardware dependencies.
+
+\subsubsection{Cooperative Scheduling}
+In a cooperative scheduling model, the operating system never forcibly pauses a running task. Instead, the currently executing thread retains control of the CPU until it voluntarily yields execution (e.g., via a specific \texttt{yield()} system call) or blocks on an I/O operation.
+
+\begin{itemize}
+    \item \textbf{Advantages:} Implementation simplicity. Since context switches occur only at known, controlled points, race conditions are significantly rarer, and complex locking mechanisms are often unnecessary. 
+    \item \textbf{Disadvantages:} A single malicious or poorly written program (e.g., one entering an infinite loop) can freeze the entire system, as the kernel never regains control to schedule other tasks.
+\end{itemize}
+
+\subsubsection{Preemptive Scheduling}
+Preemptive scheduling is the standard for modern general-purpose operating systems. In this model, the kernel assigns a specific time slice to each task. If a task does not yield voluntarily before its time expires, the hardware generates an interrupt (driven by an Event Clock \ref{subsec:event_clocks}), returning control to the kernel. The scheduler then forcibly saves the current task's state and switches to another.
+
+\begin{itemize}
+    \item \textbf{Advantages:} Responsiveness and stability. No single task can monopolize the CPU, ensuring that the system remains responsive even if a user program hangs.
+    \item \textbf{Disadvantages:} High complexity. Because a task can be interrupted at any instruction, the kernel must employ rigorous synchronization primitives (mutexes, spinlocks) to protect shared data structures from race conditions.
+\end{itemize}
+
+\subsubsection{SMP Scheduling}
+Symmetric Multiprocessing (SMP) scheduling extends these concepts to systems with multiple processor cores. In this environment, the scheduler must not only decide \textit{which} task to run next but also \textit{where} to run it.
 
 \subsection{Discovering External Devices and System Capabilities}
 
@@ -1347,34 +1370,32 @@ Upon the successful initialization of the fully functional memory management sub
 
 \subsubsection{Discovery and Abstraction (Drivers)}
 
-Device discovery varies significantly between architectures, necessitating platform-specific implementations. For instance, on most desktop AMD64 computers, the ACPI subsystem \cite{ACPI-spec} is required to enumerate core components (such as CPUs, APICs, and non-PCI devices), followed by PCI discovery \cite{osdev-pci} to detect devices operating on PCI lanes. Architecture-independent kernel must provide some unified way allowing the archtiecture to perform the discovery at a proper moment. Furthermore it must provide well defined abstraction for various device types, which must be strictly followed by architecture implementation. Example driver interface may look like this:
+Device discovery strategies vary fundamentally between hardware architectures, necessitating platform-specific implementations that feed into a unified kernel abstraction. 
 
-\begin{lstlisting}[caption={Event Clock Driver Structure}, label={lst:eventClockDriver-tutorial}]
-    struct alignas(arch::kCacheLineSizeBytes) EventClockRegistryEntry : data_structures::RegistryEntry {
-        /* Clock numbers */
-        u64 min_next_event_time_ns;  // Minimum time for the next event in nanoseconds
-    
-        /* Clock specific data */
-        EventClockFlags flags;     // Features of the event clock, e.g., core-local
-        CoreMask supported_cores;  // Cores that support this event clock
-    
-        /* infra data */
-        u64 next_event_time_ns;  // Time for the next event in nanoseconds
-        EventClockState state;   // Current state of the clock
-    
+On desktop and server platforms, particularly \textbf{x86-64}, the hardware is designed to be self-describing. The \textbf{ACPI} subsystem \cite{ACPI-spec} is utilized to enumerate core platform components (such as CPU cores, LAPICs, and IOAPICs) and handle power management. For peripheral devices, the \textbf{PCI/PCIe} bus \cite{osdev-pci} provides a dynamic enumeration mechanism. The kernel can probe the PCI bus, read vendor and device IDs from configuration space, and automatically load the appropriate drivers without prior knowledge of the hardware topology.
+
+In contrast, embedded architectures such as \textbf{ARM64} and \textbf{RISC-V}, particularly in System-on-Chip (SoC) implementations, often rely on simple system buses (e.g., AXI, AHB) that lack discovery capabilities. A UART controller or a Timer on an SoC is simply mapped to a fixed physical address. The kernel cannot "ask" the hardware if a device exists at a specific address. Attempting to read from an unmapped address could result in a bus error or system hang. 
+
+To address this, these architectures utilize the \textbf{Device Tree} (DTB) mechanism \cite{Devicetree-Spec}. Instead of hardcoding memory addresses into the kernel source (which would require a unique kernel binary for every specific motherboard), the bootloader passes a binary data structure to the kernel at boot. This blob describes the hardware topology, including memory-mapped addresses, interrupt lines, and dependency relationships. The kernel parses this tree to "discover" devices that are physically present but electronically silent.
+
+Regardless of whether a device is found via PCI enumeration, ACPI tables, or Device Tree parsing, the architecture-independent kernel must provide a unified interface for device registration. This ensures that the upper layers of the operating system remain agnostic to how the hardware was detected. An example driver interface, designed to abstract these differences, is presented below:
+
+\begin{lstlisting}[caption={Example Driver Abstraction}, label={lst:drive_abstract}]
+    struct ExampleDriver {
+        /* Device description */
+        char* name;
+        int frequency;
+        int latency;
+        
         /* Driver data */
-        void *own_data;  // Pointer to the clock's own data, used for callback
+        void *own_data; 
     
-        /* callbacks */
+        /* Operations */
         struct callbacks {
-            // Callback to set next event time
-            u32 (*next_event)(EventClockRegistryEntry *, u64);  
-            // Callback to set clock state
-            u32 (*set_oneshot)(EventClockRegistryEntry *);
-            // Callback to set clock state
-            u32 (*set_periodic)(EventClockRegistryEntry *);     
-            void (*on_entry)(EventClockRegistryEntry *);        // optional
-            void (*on_exit)(EventClockRegistryEntry *);         // optional
+            u32 (*open)(void* device);
+            u32 (*read)(void* device, char* buffer, int size);
+            u32 (*write)(void* device, const char* buffer, int size);
+            u32 (*close)(void* device);
         } cbs;
     };
 \end{lstlisting}
@@ -1383,32 +1404,30 @@ This structure must define crucial operations for the specific device type along
 
 \subsubsection{Core Local Storage}
 
-Implementing an SMP kernel necessitates an infrastructure for accessing core-local data early in the boot process to facilitate future scalability and prevent extensive refactoring. This initialization must occur after memory setup and CPU topology discovery, as structures must be allocated for each core individually. In advanced development stages, numerous per-core structures are required to eliminate locking overhead and enhance performance in critical sections. Furthermore, data strictly correlated with the execution context, such as the currently running thread, must be easily accessible for the core we are runnig on. Consequently, the architecture must provide a mechanism, such as a dedicated register or instruction, to access these unique core-specific areas. On the x86-64 architecture, this is typically implemented using the \texttt{GS} or \texttt{FS} segment registers. Since the full 64-bit base address cannot be loaded into these segment selectors directly, the kernel must utilize Model Specific Registers (specifically \texttt{IA32\_GS\_BASE} or \texttt{IA32\_KERNEL\_GS\_BASE}) to map the per-core structure to the logical address space. The \texttt{SWAPGS}\cite{osdev-gs} instruction is then employed during interrupt entry and exit to switch between user-space and kernel-space thread-local storage transparently.
+Implementing an SMP kernel necessitates an infrastructure for accessing core-local data early in the boot process to facilitate future scalability and prevent extensive refactoring. This initialization must occur after memory setup and CPU topology discovery, as structures must be allocated for each core individually. 
 
-\begin{lstlisting}[caption={Example Core Local Usage}, label={lst:core-local}]
-    void cdecl_UpdateTcbOnSyscallEntry()
-    {
-        const auto thread = hardware::GetCoreLocalTcb();
-        const u64 t       = TimingModule::Get().GetSystemTime().ReadLifeTimeNs();
-        thread->user_time_ns += t - thread->timestamp;
-        thread->timestamp = t;
-        thread->num_syscalls++;
-    };
-\end{lstlisting}
+Fundamentally, Core Local Storage (CLS) enables the kernel to maintain state unique to each processing unit, such as the currently executing thread, scheduler queues, and performance counters, without the contention and latency costs associated with global synchronization primitives. To achieve this efficiently, the hardware architecture must provide a low-latency mechanism to retrieve the address of these structures. While implementation details vary, most modern architectures dedicate a specific register for this purpose. For instance, ARM64 utilizes the specialized \texttt{TPIDR\_EL1}\cite{AArch64-cls} system register, whereas RISC-V reserves the \texttt{tp}\cite{RISCV-registers} (Thread Pointer) general-purpose register by convention.
+
+On the x86-64 architecture, this is typically implemented using the \texttt{GS} or \texttt{FS} segment registers. Since the full 64-bit base address cannot be loaded into these segment selectors directly, the kernel must utilize Model Specific Registers (specifically \texttt{IA32\_GS\_BASE} or \texttt{IA32\_KERNEL\_GS\_BASE}) to map the per-core structure to the logical address space. The \texttt{SWAPGS}\cite{osdev-gs} instruction is then employed during interrupt entry and exit to switch between user-space and kernel-space thread-local storage transparently.
+
+\subsubsection{Core Identification}
+
+A critical design challenge in this domain is the identification of the executing core. While mostly all processors provide unique hardware identifiers (e.g., APIC ID on x86, MPIDR on ARM, or Hart ID on RISC-V), these values are intrinsically tied to the physical topology of the silicon. Consequently, they are often non-contiguous, sparse, or hierarchical, rendering them unsuitable for directly indexing internal kernel arrays. To address this, an operating system typically implements a mapping layer during hardware discovery, assigning a dense, sequential \textbf{Logical ID} (ranging from 0 to $N-1$) to each active core. Generally speaking another abstraction is handy here.
 
 \subsubsection{Timing Design}
 
-Before discussing timing devices, a fundamental design decision must be made regarding the kernel type: \texttt{tickless} or \texttt{ticking}. Ticking kernels rely on a global constant defining the frequency of periodic timing interrupts. These values typically operate with millisecond granularity, as higher frequencies would degrade system performance. In contrast, tickless kernels do not define periodic interrupts. Instead, they schedule the next timing event based on immediate requirements, such as the sleep schedule or the time slice of the currently running process. It is important to note that ticking kernels also require higher granularity interrupts if support for \texttt{nanosleep} is needed \ref{subsec:linux-timing}.
+To support the preemptive scheduling model, the kernel requires a robust timing infrastructure to track execution time. Before discussing timing devices, a fundamental design decision must be made regarding the kernel type: \texttt{tickless} or \texttt{ticking}. Ticking kernels rely on a global constant defining the frequency of periodic timing interrupts. These values typically operate with millisecond granularity, as higher frequencies would degrade system performance. In contrast, tickless kernels do not define periodic interrupts. Instead, they schedule the next timing event based on immediate requirements, such as the sleep schedule or the time slice of the currently running process. It is important to note that ticking kernels also require higher granularity interrupts if support for \texttt{nanosleep} is needed \ref{subsec:linux-timing}.
 
 \subsubsection{Clocks}
 
-The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue, such as a Red-Black tree, which guarantees stability and $O(\log n)$ removal time. On AMD64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio.
+The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue. On AMD64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio, obviously from the set of supported ones.
 
 \subsubsection{Event Clocks}
+\label{subsec:event_clocks}
 
-At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. 
+At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. Crucially, to implement preemption as discussed in Section \ref{sec:scheduling_approaches}, these devices are required to forcibly interrupt the currently running task when its time slice expires.
 
-The first consideration is sleep granularity. A standard precision of approximately one millisecond is achievable on nearly every architecture using periodic interrupts. However, implementing high-precision nanosecond or microsecond sleep requires timer devices capable of fast, reprogrammable one-shot interrupts (e.g., the LAPIC Timer on AMD64), as handling periodic interrupts at microsecond intervals is technically infeasible.
+The first consideration is sleep granularity. A standard precision of approximately one millisecond is achievable on nearly every architecture using simple periodic interrupts. However, implementing high-precision nanosecond or microsecond sleep requires timer devices capable of extremely rapid reconfiguration. The minimum time interval between consecutive events is strictly limited by the hardware configuration latency. The kernel cannot schedule an interrupt to occur sooner than the time required to program the device. Older timing hardware often requires slow I/O port interactions, rendering them unsuitable for high-precision scheduling, whereas modern devices utilize faster interfaces. Additionally, it is common for a single hardware component to serve a dual purpose, acting as both a timekeeping source (Clock) and an interrupt generator (Event Clock).
 
 Another critical factor is the support for multiple cores. In an SMP environment, it is preferable to utilize timing devices that reside locally on the cores and operate independently, thereby maximizing performance. While most modern architectures provide such devices (e.g., LAPIC Timer on AMD64), some older or embedded SMP platforms may lack them. In such cases, the kernel must utilize a global timer and employ interrupt-driven inter-core communication to simulate local interrupts.
 
@@ -1426,7 +1445,7 @@ Most modern architectures support both local and high-precision timers. For exam
 
 \subsubsection{Keyboard}
 
-Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21}\cite{osdev-ps22} if are available on our device. Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec}\cite{osdev-usb}.
+Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21}\cite{osdev-ps22} if are available on our device (is quite popular on embedded systems). Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec}\cite{osdev-usb}.
 
 \subsection{File Systems}
 
@@ -1485,7 +1504,7 @@ This abstraction allows specific storage drivers to transparently fulfill reques
 
 \draw[arrow] (fs) -- (bdev);
 \draw[arrow] (bdev.south) -- (ram.north);
-\draw[arrow] (bdev.south) -- (disk.north);
+\draw[arro{Schedulerw] (bdev.south) -- (disk.north);
 \draw[arrow] (bdev.south) -- (net.north);
 
 \end{tikzpicture}
@@ -1515,6 +1534,10 @@ TODO: KRYCZKA
 
 \subsection{Scheduling}
 
+With all requisite low-level components implemented, the development process transitions to the design and implementation of the scheduling subsystem. The initial step involves defining the data structures representing the units of execution. We begin by establishing the concept of a Process.
+
+\subsubsection{Process}
+
 The fundamental unit for resource management is the process. This object represents the execution environment for the threads operating within it. Consequently, it must act as a container for all resources shared between these threads. At a minimum, a process structure must manage:
 
 \begin{itemize}
@@ -1527,7 +1550,7 @@ While additional resources may be required to implement features such as Inter-P
 At this stage, it is prudent to prepare data structures that allow for efficient querying of processes, facilitating operations such as termination, joining, or IPC. It is important to note that the creation and destruction of processes are computationally expensive operations. They require building page tables, mapping the kernel address space, and allocating memory for bookkeeping structures. To mitigate latency, some of this workload, particularly during destruction, can be deferred to dedicated kernel worker threads, allowing the system to return control to the caller more rapidly.
 
 \noindent The minimal stuct may look like this:
-\begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
+\begin{lstlisting}[caption={Process Structure}, label={lst:exampleProcessStruct}]
     struct Process {
         /* Process resources */
         data_structures::DoubleLinkedList<VMemArea *> area_list;
@@ -1540,9 +1563,9 @@ In a production environment, this structure would naturally include additional f
 
 \subsubsection{Thread}
 
-The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution - the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer.
+The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution - the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer. Although same thing may be archieved with different solution
 
-This approach simplifies the architecture significantly and enhances performance. Since the stack is heavily utilized, it is typically cached, eliminating the need to allocate separate memory regions for saving context. Consequently, all context-switching operations are unified to use the stack as the storage medium for the thread's state. When saving context, registers are pushed onto the stack. When initializing a thread, the stack is artificially populated with boot-up values.
+This approach simplifies the architecture significantly and enhances performance. It is worth noting that while certain architectures provide hardware-assisted context switching mechanisms (such as the legacy Hardware Task Switching on x86), these are rarely utilized in modern general-purpose kernels due to performance overhead and portability concerns. Instead, the standard approach is to unify context storage using the stack. Since the stack is heavily utilized, it is typically cached, eliminating the need to allocate separate memory regions for saving context. When saving context, registers are pushed onto the stack. When initializing a thread, the stack is artificially populated with boot-up values.
 
 \noindent A concise initial structure can be defined as follows:
 \begin{lstlisting}[caption={Thread Structure First Iteration}, label={lst:os-tutorial-thread-v0}]
@@ -1603,7 +1626,7 @@ With the context storage mechanism defined, the next step is context initializat
 
 \subsubsection{Context Conversion}
 
-Before a context switch can occur, an initial context must exist. This implies the creation of the first process and the preparation of all associated structures described previously, utilizing the context initialization logic \ref{subsec:context-init}. Several approaches exist to achieve this; for example, the kernel may spawn an initial user-space program (init) responsible for booting other programs, or it may create a kernel-space process to perform further system initialization.
+Before a context switch can occur, an initial context must exist. This implies the creation of the first process and the preparation of all associated structures described previously, utilizing the context initialization logic \ref{subsec:context-init}. Several approaches exist to achieve this. For example, the kernel may spawn an initial user-space program (init) responsible for booting other programs, or it may create a kernel-space process to perform further system initialization.
 
 \subsubsection{Context Switch}
 
@@ -1617,10 +1640,8 @@ Once multiple tasks are established, the system can perform context switching. A
 \end{itemize}
 
 \noindent Based on AMD64 assembly, the implementation resembles the following:
-\begin{lstlisting}[style=nasmstyle, caption={Assembly ISR wrapper}, label={lst:isr_asm}]
-; c_decl
-; void ContextSwitch(Thread* thread)
-;   RDI = thread
+\begin{lstlisting}[style=nasmstyle, caption={Context Switch Pseudocode}, label={lst:context_switch_example}]
+; RDI must store a pointer to next thread structure
 ContextSwitch:
     sub rsp, _context_switch_stack_space_ext     ; Allocate space for saving registers.
     push_all_regs                                ; Save the state
@@ -1631,23 +1652,88 @@ ContextSwitch:
 
     pop_all_regs            ; Restore registers of NEW thread's stack
     add rsp, _all_reg_size  ; Deallocate register save space.
-    iretq                   ; Load next thread's RIP from its stack
+    iretq                   ; Restore state using interrupts mechanism
 \end{lstlisting}
+
+\subsubsection{Scheduler Internal Synchronization}
+
+When designing the scheduler and internal kernel mechanisms, appropriate synchronization strategies are paramount to ensure data consistency. Furthermore, synchronization primitives must be used wisely to minimize latency, guarding only the critical sections. The two primary categories of synchronization required are:
+
+\begin{itemize}
+\item \textbf{Interrupt Synchronization} -- In a preemptive scheduling model, interrupts may induce context switches at arbitrary points. Even in non-preemptive scenarios, interrupt handlers may interact with shared kernel data. Consequently, critical sections must be protected against race conditions caused by asynchronous interrupt execution.
+\item \textbf{SMP Synchronization} -- In a multiprocessor environment, concurrent access to shared data by multiple cores necessitates rigorous protection. For short critical sections, spinlocks \cite{spinlock} or memory barriers \cite{barriers} are suitable. However, for complex scenarios requiring extended waits, blocking locks (utilizing wait queues \ref{subsec:wait_queue}) are required.
+\end{itemize}
 
 \subsubsection{Scheduler}
 
-Having thread and process management done last thing to implement we need some machinery to pick best suitable task to run next on preemption or during yielding. And that is the main responsiblity of the scheduler to track the execution of the threads and always pick most suitable tasks to run. There are multiple approaches to design the the scheduler itself and multiple algorithms picking the task
+With thread and process management structures established, the final component required is the mechanism responsible for selecting the next task for execution during preemption or voluntary yielding. The primary responsibility of the scheduler is to track the execution state of threads and determine the optimal task to run according to a specific policy. The complexity of the implementation is largely dictated by the chosen scheduling paradigm (Section \ref{sec:scheduling_approaches}).
 
-\subsubsection{SMP Scheduling}
-TODO: JAKUB
+The simplest approach is a single-core, non-preemptive (cooperative) scheduler. In this model, synchronization concerns within the scheduler are minimal, as context switches occur only at explicit yield points. Furthermore, the sleeping mechanism can be simplified, as tasks are not preempted, allowing wake-up checks to occur solely during yield calls without strict timing reliance.
 
-\subsubsection{Synchronization}
-TODO: JAKUB
+In contrast, a preemptive scheduler introduces significantly higher complexity. The system must manage CPU time allocation flexibly and safeguard against interrupts that may trigger context switches at any instruction. Additionally, preemptive scheduling requires precise timing mechanisms to handle sleeping tasks and enforce time slices accurately.
 
-\subsubsection{Sleep}
-TODO: JAKUB
+Implementing scheduling for Symmetric Multiprocessing (SMP) systems does not fundamentally alter the logic compared to a single-core preemptive scheduler, provided synchronization is handled correctly. The primary challenge lies in coordinating access between cores, typically achieved via spinlocks. Performance can be further optimized by introducing core-local schedulers coupled with a global load-balancing mechanism. In this architecture, internal scheduler synchronization is minimized, requiring synchronization only during task migration protocols.
+
+A specific scheduling algorithm must be selected based on the optimization goals of the system. Common optimization criteria include:
+
+\begin{itemize}
+    \item Minimizing latency
+    \item Minimizing waiting time
+    \item Maximizing throughput
+    \item Maximizing fairness
+    \item Prioritizing critical tasks
+\end{itemize}
+
+No single scheduler can be ideal in all metrics; therefore, a balanced solution suitable for the system's specific purpose is required. 
+
+Furthermore, task prioritization is essential. For instance, audio or block device drivers require immediate execution to ensure data consistency and user experience. To address this, hybrid policies (such as \texttt{SCHED_FIFO} in Linux \ref{subsec:linux-scheduler}) allow critical tasks to operate in a cooperative manner, yielding only when necessary, while other tasks remain preemptible.
+
+To illustrate these concepts, we present the simplest form of a preemptive scheduler: a periodic, single-core Round Robin scheduler. This algorithm maintains a single queue of executable tasks. New tasks are appended to the tail of the queue, while the scheduler selects the task at the head for execution. At fixed intervals (e.g., every 10ms), the running task is interrupted, placed back at the tail of the queue, and the next task is dequeued. The following pseudo-code demonstrates this logic:
+
+\begin{lstlisting}[caption={Round Robin Pseudo Code}, label={lst:rr_pseudo_code}]
+
+#define SCHED_PERIOD_TICK 10
+
+struct Scheduler {
+    LinkedList<Task*> tasks{};
+} g_Scheduler;
+
+extern void InitializeTimingModule(void (*handler)(), int period_ms);
+extern void ContextSwitch(Task* task);
+extern void LockInterrupts();
+extern void UnlockInterrupts();
+extern Task* GetCurrentRunningTask();
+
+void AddTask(Task* task) {
+    g_Scheduler->tasks.push_back();
+}
+
+Task* GetNext() {
+    g_Scheduler->tasks.pop_front();
+}
+
+void Yield() {
+    LockInterrupts();
+    AddTask(GetCurrentRunningTask());
+    ContextSwitch(GetNext());
+    UnlockInterrupts();
+}
+
+void TimerHandler() {
+    InitializeTimingModule(TimerHandler, SCHED_PERIOD_TICK);
+}
+\end{lstlisting}
+
+This simple model may suffice for an SMP system if implemented as a core-local scheduler, provided a load-balancing mechanism is available to redistribute tasks between cores.
 
 \subsubsection{Blocking - Wait Queues}
+\label{subsec:wait_queue}
+
+Regardless of the scheduling algorithm employed, a mechanism is required to block threads and defer their execution until specific events occur, such as acquiring a lock, joining a thread, or awaiting I/O. This necessitates the management of multiple queues distributed throughout the kernel codebase, in contrast to the centralized run queues of the scheduler.
+
+To distinguish between runnable and waiting threads, a specific \texttt{BLOCKED} state is assigned to tasks residing in a wait queue. This distinction simplifies resource management and structure cleanup. Intrusive data structures (Section \ref{subsec:intrusive}) are particularly advantageous in this context due to their efficient removal properties. The entity owning the wait queue is responsible for waking threads (transitioning them from the wait queue back to the scheduler's run queue) when the event occurs. Conversely, the task itself initiates the blocking process when it reaches a synchronization point.
+
+\subsubsection{Sleep}
 TODO: JAKUB
 
 \subsection{User Space}
@@ -1699,7 +1785,7 @@ Upon entry to the kernel, the raw system call number must be mapped to a specifi
     \item \textbf{Bounds Check:} The kernel verifies that the requested number is less than the total number of supported syscalls.
     \item \textbf{Invocation:} The kernel executes an indirect call to the address stored at \texttt{table[syscall\_number]}.
 \end{enumerate}
-This method guarantees $O(1)$ constant-time performance, ensuring that the latency of invoking a system call remains minimal. This approach requires syscall numbers to be contiguous; gaps in the numbering space are typically handled by null pointers or stub functions in the table.
+This method guarantees $O(1)$ constant-time performance, ensuring that the latency of invoking a system call remains minimal. This approach requires syscall numbers to be contiguous. Gaps in the numbering space are typically handled by null pointers or stub functions in the table.
 
 \paragraph{Security and Validation}
 
@@ -1779,7 +1865,7 @@ A well-designed build system automates this process and enforces correct depende
 
 \subsubsection{Configuration Overlays}
 
-Executable binaries alone are insufficient for a functional operating system; configuration data and static resources are also required. These include configuration files, initialization scripts, and other static assets.
+Executable binaries alone are insufficient for a functional operating system. Configuration data and static resources are also required. These include configuration files, initialization scripts, and other static assets.
 
 A common approach to managing such data is the use of a configuration overlay. In this model, the source repository contains a predefined directory tree of static files. During the build process, this tree is recursively merged into the staging directory, augmenting the compiled binaries. This separation of code and configuration promotes flexibility, as system behavior can be modified (for example, by adjusting startup parameters) without recompilation of userspace programs.
 
@@ -1818,10 +1904,10 @@ For early-stage operating systems, \textbf{static linking} is often the preferre
 
 To enforce the given memory layout, a custom linker script is required. This script groups program sections according to their protection requirements, enabling the kernel to utilize hardware-level security mechanisms, such as non-executable memory regions. A standard userspace memory layout comprises the following sections in order of increasing virtual address:
 \begin{enumerate}
-\item \textbf{.text}: Executable code; marked read-only and executable.
-\item \textbf{.rodata}: Constants and string literals; marked read-only and non-executable.
-\item \textbf{.data}: Initialized global variables; marked read-write and non-executable.
-\item \textbf{.bss}: Uninitialized global variables; these occupy no storage space in the binary but are allocated in virtual memory at runtime.
+\item \textbf{.text}: Executable code -- marked read-only and executable.
+\item \textbf{.rodata}: Constants and string literals -- marked read-only and non-executable.
+\item \textbf{.data}: Initialized global variables -- marked read-write and non-executable.
+\item \textbf{.bss}: Uninitialized global variables -- these occupy no storage space in the binary but are allocated in virtual memory at runtime.
 \end{enumerate}
 
 Across all major architectures, these sections are aligned to page boundaries to satisfy the requirements of the memory management unit (MMU), with page sizes typically being 4~KiB, though larger pages may be supported. The use of page-level permissions enables the kernel to prevent unintended execution of data regions and to enforce write protection for code and constant data.
@@ -1926,6 +2012,7 @@ Unlike many other operating systems that distinguish strictly between processes 
 \end{itemize}
 
 \subsection{Scheduler}
+\label{subsec:linux-scheduler}
 
 Linux implements several scheduling policies \cite{linux_policies}\cite{linux_cfs} operating on task priorities. There are two major classes: \textbf{Real Time}, which operates on priorities 1-99, and \textbf{Fair}, which operates on priority 0. Tasks with higher priorities preempt those with lower priorities. Linux provides six policy classes:
 
@@ -1960,13 +2047,7 @@ This algorithm is becoming the new standard for Linux scheduling, addressing sho
 
 \subsection{Memory Management}
 \label{subsec:linux_mem}
-
-Linux features centralized memory management with various APIs, including \texttt{kmalloc}, \texttt{kzalloc}, \texttt{vmalloc}, and \texttt{kvmalloc} \cite{linux_mem_interfaces}.
-
-\subsubsection{Physical Memory}
-As an architecture-independent kernel, Linux abstracts hardware details. Physical memory is partitioned into zones, each serving a distinct purpose \cite{linux_mem_phys}:
-
-\begin{itemize}
+Blocking - Wait Queues}
     \item \texttt{ZONE\_DMA} -- Memory suitable for DMA (Direct Memory Access) by devices that cannot access the full addressable range.
     \item \texttt{ZONE\_NORMAL} -- Standard memory directly accessible by the kernel.
     \item \texttt{ZONE\_MOVABLE} -- Similar to \texttt{ZONE\_NORMAL}, but the content of pages in this zone can be migrated to different physical frames (preserving virtual address).
@@ -2953,6 +3034,7 @@ Prior to the implementation of the Scheduler, and alongside functional memory ma
 The architecture-specific code is responsible for detecting available hardware and registering it within the central timing infrastructure, specifically the \textbf{ClockRegistry} and \textbf{EventClockRegistry}. Subsequently, architecture-agnostic components, such as the \textbf{ACPI} subsystem, may register additional clocks by parsing system description tables. Finally, the architecture-defined functions \texttt{hal::PickSystemClockSource()} and \texttt{hal::PickSystemEventClockSource()} are invoked during the initialization of the timing module to select the optimal sources for each purpose. The infrastructure allows the scheduler to implement either a tick-based or a tickless strategy.
 
 \subsection{Clocks}
+\label{subsec:clocks}
 
 Clock Drivers are defined by the structure shown in Listing~\ref{lst:clockDriver}:
 
@@ -3458,7 +3540,7 @@ As mentioned in the limitations section \ref{subsec:limitations}, the system imp
 
 \subsubsection{Process Flags}
 
-\textbf{KernelSpaceOnly} -- enables the creation of kernel-only threads and processes. These processes do not require a separate user-space address space or user-space stack. This minimization of resource consumption improves performance; additionally, context switching between kernel-only threads does not necessitate switching the address space.
+\textbf{KernelSpaceOnly} -- enables the creation of kernel-only threads and processes. These processes do not require a separate user-space address space or user-space stack. This minimization of resource consumption improves performance. Additionally, context switching between kernel-only threads does not necessitate switching the address space.
 
 \textbf{PreserveFloats} -- indicates that all threads within the process save and restore floating-point registers during context switches by default. Disabling this flag allows the system to omit these potentially expensive operations for threads that do not utilize floating-point arithmetic.
 
@@ -4262,15 +4344,6 @@ To support loading data from the file system, we expanded the \texttt{stdio} imp
 
 By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
-% TODO: extension
-% \section{Performance Analysis}
-% \subsection{KMalloc Performance}
-% \subsection{KFree Performance}
-% \subsection{Context Switch Performance}
-% \subsection{Syscall Performance}
-% \subsection{Scheduler Tests}
-
-
 \chapter{Future Work}
 TODO: KRYCZKA, ADAM, JAKUB
 
@@ -4341,6 +4414,7 @@ USB & Universal Serial Bus \\
 VFS & Virtual File System \\
 VMM & Virtual Memory Manager \\
 WAD & Where's All the Data \\
+CLS & Core Local Storage \\
 \end{supertabular}
 \\
 \thispagestyle{empty}
