@@ -1342,7 +1342,7 @@ This abstraction allows specific storage drivers to transparently fulfill reques
 
 \draw[arrow] (fs) -- (bdev);
 \draw[arrow] (bdev.south) -- (ram.north);
-\draw[arrow] (bdev.south) -- (disk.north);
+\draw[arro{Schedulerw] (bdev.south) -- (disk.north);
 \draw[arrow] (bdev.south) -- (net.north);
 
 \end{tikzpicture}
@@ -1372,7 +1372,7 @@ TODO: KRYCZKA
 
 \subsection{Scheduling}
 
-Finally having all previous components implemented we can proceed to designing and implementing our scheduling components. First we have to define structures for our tasks. We will start with a concept of Process.
+With all requisite low-level components implemented, the development process transitions to the design and implementation of the scheduling subsystem. The initial step involves defining the data structures representing the units of execution. We begin by establishing the concept of a Process.
 
 \subsubsection{Process}
 
@@ -1495,37 +1495,38 @@ ContextSwitch:
 
 \subsubsection{Scheduler Internal Synchronization}
 
-When designing a scheduler or any internal kernel code we must be aware what type of synchronization do we need. Additionally we always should keep in mind that synchronization must be also efficient so we should guard only essentials.
+When designing the scheduler and internal kernel mechanisms, appropriate synchronization strategies are paramount to ensure data consistency. Furthermore, synchronization primitives must be used wisely to minimize latency, guarding only the critical sections. The two primary categories of synchronization required are:
 
 \begin{itemize}
-    \item Interrupt Synchronization - if we are implementing preemptive scheduler interrupt may change the context at any point. If not we also should consider this type of synchronization. If interrupt may execute same code as syscall  execution or kernel thread then we are still faced with races.
-    \item SMP Synchronization - if multiple cores may access the data simultaneously we must be guared from simultaneous access. For simple critical sections we may use primitives like barriers \cite{barriers} or spinlocks \cite{spinlock}. But for more complicated scenarios we still needs some mutex-like mechanisms for that we must use blocking locks, which will utilize wait queues \ref{subsec:wait_queue}.
+\item \textbf{Interrupt Synchronization} -- In a preemptive scheduling model, interrupts may induce context switches at arbitrary points. Even in non-preemptive scenarios, interrupt handlers may interact with shared kernel data. Consequently, critical sections must be protected against race conditions caused by asynchronous interrupt execution.
+\item \textbf{SMP Synchronization} -- In a multiprocessor environment, concurrent access to shared data by multiple cores necessitates rigorous protection. For short critical sections, spinlocks \cite{spinlock} or memory barriers \cite{barriers} are suitable. However, for complex scenarios requiring extended waits, blocking locks (utilizing wait queues \ref{subsec:wait_queue}) are required.
 \end{itemize}
 
 \subsubsection{Scheduler}
 
-Having thread and process management done last thing to implement we need some machinery to pick best suitable task to run next on preemption or during yielding. And that is the main responsiblity of the scheduler to track the execution of the threads and always pick most suitable tasks to run. The difficulty of scheduler implementation will mostly depend on which approach we are working with \ref{sec:scheduling_approaches}.
+With thread and process management structures established, the final component required is the mechanism responsible for selecting the next task for execution during preemption or voluntary yielding. The primary responsibility of the scheduler is to track the execution state of threads and determine the optimal task to run according to a specific policy. The complexity of the implementation is largely dictated by the chosen scheduling paradigm (Section \ref{sec:scheduling_approaches}).
 
-The simplest option to implement is single core non-preemptive (cooperative) scheduler. In this case we dont have to worry about synchronization inside the scheduler at all as only scenario its internals are invoked is on yield (we have single core and no preemption). Also sleeping mechanism my be simplified here, as the task cannot be preempted we could only wake up tasks during yield calls and dont bother with timing at all.
+The simplest approach is a single-core, non-preemptive (cooperative) scheduler. In this model, synchronization concerns within the scheduler are minimal, as context switches occur only at explicit yield points. Furthermore, the sleeping mechanism can be simplified, as tasks are not preempted, allowing wake-up checks to occur solely during yield calls without strict timing reliance.
 
-Much more difficult to implement is preemptive scheduler as we are now additionally responsible for how to distribute the cpu time with bigger flexibility, the latency depends on us in bigger scale and we have to guard oursefles from interrupts that may change the context at any point. The scheduler also should be more precise for sleeping mechanism and ensure to execute sleeping tasks more accuratly.
+In contrast, a preemptive scheduler introduces significantly higher complexity. The system must manage CPU time allocation flexibly and safeguard against interrupts that may trigger context switches at any instruction. Additionally, preemptive scheduling requires precise timing mechanisms to handle sleeping tasks and enforce time slices accurately.
 
-Finally implementing the scheduling for SMP systems will not change the difficulty drastically compare to preemptive and cooperative gap. The only new challange here is to ensure synchronization is done properly between the cores. Spinlocks are sufficient here. We can additionally improve the performance by introducing core-local schedulers and some global load balancer mechanism instead of single global scheduler. In this case we dont need any smp synchronization inside the scheduler, we only need synchronized task migration protocol between the cores if some core is under or orver utilized.
+Implementing scheduling for Symmetric Multiprocessing (SMP) systems does not fundamentally alter the logic compared to a single-core preemptive scheduler, provided synchronization is handled correctly. The primary challenge lies in coordinating access between cores, typically achieved via spinlocks. Performance can be further optimized by introducing core-local schedulers coupled with a global load-balancing mechanism. In this architecture, internal scheduler synchronization is minimized, requiring synchronization only during task migration protocols.
 
-First we have to decide on scheduling algorithms we will use. We may want to optimize our scheduler in various ares, which mostly include:
+A specific scheduling algorithm must be selected based on the optimization goals of the system. Common optimization criteria include:
 
 \begin{itemize}
-    \item minimazing latency
-    \item minimzaing wait time
-    \item maximizing throughput
-    \item maximizing fairness
+    \item Minimizing latency
+    \item Minimizing waiting time
+    \item Maximizing throughput
+    \item Maximizing fairness
+    \item Prioritizing critical tasks
 \end{itemize}
 
-We cannot make a scheduler which is ideal in all of this fields, instead we should find a good enough solution for our main purpose. Secondly the scheduler should prioritize the tasks as some things are more important than others. For example sound driver or block device driver threads may need to be executed before other only because to ensure consitency for the users. Some solutions introduce cooperative policies for that case (For example \texttt{SCHED\_FIFO} from linux \ref{subsec:linux-scheduler}). Generally it is good idea to allow the tasks to work on cooperative mode only if there is no more important task to do. It is crucial for some use cases like video graphics or sound drivers to deliver the results no matter what else we do, as it directly maps on user the experience. 
+No single scheduler can be ideal in all metrics; therefore, a balanced solution suitable for the system's specific purpose is required. 
 
-To present the concept on example we will show simplest  preemptive scheduler possible: that is periodic single core round robin scheduler:
+Furthermore, task prioritization is essential. For instance, audio or block device drivers require immediate execution to ensure data consistency and user experience. To address this, hybrid policies (such as \texttt{SCHED_FIFO} in Linux \ref{subsec:linux-scheduler}) allow critical tasks to operate in a cooperative manner, yielding only when necessary, while other tasks remain preemptible.
 
-We have to maintain single queue of tasks to execute. New tasks are added to the end, and picked up from the front. Each constatn time (e.g. 10ms) the task is interrupted, added to the end of queue and next task is picked from the fron. In pseudo code it may look like that:
+To illustrate these concepts, we present the simplest form of a preemptive scheduler: a periodic, single-core Round Robin scheduler. This algorithm maintains a single queue of executable tasks. New tasks are appended to the tail of the queue, while the scheduler selects the task at the head for execution. At fixed intervals (e.g., every 10ms), the running task is interrupted, placed back at the tail of the queue, and the next task is dequeued. The following pseudo-code demonstrates this logic:
 
 \begin{lstlisting}[caption={Round Robin Pseudo Code}, label={lst:rr_pseudo_code}]
 
@@ -1561,12 +1562,14 @@ void TimerHandler() {TODO: JAKUB
 }
 \end{lstlisting}
 
-It may be even enough for SMP system as core local scheduler, assuming that load balancing could take some tasks from local tasks field.
+This simple model may suffice for an SMP system if implemented as a core-local scheduler, provided a load-balancing mechanism is available to redistribute tasks between cores.
 
 \subsubsection{Blocking - Wait Queues}
 \label{subsec:wait_queue}
 
-No matter which type of scheduler we implementing, we need some mechanism to block the thread and deffer the execution unil some event happens. In reality it might be a sleeping lock, thread joining or any other type of synchronization. For this case we need to sustain multiple queues distributed all over the code. In contrast to scheduler queues which are mostly centralized (either core local or globlal). To properly distinguish both cases the task state might be handy solution here to create special state \texttt{BLOCKED} reserved for tasks waiting on some wait-queue. In case of thread removal we will easy know how to cleanup the structures. Here also intrusive structures come in handy with removal property \ref{subsec:intrusive}. The holder of queue is responsible for waking up all the threads waiting on the event (that is moving thread from its wait-queue to scheduler queues) on the other hand usually the task's code itself will put him inside such a queue on some synchronization point. 
+Regardless of the scheduling algorithm employed, a mechanism is required to block threads and defer their execution until specific events occur, such as acquiring a lock, joining a thread, or awaiting I/O. This necessitates the management of multiple queues distributed throughout the kernel codebase, in contrast to the centralized run queues of the scheduler.
+
+To distinguish between runnable and waiting threads, a specific \texttt{BLOCKED} state is assigned to tasks residing in a wait queue. This distinction simplifies resource management and structure cleanup. Intrusive data structures (Section \ref{subsec:intrusive}) are particularly advantageous in this context due to their efficient removal properties. The entity owning the wait queue is responsible for waking threads (transitioning them from the wait queue back to the scheduler's run queue) when the event occurs. Conversely, the task itself initiates the blocking process when it reaches a synchronization point.
 
 \subsubsection{Sleep}
 TODO: JAKUB
@@ -1890,13 +1893,7 @@ This algorithm is becoming the new standard for Linux scheduling, addressing sho
 
 \subsection{Memory Management}
 \label{subsec:linux_mem}
-
-Linux features centralized memory management with various APIs, including \texttt{kmalloc}, \texttt{kzalloc}, \texttt{vmalloc}, and \texttt{kvmalloc} \cite{linux_mem_interfaces}.
-
-\subsubsection{Physical Memory}
-As an architecture-independent kernel, Linux abstracts hardware details. Physical memory is partitioned into zones, each serving a distinct purpose \cite{linux_mem_phys}:
-
-\begin{itemize}
+Blocking - Wait Queues}
     \item \texttt{ZONE\_DMA} -- Memory suitable for DMA (Direct Memory Access) by devices that cannot access the full addressable range.
     \item \texttt{ZONE\_NORMAL} -- Standard memory directly accessible by the kernel.
     \item \texttt{ZONE\_MOVABLE} -- Similar to \texttt{ZONE\_NORMAL}, but the content of pages in this zone can be migrated to different physical frames (preserving virtual address).
