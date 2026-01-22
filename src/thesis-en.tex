@@ -1504,7 +1504,7 @@ This abstraction allows specific storage drivers to transparently fulfill reques
 
 \draw[arrow] (fs) -- (bdev);
 \draw[arrow] (bdev.south) -- (ram.north);
-\draw[arro{Schedulerw] (bdev.south) -- (disk.north);
+\draw[arrow] (bdev.south) -- (disk.north);
 \draw[arrow] (bdev.south) -- (net.north);
 
 \end{tikzpicture}
@@ -1686,7 +1686,7 @@ A specific scheduling algorithm must be selected based on the optimization goals
 
 No single scheduler can be ideal in all metrics; therefore, a balanced solution suitable for the system's specific purpose is required. 
 
-Furthermore, task prioritization is essential. For instance, audio or block device drivers require immediate execution to ensure data consistency and user experience. To address this, hybrid policies (such as \texttt{SCHED_FIFO} in Linux \ref{subsec:linux-scheduler}) allow critical tasks to operate in a cooperative manner, yielding only when necessary, while other tasks remain preemptible.
+Furthermore, task prioritization is essential. For instance, audio or block device drivers require immediate execution to ensure data consistency and user experience. To address this, hybrid policies (such as \texttt{SCHED\_FIFO} in Linux \ref{subsec:linux-scheduler}) allow critical tasks to operate in a cooperative manner, yielding only when necessary, while other tasks remain preemptible.
 
 To illustrate these concepts, we present the simplest form of a preemptive scheduler: a periodic, single-core Round Robin scheduler. This algorithm maintains a single queue of executable tasks. New tasks are appended to the tail of the queue, while the scheduler selects the task at the head for execution. At fixed intervals (e.g., every 10ms), the running task is interrupted, placed back at the tail of the queue, and the next task is dequeued. The following pseudo-code demonstrates this logic:
 
@@ -1734,10 +1734,25 @@ Regardless of the scheduling algorithm employed, a mechanism is required to bloc
 To distinguish between runnable and waiting threads, a specific \texttt{BLOCKED} state is assigned to tasks residing in a wait queue. This distinction simplifies resource management and structure cleanup. Intrusive data structures (Section \ref{subsec:intrusive}) are particularly advantageous in this context due to their efficient removal properties. The entity owning the wait queue is responsible for waking threads (transitioning them from the wait queue back to the scheduler's run queue) when the event occurs. Conversely, the task itself initiates the blocking process when it reaches a synchronization point.
 
 \subsubsection{Sleep}
-TODO: JAKUB
+
+Finially to add sleep we need to add two functionalities to the code: putting the task into the sleep and waking up the task. First is pretty straightforward, similar to blocking we change the location of thread from scheduler queues to sleeping data structure and change the state. In the other the situation is slightly more complicated as we first need to find a proper place where tasks are woken up. In case of cooperative shceduling it simply may be inside function picking next task from the scheduler queues. In other cases we have to manage timing framework and wake up threads carefully to not introduce additional latencies. 
+
+For ticking kernels sleep with granularity around the tick is pretty straightforward, waking up threads each time we have interrupt is sufficient. Very simple solutions exists for managing this type of sleeping tasks \cite{linux_timer_wheel}.
+
+For other case where we want to schedule interrupts dynamically the situation is quite complicated. It requires proper sorting of the tasks (creation of timeline), that means some priority queues will be involved here. For nanosleep if the tasks want to sleep for really small value, for example smaller than time needed to interact with the timing module or timer reconfiguration time it might be worth to introduce busy waiting instead. Designing such framework timing constraits must be taken in account, like time spent on the timer configuration or if the time left is not smaller than the reconfiguration time. It might be really tricky and difficult as in some cases we will be fighting with time. Additionally each time we reprogram the timer we should wake up tasks that previous timer should woke up if the value is small enough.
 
 \subsection{User Space}
-TODO: JAKUB
+
+Finally we have all components to introduce the possibility to run unprivileged tasks create by the typical user. Briefly to enable running user space programs we still need  couple of things:
+
+\begin{itemize}
+    \item syscalls -- communication with the kernel. Way to escalate the privilege
+    \item user space libraries -- porting the libraries for the kernel
+    \item loading the executable from fs -- the kernel must understand some executable format and properly load the code to the memory
+    \item proper memory protection -- separate address spaces and privilege flags setup
+    \item conversion kernel -> user space -- kernel space bootstrap code at the end should jump to user space and start executing users code
+    \item user space compilation -- extending the compiler and enable compilation targeting our os
+\end{itemize}
 
 \subsubsection{Syscalls}
 \label{subsubsec:syscalls}
@@ -2047,7 +2062,13 @@ This algorithm is becoming the new standard for Linux scheduling, addressing sho
 
 \subsection{Memory Management}
 \label{subsec:linux_mem}
-Blocking - Wait Queues}
+
+Linux features centralized memory management with various APIs, including \texttt{kmalloc}, \texttt{kzalloc}, \texttt{vmalloc}, and \texttt{kvmalloc} \cite{linux_mem_interfaces}.
+
+\subsubsection{Physical Memory}
+As an architecture-independent kernel, Linux abstracts hardware details. Physical memory is partitioned into zones, each serving a distinct purpose \cite{linux_mem_phys}:
+
+\begin{itemize}
     \item \texttt{ZONE\_DMA} -- Memory suitable for DMA (Direct Memory Access) by devices that cannot access the full addressable range.
     \item \texttt{ZONE\_NORMAL} -- Standard memory directly accessible by the kernel.
     \item \texttt{ZONE\_MOVABLE} -- Similar to \texttt{ZONE\_NORMAL}, but the content of pages in this zone can be migrated to different physical frames (preserving virtual address).
