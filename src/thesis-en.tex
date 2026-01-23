@@ -1,4 +1,4 @@
-\documentclass[a4paper,9pt,twoside]{report}
+\documentclass[a4paper,10pt,twoside]{report}
 
 % --------   PREAMBLE PART ----------
 
@@ -13,6 +13,7 @@
 \usepackage{amsmath, amsfonts, amsthm, latexsym}
 
 \usepackage[final]{pdfpages}
+\usepackage{csquotes}
 \usepackage[backend=biber, style=numeric, sorting=none]{biblatex}
 \addbibresource{references.bib}
 
@@ -290,7 +291,7 @@
 \title
 \end{center}
 
-TODO
+TODO: KRYCZKA
 
 \end{abstract}
 }
@@ -334,47 +335,61 @@ TODO
 \markboth{}{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
 
-\section{Scope of the Thesis} 
-TODO: JAKUB
+\section{Motivation}
 
-\section{Limitations and Assumptions}
-TODO: JAKUB
-TODO: KRYCZKA, ADAM, JAKUB
+The creation of a functional operating system kernel stands as one of the most complex tasks in software engineering. It encompasses a wide range of computer science disciplines and necessitates a rigorous design approach. While the primary focus of this thesis is on the practical design and implementation of a solution rather than theoretical research, it represents a significant challenge for engineers with three years of professional experience, offering a unique opportunity to both acquire new knowledge and refine existing skills.
 
-\subsection{Minimal requirements}
-\begin{itemize}
-  \item avx
-  \item osxsave
-  \item swapgs
-  \item invariant tsc
-  \item HPET
-  \item APIC
-  \item acpi
-  \item 64bit LAPIC
-  \item mmu
-  \item genreal purpose os
+Firstly, the scale of the project necessitates strict adherence to engineering procedures, coding standards, and established design patterns to ensure the system's viability. Engineering proficiency will be rigorously tested, as development takes place in a freestanding environment devoid of standard debugging utilities or established external libraries. The system relies entirely on self-implemented solutions. Consequently, a failure in any foundational component can cascade through the entire system. Through this process, we will understand low-level hardware interaction, device abstraction, scheduling, memory management and the specific challenges inherent to operating system development. Ultimately, from the perspective of professional software engineering, gaining a deep understanding of internal kernel mechanisms, multithreading, and scheduling will significantly enhance our proficiency as programmers.
+
+\section{Scope of the Thesis}
+
+The primary objective of this thesis, as initially defined, was to implement a functional scheduler capable of executing tasks within isolated address spaces. Specifically, the project aimed to achieve the following technical goals:
+
+\begin{itemize} 
+    \item Bootloading -- the ability to start the system on bare metal hardware. 
+    \item Virtual memory support -- implementation of memory management to allocate isolated space for tasks. 
+    \item Preemptive scheduling -- the ability to interrupt a running task to switch context. 
+    \item Implementation of a basic scheduling algorithm -- specifically Round Robin. 
+    \item x86\_64 Architecture -- targeting the AMD64 archietcture only. 
+    \item General-purpose scheduling -- designing a scheduler suitable for generic workloads. 
+    \item Monolithic design -- implementing the kernel within a single address space. 
 \end{itemize}
 
-\subsection{Known Limitations}
-\label{subsec:limitations}
+At the inception of the project, the specific requirements were not rigidly defined, as the complexity and effort required to complete the implementation were initially uncertain.
 
-\begin{itemize}
-  \item max process name = 128
-  \item max processes = 4096
-  \item max threads = 8192
+\subsection{Functional Requirements}
+\label{subsec:functional}
+
+Based on the initial scope and architectural assumptions, the following functional requirements were derived:
+
+\begin{itemize} 
+    \item \textbf{x86\_64 Long Mode Transition} -- The kernel must successfully transition the CPU from 32-bit Protected Mode to 64-bit Long Mode, including the setup of a 64-bit Global Descriptor Table (GDT) and enabling 4-level paging.
+    \item \textbf{Physical Memory Allocation} -- The kernel must implement a Physical Memory Manager (PMM) to track available RAM and provide a mechanism for allocating and freeing physical page frames based on the system memory map.
+    \item \textbf{Virtual Memory Mapping} -- The system must implement a Virtual Memory Manager (VMM) and an MMU abstraction to map virtual addresses to physical frames, allowing for the creation of isolated address spaces.
+    \item \textbf{Preemptive Scheduling} -- The kernel must provide a mechanism to forcibly interrupt a running task and switch context to another, ensuring that no single task can monopolize the CPU.
+    \item \textbf{Context Management} -- The system must be able to create, save, and restore execution contexts (thread state including registers and stacks) to support multitasking.
+    \item \textbf{Interrupt and Exception Handling} -- The kernel must configure the Interrupt Descriptor Table (IDT) and provide handlers for hardware interrupts (to drive the scheduler) and CPU exceptions (to ensure system stability).
 \end{itemize}
 
-Functionalities:
-\begin{itemize}
-  \item aaa
-\end{itemize}
+\section{Work Division -- Code}
 
-\section{Achieved Functionalities} 
-TODO: JAKUB
-\section{Work Division -- Code} 
-TODO: KRYCZKA, ADAM, JAKUB
+The division of labor regarding the source code was determined by the distinct and complex subsystems inherent to operating system development. Responsibilities were allocated according to specific technical domains:
+
+\subsubsection{Jakub Lisowski}
+
+Responsible for scheduling, process and thread lifecycle management, context switching, scheduling algorithms, thread sleeping mechanisms, interrupts and timer devices.
+
+\subsubsection{Adam Ogieniewski} TODO: ADAM CHECK
+
+Responsible for storage and filesystem management (including the abstraction layer and implementation of the FAT filesystem family), the standard C library (libc), the system interface (syscalls and libc extensions), and hardware interaction via ACPI and other drivers.
+
+\subsubsection{Łukasz Kryczka} TODO: KRYCZKA CHECK
+
+Responsible for virtual memory, physical memory management, allocation strategies, memory initialization, and the management of address spaces.
+
 \section{Work Division -- Thesis}
-TODO: KRYCZKA, ADAM, JAKUB
+
+The division of work regarding the written thesis mirrors the distribution of coding responsibilities. The content was authored based on each contributor's specific area of implementation, technical expertise, and role within the project. The overall contribution effort was distributed evenly among the authors.
 
 % ==================================================================
 
@@ -448,11 +463,73 @@ In addition to general optimization settings, architecture-specific constraints 
 TODO: KRYCZKA
 
 \section{General Design Considerations}
-TODO: JAKUB
+
+Developing an operating system kernel is a complex software engineering challenge involving massive codebases and strict performance requirements. To manage this complexity and ensure code quality, it is advisable to leverage established architectural patterns and high-quality design solutions used in systems programming. This section discusses general design concepts that are beneficial in kernel development.
 
 \subsection{Intrusive Data Structures}
 \label{subsec:intrusive}
-TODO: JAKUB
+
+Kernel development frequently involves managing collections of objects, such as linked lists of threads. Standard library containers (e.g., \texttt{std::list}) typically manage these collections by allocating a separate node structure for every element to hold the data and the navigation pointers. In a kernel environment, where objects are inserted and removed from lists with high frequency, the overhead of repeated allocation and deallocation is often unacceptable due to performance costs and memory fragmentation.
+
+A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
+
+By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is illustrated below:
+\begin{lstlisting}[caption={Intrusive Data Structures Example}, label={lst:intrusiveNodesExample}]
+template<class T>
+struct ListNode {
+    T* next;
+    T* prev;
+};
+
+struct Obj: ListNode<Obj> {
+    const char* name;
+};
+
+template<class T>
+struct LinkedList {
+    void PushFront(T* item) {
+        T* first = head->next;
+        
+        first->prev = item;
+
+        item->next = first;
+        item->prev = nullptr;
+
+        head->next = item;
+    }
+
+    // Other operations...
+
+private:
+    T sentinel{};
+
+    T* head = &sentinel;
+    T* tail = &sentinel;
+};
+
+void RemoveFromLinkedList(T* item) {
+    if (item->next == nullptr) {
+        return;
+    }
+
+    // Valid, because of the sentinel
+    item->prev->next = item->next;
+    item->next->prev = item->prev;
+
+    // Assure proper unassigned state
+    item->prev = item->next = nullptr;
+}
+
+\end{lstlisting}
+
+The usage of intrusive data structures offers multiple benefits critical for systems programming:
+\begin{itemize}
+    \item \textbf{No dynamic allocation} -- Insertion and removal operations do not require memory allocation or deallocation, eliminating heap fragmentation and allocation latency.
+    \item \textbf{Improved memory access} -- The object is accessed directly, avoiding the pointer indirection required by external node structures.
+    \item \textbf{O(1) Verification} -- Determining whether an object belongs to a collection can be performed in constant time by inspecting the object's internal state.
+    \item \textbf{O(1) Removal} -- An object can be removed from a doubly linked list in constant time, given only a pointer to the object itself.
+    \item \textbf{Independent Removal} -- Removal operations do not require access to the double linked list head or the container object.
+\end{itemize}
 
 \subsection{Ref-counting}
 TODO: ADAM
@@ -460,10 +537,7 @@ TODO: ADAM
 \subsection{Archtiecture Abstraction}
 TODO: KRYCZKA
 
-\section{Target Environment}
-TODO: JAKUB
-
-\subsection{Implementation of the Standard Library}
+\section{Implementation of the Standard Library}
 \label{subsec:theory_std}
 
 A C standard library, commonly referred to as \texttt{libc}, is a collection of pre-written code that provides a set of fundamental functionalities to userspace applications. These functionalities include, but are not limited to, input/output operations, string manipulation, memory management, mathematical computations, and system call wrappers. The standard library serves as an intermediary layer between user applications and the underlying operating system, abstracting away low-level details and providing a consistent programming interface.
@@ -576,17 +650,17 @@ The overall control flow of the C runtime initialization and termination process
 
 Failure to link these components in the correct order results in an incomplete runtime environment, in which global constructors are not executed and program behavior becomes undefined --- particularly for C++ applications or code relying on constructor or destructor attributes.
 
-\subsection{Bootloader}
+\section{Bootloader}
 \label{subsec:theory_bootloader}
 
 The process of bringing a computer from a powered-off state to a fully functional operating system is governed by a rigid chain of physical and logical constraints. At the hardware level, the Central Processing Unit (CPU) functions as a complex state machine. Upon the application of power or a reset signal, the CPU resets its internal registers to default values and sets the Instruction Pointer to a specific, hardcoded physical address known as the \textit{Reset Vector} \cite{IntelManual-Reset}.
 
-\subsubsection{The Memory Paradox and Storage}
+\subsection{The Memory Paradox and Storage}
 A fundamental challenge in this sequence is the source of the initial instructions. The standard Random Access Memory (RAM), which serves as the primary workspace for modern operating systems, is volatile. It requires active electrical flow to maintain its state. When the system is powered off, the state is lost. Upon power-up, the memory cells contain random garbage data. Consequently, the CPU cannot fetch valid instructions from standard RAM immediately after a reset.
 
 To resolve this, hardware architects map the Reset Vector address to a non-volatile memory region, typically Flash Memory or Read-Only Memory (ROM), which retains data without power.
 
-\subsubsection{Embedded vs. Complex Architectures}
+\subsection{Embedded vs. Complex Architectures}
 In simple embedded architectures (e.g., microcontrollers used in automotive braking systems or household appliances), the entire application code is often stored in this non-volatile memory. The memory controller maps this storage directly into the CPU's addressable space. This technique, known as \textbf{Execute In Place (XIP)}, allows the CPU to fetch and execute the developer's code from the very first clock cycle \cite{ARM-CortexM4-Generic-User-Guide}. The developer "owns" the machine from the first nanosecond.
 
 In contrast, more complex architectures (such as ARM-based smartphones or single-board computers like the Raspberry Pi) often store the main operating system on external, complex storage media like SD cards or eMMC chips. The CPU cannot simply memory-map an SD card. It requires a sophisticated software driver to communicate with the storage controller. To bridge this gap, manufacturers embed a tiny, immutable piece of software called the \textbf{BootROM} directly into the silicon. This code initializes the minimal required hardware (often internal SRAM) and loads a secondary bootloader from the external storage into that SRAM, which in turn loads the main software.
@@ -691,7 +765,7 @@ On modern "heavy" machines, such as x86-64 workstations, the initialization proc
 
 To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution.
 
-\subsubsection{The Chain of Trust and Abstraction}
+\subsection{The Chain of Trust and Abstraction}
 \label{subsubsec:chain_of_trust_and_abstraction}
 By the time a modern Operating System kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for defining the interface between the hardware and the OS is the \textbf{System Firmware} \cite{UEFI-Base-Spec, UEFI-PI-Spec}.
 
@@ -728,7 +802,7 @@ To solve this, a \textbf{Third-Party Bootloader} is often utilized. This program
 \label{fig:boot_chain}
 \end{figure}
 
-\subsubsection{The OS-Level Trampoline}
+\subsection{The OS-Level Trampoline}
 Even with a standardized bootloader, the kernel cannot assume full control immediately. A generic bootloader cannot know the specific internal requirements of the OS. For instance:
 \begin{itemize}
     \item The kernel may typically require memory to be mapped to a specific virtual address range (e.g., the higher half).
@@ -1754,7 +1828,7 @@ With the foundational kernel components established, the development process tra
     \item \textbf{User Space Libraries} -- The porting or implementation of standard libraries (such as \texttt{libc}) to run on top of the kernel interface.
     \item \textbf{Executable Loading} -- A loader capable of parsing a standard executable format (e.g., ELF) and correctly loading the code into memory.
     \item \textbf{Memory Protection} -- The enforcement of isolation through separate address spaces and the configuration of appropriate page-level privilege flags.
-    \item \textbf{Context Transition} -- A bootstrapping mechanism within the kernel to finalize initialization and jump to user space to begin executing user code.
+    \item \textbf{Userspace Transition} -- A bootstrapping mechanism within the kernel to finalize initialization and jump to user space to begin executing user code - strictly depends on architecture.
     \item \textbf{Compilation Toolchain} -- The extension and configuration of the compiler to support targeting the specific operating system.
 \end{itemize}
 
@@ -1836,9 +1910,6 @@ In addition to the ISO C standard, many operating systems implement parts of the
 Custom operating systems frequently introduce features that fall outside the scope of ISO C or POSIX, such as direct frame buffer access, specialized inter-process communication mechanisms, or hardware-specific controls.
 
 It is considered best practice to place operating system-specific extensions within a clearly separated namespace, for example under a dedicated directory such as \texttt{<alkos/...>}. This approach enables applications developed specifically for the target operating system to access unique kernel features.
-
-\subsection{Conversion to User Space}
-TODO: JAKUB
 
 \section{Host Environment -- Working OS}
 
@@ -2256,7 +2327,8 @@ System calls are dispatched to specialized servers according to their functional
 The kernel acts solely as a transport mechanism and remains agnostic to the semantics of the system call. After processing a request, the server returns a reply message to the calling process, thereby unblocking it and delivering the result.
 
 \chapter{Our Implementation} 
-TODO: JAKUB
+
+This chapter presents the implementation details of the AlkOS operating system. It focuses on the core subsystems and architectural decisions that form the foundation of the kernel. The specific mechanisms described herein correspond directly to the source code attached to this thesis.
 
 \section{Bootloader}
 
@@ -3748,7 +3820,7 @@ Before initializing the scheduling module, the operating system creates three es
 
 \subsection{Intrusive Data Structures}
 
-Since threads frequently migrate between different linked lists and data structures, allocating and freeing list nodes for every operation introduces significant overhead. To address this, the system employs intrusive data structures (Listing~\ref{lst:intrusiveNodes}). Instead of allocating a node that contains a pointer to the object, the node structure is embedded directly within the object itself. Operations on the lists are performed by simply modifying the fields of the object.
+Since threads frequently migrate between different linked lists and data structures, allocating and freeing list nodes for every operation introduces significant overhead. To address this, the system employs intrusive data structures \ref{subsec:intrusive}. Instead of allocating a node that contains a pointer to the object, the node structure is embedded directly within the object itself. Operations on the lists are performed by simply modifying the fields of the object.
 
 \begin{lstlisting}[caption={Intrusive Nodes}, label={lst:intrusiveNodes}]
 template <class T, int kIntrusiveLevel>
@@ -3782,15 +3854,6 @@ struct IntrusiveRbNode {
     KeyT key;
 };
 \end{lstlisting}
-
-The Thread data structure \ref{lst:threadStruct} demonstrates the usage of such nodes. This approach offers multiple benefits, including:
-\begin{itemize}
-    \item No dynamic allocation or deallocation during insert or pop operations.
-    \item Improved memory access patterns, the object is accessed directly rather than via a pointer from a separate node.
-    \item Verification of whether an object belongs to a list in \textbf{O(1)} time, given only the object itself.
-    \item Removal of the object from the list in \textbf{O(1)} time.
-    \item Removal of the object from the list without requiring access to the list head structure.
-\end{itemize}
 
 \subsection{Meta-Scheduler}
 
@@ -3878,10 +3941,7 @@ To provide high-precision sleeping, the system relies on one-shot, precise timin
 
 % ==================================================================
 
-\chapter{Results}
-TODO: JAKUB
-
-\section{User's Manual}
+\chapter{User's Manual}
 
 This section describes the usage of the AlkOS build environment and documents the public interfaces available to userspace applications. It outlines the build and execution workflow, the integration of user programs, and the system call interface provided by the operating system.
 
@@ -4369,10 +4429,91 @@ To support loading data from the file system, we expanded the \texttt{stdio} imp
 
 By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
-\chapter{Future Work}
-TODO: KRYCZKA, ADAM, JAKUB
+\chapter{Results}
 
-\chapter{Conclusion}
+This chapter summarizes the work accomplished and the assumptions made during the development process. Furthermore, it provides a critical analysis of the implemented solution.
+
+\section{Achieved Functionalities}
+
+We successfully fulfilled all functional requirements defined in Section \ref{subsec:functional}, in addition to implementing several supplementary features. The following list details the additional functionalities achieved:
+
+\begin{itemize} 
+    \item File system abstraction layer 
+    \item FAT filesystem implementation 
+    \item Hardware abstraction layer 
+    \item Userspace separation 
+    \item Userspace shell 
+    \item Chain loading
+    \item ELF64 executable loading 
+    \item Porting of external programs (Doom) 
+    \item Thread sleeping mechanism 
+    \item Wait queues implementation 
+    \item System call mechanism 
+    \item Extensive system call interface 
+    \item Tickless kernel architecture 
+    \item Thread termination capabilities 
+    \item Thread creation 
+    \item Process creation 
+    \item Graphical output support 
+    \item Basic window management 
+    \item Page fault handling (lazy virtualization) 
+\end{itemize}
+
+\section{Limitations and Assumptions}
+
+TODO: KRYCZKA DODAJ SWOJE
+TODO: ADAM DODAJ SWOJE
+
+Developing an operating system kernel is an inherently complex task, further complicated by the intricacies of hardware architectures. To maintain a steady development pace and avoid getting stalled by exhaustive driver implementation or edge-case handling, several strategic assumptions were made. Consequently, for AlkOS to function correctly, the underlying hardware must meet the following requirements:
+
+\begin{itemize} 
+    \item \textbf{64-bit Architecture} -- The system supports only 64-bit instructions. Compatibility libraries for 32-bit applications are not provided. 
+    \item \textbf{AVX2 Support} -- The system requires AVX2 support. Implementation was restricted to this specific instruction set to avoid the complexity of supporting every possible vector extension. 
+    \item \textbf{SWAPGS Instruction} -- The architecture must support the \texttt{swapgs} instruction, which is utilized to efficiently swap the GS register base address for Core Local Storage management. 
+    \item \textbf{Invariant TSC} -- To avoid implementing a driver for every possible AMD64 timer, the system relies on the Time Stamp Counter (TSC) as the primary clock source. The hardware must support an invariant TSC to ensure timing consistency regardless of frequency scaling.
+    \item \textbf{HPET} -- The High Precision Event Timer (HPET) must be available, as it serves as the reference source for calibrating both the TSC and the LAPIC Timer. 
+    \item \textbf{APIC} -- Although SMP is not fully enabled, the system architecture was designed with SMP compatibility in mind, necessitating the presence of an Advanced Programmable Interrupt Controller (APIC). 
+    \item \textbf{ACPI} -- It is assumed that device discovery is performed via the Advanced Configuration and Power Interface (ACPI), a standard supported by the majority of modern platforms. 
+    \item \textbf{PS/2 Keyboard} -- Input is handled via a PS/2 keyboard controller. A USB stack was not implemented due to the significant development effort required. 
+\end{itemize}
+
+\subsection{Known Limitations}
+\label{subsec:limitations}
+
+TODO: KRYCZKA DODAJ SWOJE
+TODO: ADAM DODAJ SWOJE
+
+The following section outlines the internal constraints established during development. These constants are hardcoded within the codebase, and multiple system mechanisms rely on them for correct operation.
+
+\begin{itemize} 
+    \item \textbf{Max Process Name Size} -- 128 bytes -- Defined by the static storage size within the process structure. 
+    \item \textbf{Max Processes} -- 4096 -- This limit simplifies indexing and memory management. Exceeding this number would likely result in memory exhaustion given current constraints.
+    \item \textbf{Max Threads} -- 8192 -- Similar to processes, this limit simplifies data structures and resource allocation. 
+    \item \textbf{Kernel Stack Size} -- 64 KB -- The kernel stack is allocated per thread. Keeping this size minimal prevents excessive memory consumption. 
+    \item \textbf{User Stack Size} -- 8 MB -- A large stack is provided for user-space threads to facilitate the smooth execution of standard applications. 
+    \item \textbf{User Space Address Range} -- \texttt{0x0 - 0x00007FFFFFFFFFFF}. 
+    \item \textbf{Kernel Space Address Range} -- \texttt{0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF}. 
+    \item \textbf{Max Cores} -- 512 -- This limit exceeds the core count of most current processors and simplifies various internal data structures. 
+\end{itemize}
+
+\section{Future Work}
+
+TODO: KRYCZKA DODAJ SWOJE
+TODO: ADAM DODAJ SWOJE
+
+The current solution can be extended and improved in several areas: 
+\begin{itemize} 
+    \item \textbf{SMP Support} -- As most components were designed with multicore execution in mind, implementing SMP support is a feasible next step. This would involve reinforcing locking schemes, implementing core boot-up sequences, inter-core communication, and a scheduler load balancer. 
+    \item \textbf{Relocatable Code and Dynamic Libraries} -- Currently, the system supports only statically linked binaries. Future work could include a dynamic linker to support shared libraries. 
+    \item \textbf{General Driver Interface} -- Establishing a standardized driver model to facilitate the easy addition of new devices. 
+    \item \textbf{Refining Scheduling Algorithms} -- Improving the scheduler to enhance fairness and reduce latency. 
+    \item \textbf{Completing Libc Implementation} -- Extending the standard library to support a wider range of third-party applications. 
+    \item \textbf{Physical Storage Drivers} -- Replacing the RAM disk with drivers for physical storage media (e.g., AHCI/NVMe). 
+    \item \textbf{Task Synchronization Primitives} -- Implementing full support for mutexes, semaphores, and condition variables.
+    \item \textbf{Networking Stack} -- Adding a network layer to support TCP/IP communication. 
+\end{itemize}
+
+\section{Conclusion}
 TODO: JAKUB
 
 % ----------- BIBLIOGRAPHY ---------
@@ -4381,8 +4522,6 @@ TODO: JAKUB
 
 \pagenumbering{gobble}
 \thispagestyle{empty}
-
-
 
 % --------- LIST OF SYMBOLS AND ABBREVIATIONS ------
 \chapter*{List of symbols and abbreviations}
@@ -4396,6 +4535,7 @@ APIC & Advanced Programmable Interrupt Controller \\
 ASLR & Address Space Layout Randomization \\
 BSS & Block Starting Symbol \\
 CFS & Completly Fair Scheduler \\
+CLS & Core Local Storage \\
 COW & Copy On Write \\
 CRTP & Curiously Recurring Template Pattern \\
 DMA & Direct Memory Access \\
@@ -4439,7 +4579,6 @@ USB & Universal Serial Bus \\
 VFS & Virtual File System \\
 VMM & Virtual Memory Manager \\
 WAD & Where's All the Data \\
-CLS & Core Local Storage \\
 \end{supertabular}
 \\
 \thispagestyle{empty}
