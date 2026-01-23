@@ -335,7 +335,13 @@ TODO: KRYCZKA
 \markboth{}{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
 
-\\section{Scope of the Thesis}
+\section{Motivation}
+
+The creation of a functional operating system kernel stands as one of the most complex tasks in software engineering. It encompasses a wide range of computer science disciplines and necessitates a rigorous design approach. While the primary focus of this thesis is on the practical design and implementation of a solution rather than theoretical research, it represents a significant challenge for engineers with three years of professional experience, offering a unique opportunity to both acquire new knowledge and refine existing skills.
+
+Firstly, the scale of the project necessitates strict adherence to engineering procedures, coding standards, and established design patterns to ensure the system's viability. Engineering proficiency will be rigorously tested, as development takes place in a freestanding environment devoid of standard debugging utilities or established external libraries. The system relies entirely on self-implemented solutions. Consequently, a failure in any foundational component can cascade through the entire system. Through this process, we will understand low-level hardware interaction, device abstraction, scheduling, memory management and the specific challenges inherent to operating system development. Ultimately, from the perspective of professional software engineering, gaining a deep understanding of internal kernel mechanisms, multithreading, and scheduling will significantly enhance our proficiency as programmers.
+
+\section{Scope of the Thesis}
 
 The primary objective of this thesis, as initially defined, was to implement a functional scheduler capable of executing tasks within isolated address spaces. Specifically, the project aimed to achieve the following technical goals:
 
@@ -344,7 +350,7 @@ The primary objective of this thesis, as initially defined, was to implement a f
     \item Virtual memory support -- implementation of memory management to allocate isolated space for tasks. 
     \item Preemptive scheduling -- the ability to interrupt a running task to switch context. 
     \item Implementation of a basic scheduling algorithm -- specifically Round Robin. 
-    \item x86_64 Architecture -- targeting the AMD64 archietcture only. 
+    \item x86\_64 Architecture -- targeting the AMD64 archietcture only. 
     \item General-purpose scheduling -- designing a scheduler suitable for generic workloads. 
     \item Monolithic design -- implementing the kernel within a single address space. 
 \end{itemize}
@@ -365,7 +371,7 @@ The division of labor regarding the source code was determined by the distinct a
 
 \subsubsection{Jakub Lisowski}
 
-Responsible for scheduling, process and thread lifecycle management, context switching, scheduling algorithms, thread sleeping mechanisms, and timer devices.
+Responsible for scheduling, process and thread lifecycle management, context switching, scheduling algorithms, thread sleeping mechanisms, interrupts and timer devices.
 
 \subsubsection{Adam Ogieniewski} TODO: ADAM CHECK
 
