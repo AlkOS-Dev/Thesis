@@ -4431,29 +4431,32 @@ By addressing these requirements, the Doom port served not only as a graphical d
 
 \chapter{Results}
 
-In this chapter we will sum up our work what we have done and what assumptions we made along the way. Also we will critically think about our solution.
+This chapter summarizes the work accomplished and the assumptions made during the development process. Furthermore, it provides a critical analysis of the implemented solution.
 
-\section{Achieved Functionalities} 
+\section{Achieved Functionalities}
 
-We archieved everything we assumed at the beginning \ref{subsec:functional} and even much more. Below we list additional functionalities which was implemented:
+We successfully fulfilled all functional requirements defined in Section \ref{subsec:functional}, in addition to implementing several supplementary features. The following list details the additional functionalities achieved:
 
-\begin{itemize}
-    \item File system abstraction
-    \item FAT implementation
-    \item Userspace separation
-    \item ELF64 loading
-    \item porting external programs - doom
-    \item Sleeping mechanism
-    \item Wait queues
-    \item syscall mechanism
-    \item rich syscalls mechanisms
-    \item tickless kernel
-    \item thread killing
-    \item thread spawning
-    \item thread/process spawning
-    \item graphics support
-    \item simple window management
-    \item page fault handling - lazy virtualization
+\begin{itemize} 
+    \item File system abstraction layer 
+    \item FAT filesystem implementation 
+    \item Hardware abstraction layer 
+    \item Userspace separation 
+    \item Userspace shell 
+    \item Chain loading
+    \item ELF64 executable loading 
+    \item Porting of external programs (Doom) 
+    \item Thread sleeping mechanism 
+    \item Wait queues implementation 
+    \item System call mechanism 
+    \item Extensive system call interface 
+    \item Tickless kernel architecture 
+    \item Thread termination capabilities 
+    \item Thread creation 
+    \item Process creation 
+    \item Graphical output support 
+    \item Basic window management 
+    \item Page fault handling (lazy virtualization) 
 \end{itemize}
 
 \section{Limitations and Assumptions}
@@ -4461,17 +4464,17 @@ We archieved everything we assumed at the beginning \ref{subsec:functional} and 
 TODO: KRYCZKA DODAJ SWOJE
 TODO: ADAM DODAJ SWOJE
 
-As writing a kernel is quite complex task and architecture technical debt does not simplify the situation we made couple assumpation along the way to not stuck on implemeting all drivers and archtiecture edge cases. To run properly ALKOS the system must have:
+Developing an operating system kernel is an inherently complex task, further complicated by the intricacies of hardware architectures. To maintain a steady development pace and avoid getting stalled by exhaustive driver implementation or edge-case handling, several strategic assumptions were made. Consequently, for AlkOS to function correctly, the underlying hardware must meet the following requirements:
 
-\begin{itemize}
-\item 64bit -- we support only 64bit instructions and we do not provide 32bit libraries
-\item AVX2 -- we didnt wanted to implement each possible vector extensions or floating point instruction sets. The system must support avx2
-\item swapgs -- we use gs register for core local storage swapgs allows to make changing the segment base addres quicker. 
-\item invariant tsc -- to not implement all possible amd64 drivers we use TSC for base clock device, invariant must be support on the system
-\item HPET -- additionally hpet timer must be avaialable as is used as only source of truth to calibrate both TSC and LAPIC Timer
-\item APIC -- in reality we do not support SMP but we implemented everything with assumption we will so we assumed APIC is available
-\item acpi -- we assume the device discovery is perofrmed by ACPI, is probably supported by most devices this days
-\item PS2 keyboard -- we assume the system has PS port as implementing USB driver would take a lot of time
+\begin{itemize} 
+    \item \textbf{64-bit Architecture} -- The system supports only 64-bit instructions. Compatibility libraries for 32-bit applications are not provided. 
+    \item \textbf{AVX2 Support} -- The system requires AVX2 support. Implementation was restricted to this specific instruction set to avoid the complexity of supporting every possible vector extension. 
+    \item \textbf{SWAPGS Instruction} -- The architecture must support the \texttt{swapgs} instruction, which is utilized to efficiently swap the GS register base address for Core Local Storage management. 
+    \item \textbf{Invariant TSC} -- To avoid implementing a driver for every possible AMD64 timer, the system relies on the Time Stamp Counter (TSC) as the primary clock source. The hardware must support an invariant TSC to ensure timing consistency regardless of frequency scaling.
+    \item \textbf{HPET} -- The High Precision Event Timer (HPET) must be available, as it serves as the reference source for calibrating both the TSC and the LAPIC Timer. 
+    \item \textbf{APIC} -- Although SMP is not fully enabled, the system architecture was designed with SMP compatibility in mind, necessitating the presence of an Advanced Programmable Interrupt Controller (APIC). 
+    \item \textbf{ACPI} -- It is assumed that device discovery is performed via the Advanced Configuration and Power Interface (ACPI), a standard supported by the majority of modern platforms. 
+    \item \textbf{PS/2 Keyboard} -- Input is handled via a PS/2 keyboard controller. A USB stack was not implemented due to the significant development effort required. 
 \end{itemize}
 
 \subsection{Known Limitations}
@@ -4480,17 +4483,17 @@ As writing a kernel is quite complex task and architecture technical debt does n
 TODO: KRYCZKA DODAJ SWOJE
 TODO: ADAM DODAJ SWOJE
 
-Here we list all limitations we assumed duruing the development. These numbers are strictly used inside the codebase and multiple mechanisms depends on them.
+The following section outlines the internal constraints established during development. These constants are hardcoded within the codebase, and multiple system mechanisms rely on them for correct operation.
 
-\begin{itemize}
-  \item Max Process Name Size -- 128 -- static storage inside the struct.
-  \item Max Processes -- 4096 -- simplifies indexing and memory management, Additionally above we would probably run out of memory anyway
-  \item Max Threads -- 8192 -- simplifies indexing and memory management, Additionally above we would probably run out of memory anyway
-  \item Kernel Stack Size -- 64 KB -- kernel should not use huge amount of memory anyway, as kernel stack is allocated per therad, bigger size would increase the memory usage significantly
-  \item User Stack Size -- 8MB -- To allow smooth execution of user space programs, we provide big stack for user space theeads.
-  \item User Space Address range -- 0x0 - 0x00007FFFFFFFFFFF -- ...
-  \item Kernel Space addres range -- 0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF -- ...
-  \item Max Cores -- 512 -- At current stage there are not so many processor with bigger number of cores, simplifies various data structures
+\begin{itemize} 
+    \item \textbf{Max Process Name Size} -- 128 bytes -- Defined by the static storage size within the process structure. 
+    \item \textbf{Max Processes} -- 4096 -- This limit simplifies indexing and memory management. Exceeding this number would likely result in memory exhaustion given current constraints.
+    \item \textbf{Max Threads} -- 8192 -- Similar to processes, this limit simplifies data structures and resource allocation. 
+    \item \textbf{Kernel Stack Size} -- 64 KB -- The kernel stack is allocated per thread. Keeping this size minimal prevents excessive memory consumption. 
+    \item \textbf{User Stack Size} -- 8 MB -- A large stack is provided for user-space threads to facilitate the smooth execution of standard applications. 
+    \item \textbf{User Space Address Range} -- \texttt{0x0 - 0x00007FFFFFFFFFFF}. 
+    \item \textbf{Kernel Space Address Range} -- \texttt{0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF}. 
+    \item \textbf{Max Cores} -- 512 -- This limit exceeds the core count of most current processors and simplifies various internal data structures. 
 \end{itemize}
 
 \section{Future Work}
@@ -4498,16 +4501,16 @@ Here we list all limitations we assumed duruing the development. These numbers a
 TODO: KRYCZKA DODAJ SWOJE
 TODO: ADAM DODAJ SWOJE
 
-In future we could externd our solution by:
-\begin{itemize}
-    \item Add suport for SMP -- it will not be so difficult task, as we designed most components with assumption it will run properly in multicore environemt. To sump up it will reinforcing the locking schemes across the codebase, adding support for core bootup, intercore communications and finally scheduler load balancer.
-    \item Rellocable code and dynamic libraries -- currently we can load only staticaly linked binaries
-    \item General driver interfaces -- allowing simple extension of the kernel with new devices
-    \item Polishing scheduling algorithms -- improving fairness and latency
-    \item Finishing libc implementation -- it will allow us to port more binaries
-    \item Real device storage -- currently we utilize the ramdisk only
-    \item Task synchronization -- including mutexes, semaphores and cvs
-    \item Adding networking layer
+The current solution can be extended and improved in several areas: 
+\begin{itemize} 
+    \item \textbf{SMP Support} -- As most components were designed with multicore execution in mind, implementing SMP support is a feasible next step. This would involve reinforcing locking schemes, implementing core boot-up sequences, inter-core communication, and a scheduler load balancer. 
+    \item \textbf{Relocatable Code and Dynamic Libraries} -- Currently, the system supports only statically linked binaries. Future work could include a dynamic linker to support shared libraries. 
+    \item \textbf{General Driver Interface} -- Establishing a standardized driver model to facilitate the easy addition of new devices. 
+    \item \textbf{Refining Scheduling Algorithms} -- Improving the scheduler to enhance fairness and reduce latency. 
+    \item \textbf{Completing Libc Implementation} -- Extending the standard library to support a wider range of third-party applications. 
+    \item \textbf{Physical Storage Drivers} -- Replacing the RAM disk with drivers for physical storage media (e.g., AHCI/NVMe). 
+    \item \textbf{Task Synchronization Primitives} -- Implementing full support for mutexes, semaphores, and condition variables.
+    \item \textbf{Networking Stack} -- Adding a network layer to support TCP/IP communication. 
 \end{itemize}
 
 \section{Conclusion}
