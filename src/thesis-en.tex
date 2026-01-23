@@ -343,19 +343,19 @@ Firstly, the scale of the project necessitates strict adherence to engineering p
 
 \section{Scope of the Thesis}
 
-The primary objective of this thesis, as initially defined, was to implement a functional scheduler capable of executing tasks within isolated address spaces. Specifically, the project aimed to achieve the following technical goals:
+The primary objective of this thesis, as initially defined, was to implement a functional scheduler capable of executing tasks within isolated address spaces. Specifically, the project aimed to achieve the following minimal technical goals:
 
 \begin{itemize} 
     \item Bootloading -- the ability to start the system on bare metal hardware. 
+    \item Monolithic design -- implementing the kernel within a single address space. 
     \item Virtual memory support -- implementation of memory management to allocate isolated space for tasks. 
     \item Preemptive scheduling -- the ability to interrupt a running task to switch context. 
-    \item Implementation of a basic scheduling algorithm -- specifically Round Robin. 
-    \item x86-64 Architecture -- targeting the x86-64 archietcture only. 
     \item General-purpose scheduling -- designing a scheduler suitable for generic workloads. 
-    \item Monolithic design -- implementing the kernel within a single address space. 
+    \item Implementation of a scheduling algorithm -- at least something as simple as Round Robin. 
+    \item x86-64 Architecture -- targeting the x86-64 archietcture only. 
 \end{itemize}
 
-At the inception of the project, the specific requirements were not rigidly defined, as the complexity and effort required to complete the implementation were initially uncertain.
+At the outset of the project, specific requirements were not rigidly defined due to the uncertainty regarding the complexity and effort required for the implementation. It was anticipated that the challenge would be significant, necessitating extensive research, quality assurance, and the development of components from scratch. Driven by a strong interest in the subject matter, development started over a year ago with the objective of implementing as comprehensive a system as time constraints would permit. Ultimately, the scope of the realized system significantly exceeds the initial assumptions. Subsequent chapters describe the complete thoery and implementation details, which extends beyond the original scope to include a complex scheduler, file systems, a robust userspace environment, and ported software, specifically the Doom game.
 
 \section{Work Division -- Code}
 
@@ -4097,6 +4097,7 @@ The available system calls are grouped into logical categories:
 
 
 \section{Example Programs}
+\label{sec::example_programs}
 
 To validate the functionality of the kernel and its subsystems, a set of userspace applications was developed. these programs serve as integration tests, verifying the interactions between the system call interface, the C standard library, drivers, and the kernel core. Each program targets specific subsystems and features of the operating system.
 
@@ -4226,14 +4227,13 @@ Once the session is established, the application treats the video buffer as a li
 To prevent screen tearing, AlkOS employs a double-buffering strategy. The user application writes to its private backbuffer. To display the frame, the application calls `blit()` (Listing~\ref{lst:gui_sync}). This system call triggers the kernel's window manager to copy the contents of the user's backbuffer to the physical video memory if its session is currently active.
 
 \begin{lstlisting}[caption={Frame Synchronization}, label={lst:gui_sync}]
-        // Blit to screen
-        __platform_blit();
+    // Blit to screen
+    __platform_blit();
 
-        color_offset += 1;
+    color_offset += 1;
 
-        // Frame limiting
-        NanoSleep(16'000'000); // ~60 FPS
-    }
+    // Frame limiting
+    NanoSleep(16'000'000); // ~60 FPS
 \end{lstlisting}
 
 \subsection{Shell}
@@ -4424,25 +4424,28 @@ This chapter summarizes the work accomplished and the assumptions made during th
 We successfully fulfilled all functional requirements defined in Section \ref{subsec:functional}, in addition to implementing several supplementary features. The following list details the additional functionalities achieved:
 
 \begin{itemize} 
-    \item File system abstraction layer 
-    \item FAT filesystem implementation 
-    \item Hardware abstraction layer 
-    \item Userspace separation 
-    \item Userspace shell 
-    \item Chain loading
-    \item ELF64 executable loading 
-    \item Porting of external programs (Doom) 
-    \item Thread sleeping mechanism 
-    \item Wait queues implementation 
-    \item System call mechanism 
-    \item Extensive system call interface 
-    \item Tickless kernel architecture 
-    \item Thread termination capabilities 
-    \item Thread creation 
-    \item Process creation 
-    \item Graphical output support 
-    \item Basic window management 
-    \item Page fault handling (lazy virtualization) 
+    \item \textbf{Hardware Abstraction Layer (HAL)} -- An architectural interface decoupling high-level kernel logic from platform-specific hardware instructions.
+    \item \textbf{Custom Bootloader} -- A multi-stage loader handling the transition from Multiboot2 to a 64-bit higher-half kernel environment.
+    \item \textbf{Physical Memory Management} -- A robust allocation system combining a Buddy Allocator for pages and a Slab Allocator for kernel objects.
+    \item \textbf{Virtual Memory Management} -- A comprehensive VMM supporting recursive page table mapping, higher-half mapping, and kernel space synchronization.
+    \item \textbf{Lazy Allocation} -- A demand-paging mechanism that allocates physical memory only when accessed, utilizing page fault handling.
+    \item \textbf{Tickless Kernel Architecture} -- A dynamic timing subsystem that schedules interrupts only when necessary, improving CPU efficiency.
+    \item \textbf{Advanced Scheduling Policies} -- Implementation of multiple algorithms including Round Robin, Priority Queue, and Multi-Level Feedback Queue (MLFQ).
+    \item \textbf{Process & Thread Management} -- Full lifecycle management including creation, execution, detaching, joining, and termination of tasks.
+    \item \textbf{Wait Queues} -- A synchronization primitive allowing threads to block efficiently until specific conditions or events occur.
+    \item \textbf{System Call Interface} -- A high-performance dispatch mechanism utilizing `syscall`/`sysret` instructions with a wide array of implemented services.
+    \item \textbf{Standard C Library (libc)} -- A custom implementation of the C standard library (stdio, stdlib, string, math) tailored for the kernel environment.
+    \item \textbf{Virtual File System (VFS)} -- An abstraction layer supporting mount points, file descriptors, and generic I/O operations.
+    \item \textbf{FAT Filesystem Support} -- Full read/write drivers for FAT12, FAT16, and FAT32 file systems.
+    \item \textbf{Initial Ramdisk (Initrd)} -- Support for loading a temporary root filesystem from memory during the boot process.
+    \item \textbf{ELF64 Loader} -- A static parser capable of validating, loading, and relocating standard 64-bit executables.
+    \item \textbf{Userspace Shell} -- An interactive command-line environment with built-in commands and process execution capabilities.
+    \item \textbf{Graphical Output} -- A linear framebuffer driver supporting double-buffering and direct pixel manipulation.
+    \item \textbf{Window Manager} -- A session-based compositing system allowing switching between different graphical applications.
+    \item \textbf{Doom Port} -- A successful port of the Doom game engine, validating the stability of the kernel's subsystems.
+    \item \textbf{ACPI Integration} -- A subsystem for parsing ACPI tables to discover hardware topology and manage system power states.
+    \item \textbf{In-Kernel Testing Framework} -- A custom unit-testing suite running directly on bare metal to verify kernel logic.
+    \item \textbf{Build Infrastructure} -- A fully automated CMake-based pipeline capable of bootstrapping a custom cross-compilation toolchain.
 \end{itemize}
 
 \section{Limitations and Assumptions}
@@ -4499,8 +4502,21 @@ The current solution can be extended and improved in several areas:
     \item \textbf{Networking Stack} -- Adding a network layer to support TCP/IP communication. 
 \end{itemize}
 
+\section{Tests}
+
+During the development we used two type of tests, which we found very helpfull  and wsa necessary to deliver the quality inside of a such big project:
+
+\begin{itemize}
+    \item Unit Testing - we implemented multiple unit tests inside the kernel both to verify correctnes of libc/libcpp and internal kernel components
+    \item Regression Testing - parsing kernel log for errors inside CI ensuring no warning or fatal information is displayed
+\end{itemize}
+
+Finally we tested the project manually using multiple example programs we provided \ref{sec::example_programs}.
+
+
 \section{Conclusion}
-TODO: JAKUB
+
+Summing up we finished the project fulfilling our initial requirements and even extended the scope by multiple features. Subjectively speaking we are proud of our archievement including the final shape of the project and work we have done. We overdone our expectetions and finished our main goal that is we deeply understood multiple concepts involved during os development. Objectively speaking we delivered more than expected, reading on the way hundred of pages of Intel Software Deleoper Manual, reading over a hunder documents on osdev, reading hundreds of osdev forum posts and discussions, went through thousands of lines of external os projects like linux or minix, working with multiple specifications or hardware documentations. Looking into numbers we finished at this point with over 80000 lines of code and total of around 700 files in the codebase. Critically looking we didnt do everything perfectly, we stumlbed upon multiple times on the way. We had to refactor multiple thousands of code lines because of teh debt or something we initially didnt understand well. Build system was rewriten fully at least 2 times and it sill needs some refactorings. Also at the begining without understandment how something function we implemented some module and after couple of weeks we rewrote the whole thing as we understood the problem better. Also we made multiple bad design decision, mostly with include patterns and project structure, finally everything was fixed, but initially we didnt predicted that accepting some scheme some edge case would create multiple circular dependencies. I think we did a good job with work separation as finally everyone did similar part of the project and at any point everyone was busy, but to be honest complexity of the project simplified the issue for us as there was more problems to solve than people we had. Another thing we could do better during the process is better communication during designing  things. Finally we probably spend too much time working with libc and libcpp implementation, but finally it also was very educational and horizon-expanding. 
 
 % ----------- BIBLIOGRAPHY ---------
 
