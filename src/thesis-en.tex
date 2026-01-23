@@ -363,17 +363,11 @@ Based on the initial scope and architectural assumptions, the following function
 
 \begin{itemize} 
     \item \textbf{x86\_64 Long Mode Transition} -- The kernel must successfully transition the CPU from 32-bit Protected Mode to 64-bit Long Mode, including the setup of a 64-bit Global Descriptor Table (GDT) and enabling 4-level paging.
-
     \item \textbf{Physical Memory Allocation} -- The kernel must implement a Physical Memory Manager (PMM) to track available RAM and provide a mechanism for allocating and freeing physical page frames based on the system memory map.
-    
     \item \textbf{Virtual Memory Mapping} -- The system must implement a Virtual Memory Manager (VMM) and an MMU abstraction to map virtual addresses to physical frames, allowing for the creation of isolated address spaces.
-    
     \item \textbf{Preemptive Scheduling} -- The kernel must provide a mechanism to forcibly interrupt a running task and switch context to another, ensuring that no single task can monopolize the CPU.
-        
     \item \textbf{Context Management} -- The system must be able to create, save, and restore execution contexts (thread state including registers and stacks) to support multitasking.
-    
     \item \textbf{Interrupt and Exception Handling} -- The kernel must configure the Interrupt Descriptor Table (IDT) and provide handlers for hardware interrupts (to drive the scheduler) and CPU exceptions (to ensure system stability).
-
 \end{itemize}
 
 \section{Work Division -- Code}
