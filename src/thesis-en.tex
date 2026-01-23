@@ -4504,19 +4504,24 @@ The current solution can be extended and improved in several areas:
 
 \section{Tests}
 
-During the development we used two type of tests, which we found very helpfull  and wsa necessary to deliver the quality inside of a such big project:
+To ensure the high quality and stability required for a project of this magnitude, we employed two primary testing methodologies throughout the development process:
 
 \begin{itemize}
-    \item Unit Testing - we implemented multiple unit tests inside the kernel both to verify correctnes of libc/libcpp and internal kernel components
-    \item Regression Testing - parsing kernel log for errors inside CI ensuring no warning or fatal information is displayed
+    \item \textbf{Unit Testing} -- We implemented a comprehensive suite of unit tests within the kernel to verify the correctness of the custom C/C++ standard libraries (\texttt{libc}/\texttt{libc++}) and internal kernel components.
+    \item \textbf{Regression Testing} -- We utilized Continuous Integration (CI) pipelines to automatically parse kernel logs, ensuring that no warnings or fatal errors were introduced during development.
 \end{itemize}
 
-Finally we tested the project manually using multiple example programs we provided \ref{sec::example_programs}.
-
+Finally, with everything implemented, we validated the system manually by executing the suite of example programs described in Section~\ref{sec::example_programs}.
 
 \section{Conclusion}
 
-Summing up we finished the project fulfilling our initial requirements and even extended the scope by multiple features. Subjectively speaking we are proud of our archievement including the final shape of the project and work we have done. We overdone our expectetions and finished our main goal that is we deeply understood multiple concepts involved during os development. Objectively speaking we delivered more than expected, reading on the way hundred of pages of Intel Software Deleoper Manual, reading over a hunder documents on osdev, reading hundreds of osdev forum posts and discussions, went through thousands of lines of external os projects like linux or minix, working with multiple specifications or hardware documentations. Looking into numbers we finished at this point with over 80000 lines of code and total of around 700 files in the codebase. Critically looking we didnt do everything perfectly, we stumlbed upon multiple times on the way. We had to refactor multiple thousands of code lines because of teh debt or something we initially didnt understand well. Build system was rewriten fully at least 2 times and it sill needs some refactorings. Also at the begining without understandment how something function we implemented some module and after couple of weeks we rewrote the whole thing as we understood the problem better. Also we made multiple bad design decision, mostly with include patterns and project structure, finally everything was fixed, but initially we didnt predicted that accepting some scheme some edge case would create multiple circular dependencies. I think we did a good job with work separation as finally everyone did similar part of the project and at any point everyone was busy, but to be honest complexity of the project simplified the issue for us as there was more problems to solve than people we had. Another thing we could do better during the process is better communication during designing  things. Finally we probably spend too much time working with libc and libcpp implementation, but finally it also was very educational and horizon-expanding. 
+Summing up, we successfully fulfilled the project's initial requirements and significantly extended its scope with multiple additional features. Subjectively, we are proud of the achievement, particularly the final shape of the system and the effort invested. We surpassed our initial expectations and accomplished our primary goal: gaining a deep, practical understanding of the complex concepts involved in operating system development.
+
+Objectively, the project delivered more than anticipated. The final codebase consists of approximately 700 files and over 80,000 lines of code. This achievement required processing a vast amount of technical literature, including hundreds of pages of the Intel Software Developer's Manual, OSDev documentation, hardware specifications, and the source code of established systems like Linux or Minix.
+
+However, a critical assessment reveals that the execution was not flawless, and we encountered multiple obstacles along the way. We were compelled to refactor thousands of lines of code due to technical debt or an initial lack of understanding regarding specific mechanisms. For instance, the build system underwent at least two complete rewrites and still requires further refinement. Furthermore, early design decisions regarding project structure and header inclusion patterns led to circular dependency issues that had to be painstakingly resolved.
+
+Regarding the division of labor, we believe the workload was distributed effectively. The inherent complexity of the project ensured that there were always more problems to solve than available contributors, keeping everyone fully engaged. In retrospect, communication during the architectural design phase could have been better to avoid some of the aforementioned structural issues. Finally, while we likely allocated too much time to the implementation of the C and C++ standard libraries, this process proved to be extremely educational and significantly expanded our horizons anyway.
 
 % ----------- BIBLIOGRAPHY ---------
 
