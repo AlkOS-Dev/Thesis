@@ -358,6 +358,7 @@ The primary objective of this thesis, as initially defined, was to implement a f
 At the inception of the project, the specific requirements were not rigidly defined, as the complexity and effort required to complete the implementation were initially uncertain.
 
 \subsection{Functional Requirements}
+\label{subsec:functional}
 
 Based on the initial scope and architectural assumptions, the following functional requirements were derived:
 
@@ -4429,44 +4430,85 @@ To support loading data from the file system, we expanded the \texttt{stdio} imp
 By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
 \chapter{Results}
-TODO: JAKUB
+
+In this chapter we will sum up our work what we have done and what assumptions we made along the way. Also we will critically think about our solution.
 
 \section{Achieved Functionalities} 
-TODO: JAKUB
+
+We archieved everything we assumed at the beginning \ref{subsec:functional} and even much more. Below we list additional functionalities which was implemented:
+
+\begin{itemize}
+    \item File system abstraction
+    \item FAT implementation
+    \item Userspace separation
+    \item ELF64 loading
+    \item porting external programs - doom
+    \item Sleeping mechanism
+    \item Wait queues
+    \item syscall mechanism
+    \item rich syscalls mechanisms
+    \item tickless kernel
+    \item thread killing
+    \item thread spawning
+    \item thread/process spawning
+    \item graphics support
+    \item simple window management
+    \item page fault handling - lazy virtualization
+\end{itemize}
 
 \section{Limitations and Assumptions}
-TODO: JAKUB
-TODO: KRYCZKA, ADAM, JAKUB
+
+TODO: KRYCZKA DODAJ SWOJE
+TODO: ADAM DODAJ SWOJE
+
+As writing a kernel is quite complex task and architecture technical debt does not simplify the situation we made couple assumpation along the way to not stuck on implemeting all drivers and archtiecture edge cases. To run properly ALKOS the system must have:
 
 \begin{itemize}
-    \item aaa
-  \end{itemize}
-
-\subsection{Minimal requirements}
-\begin{itemize}
-  \item avx
-  \item osxsave
-  \item swapgs
-  \item invariant tsc
-  \item HPET
-  \item APIC
-  \item acpi
-  \item 64bit LAPIC
-  \item mmu
-  \item genreal purpose os
+\item 64bit -- we support only 64bit instructions and we do not provide 32bit libraries
+\item AVX2 -- we didnt wanted to implement each possible vector extensions or floating point instruction sets. The system must support avx2
+\item swapgs -- we use gs register for core local storage swapgs allows to make changing the segment base addres quicker. 
+\item invariant tsc -- to not implement all possible amd64 drivers we use TSC for base clock device, invariant must be support on the system
+\item HPET -- additionally hpet timer must be avaialable as is used as only source of truth to calibrate both TSC and LAPIC Timer
+\item APIC -- in reality we do not support SMP but we implemented everything with assumption we will so we assumed APIC is available
+\item acpi -- we assume the device discovery is perofrmed by ACPI, is probably supported by most devices this days
+\item PS2 keyboard -- we assume the system has PS port as implementing USB driver would take a lot of time
 \end{itemize}
 
 \subsection{Known Limitations}
 \label{subsec:limitations}
 
+TODO: KRYCZKA DODAJ SWOJE
+TODO: ADAM DODAJ SWOJE
+
+Here we list all limitations we assumed duruing the development. These numbers are strictly used inside the codebase and multiple mechanisms depends on them.
+
 \begin{itemize}
-  \item max process name = 128
-  \item max processes = 4096
-  \item max threads = 8192
+  \item Max Process Name Size -- 128 -- static storage inside the struct.
+  \item Max Processes -- 4096 -- simplifies indexing and memory management, Additionally above we would probably run out of memory anyway
+  \item Max Threads -- 8192 -- simplifies indexing and memory management, Additionally above we would probably run out of memory anyway
+  \item Kernel Stack Size -- 64 KB -- kernel should not use huge amount of memory anyway, as kernel stack is allocated per therad, bigger size would increase the memory usage significantly
+  \item User Stack Size -- 8MB -- To allow smooth execution of user space programs, we provide big stack for user space theeads.
+  \item User Space Address range -- 0x0 - 0x00007FFFFFFFFFFF -- ...
+  \item Kernel Space addres range -- 0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF -- ...
+  \item Max Cores -- 512 -- At current stage there are not so many processor with bigger number of cores, simplifies various data structures
 \end{itemize}
 
 \section{Future Work}
-TODO: KRYCZKA, ADAM, JAKUB
+
+TODO: KRYCZKA DODAJ SWOJE
+TODO: ADAM DODAJ SWOJE
+
+In future we could externd our solution by:
+\begin{itemize}
+    \item Add suport for SMP -- it will not be so difficult task, as we designed most components with assumption it will run properly in multicore environemt. To sump up it will reinforcing the locking schemes across the codebase, adding support for core bootup, intercore communications and finally scheduler load balancer.
+    \item Rellocable code and dynamic libraries -- currently we can load only staticaly linked binaries
+    \item General driver interfaces -- allowing simple extension of the kernel with new devices
+    \item Polishing scheduling algorithms -- improving fairness and latency
+    \item Finishing libc implementation -- it will allow us to port more binaries
+    \item Real device storage -- currently we utilize the ramdisk only
+    \item Task synchronization -- including mutexes, semaphores and cvs
+    \item Adding networking layer
+\end{itemize}
 
 \section{Conclusion}
 TODO: JAKUB
