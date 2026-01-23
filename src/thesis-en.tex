@@ -350,26 +350,12 @@ The primary objective of this thesis, as initially defined, was to implement a f
     \item Virtual memory support -- implementation of memory management to allocate isolated space for tasks. 
     \item Preemptive scheduling -- the ability to interrupt a running task to switch context. 
     \item Implementation of a basic scheduling algorithm -- specifically Round Robin. 
-    \item x86\_64 Architecture -- targeting the AMD64 archietcture only. 
+    \item x86-64 Architecture -- targeting the x86-64 archietcture only. 
     \item General-purpose scheduling -- designing a scheduler suitable for generic workloads. 
     \item Monolithic design -- implementing the kernel within a single address space. 
 \end{itemize}
 
 At the inception of the project, the specific requirements were not rigidly defined, as the complexity and effort required to complete the implementation were initially uncertain.
-
-\subsection{Functional Requirements}
-\label{subsec:functional}
-
-Based on the initial scope and architectural assumptions, the following functional requirements were derived:
-
-\begin{itemize} 
-    \item \textbf{x86\_64 Long Mode Transition} -- The kernel must successfully transition the CPU from 32-bit Protected Mode to 64-bit Long Mode, including the setup of a 64-bit Global Descriptor Table (GDT) and enabling 4-level paging.
-    \item \textbf{Physical Memory Allocation} -- The kernel must implement a Physical Memory Manager (PMM) to track available RAM and provide a mechanism for allocating and freeing physical page frames based on the system memory map.
-    \item \textbf{Virtual Memory Mapping} -- The system must implement a Virtual Memory Manager (VMM) and an MMU abstraction to map virtual addresses to physical frames, allowing for the creation of isolated address spaces.
-    \item \textbf{Preemptive Scheduling} -- The kernel must provide a mechanism to forcibly interrupt a running task and switch context to another, ensuring that no single task can monopolize the CPU.
-    \item \textbf{Context Management} -- The system must be able to create, save, and restore execution contexts (thread state including registers and stacks) to support multitasking.
-    \item \textbf{Interrupt and Exception Handling} -- The kernel must configure the Interrupt Descriptor Table (IDT) and provide handlers for hardware interrupts (to drive the scheduler) and CPU exceptions (to ensure system stability).
-\end{itemize}
 
 \section{Work Division -- Code}
 
@@ -404,7 +390,7 @@ Before proceeding to writing actual kernel code we must first do some preparatio
 \subsection{Cross-Compilation Toolchain}
 \label{subsec:theory_toolchain}
 
-The development process begins with the establishment of a cross-compilation toolchain targeting a generic, os-independent architecture (e.g., \texttt{x86\_64-elf}). Using a compiler provided by the host system may lead to issues, as such compilers typically assume that the generated code will execute within an operating system environment. These assumptions are invalid during development, where no such infrastructure exists initially.
+The development process begins with the establishment of a cross-compilation toolchain targeting a generic, os-independent architecture (e.g., \texttt{x86-64-elf}). Using a compiler provided by the host system may lead to issues, as such compilers typically assume that the generated code will execute within an operating system environment. These assumptions are invalid during development, where no such infrastructure exists initially.
 
 For this reason, the cross-compiler is built from source, allowing it to be configured and, if necessary, patched to accommodate the specific requirements of kernel and userspace development. A complete cross-compilation toolchain typically consists of a cross-compiler (e.g., GCC or Clang), a binary utilities suite (including the assembler and linker), and optionally a cross-debugger such as GDB or LLDB. Although any suitable cross-compiler may be used to build an operating system, GCC is generally preferred due to extensive support within the operating systems development community. For a detailed guide to building a GCC-based cross-compilation toolchain, refer to \cite{osdev-gcc-cross-compiler}.
 
@@ -434,7 +420,7 @@ A toolchain configuration file must fulfill two primary functions:
 \item \textbf{Binary mapping:} It maps abstract compiler roles (e.g., C Compiler, Assembler, Linker) to the absolute paths of the specific cross-toolchain binaries compiled during the environment preparation phase.
 \end{enumerate}
 
-This architectural decoupling ensures that the build logic remains agnostic of the underlying hardware. Retargeting the operating system to a new architecture (e.g., transitioning from \texttt{x86\_64} to \texttt{aarch64}) entails only the substitution of the active toolchain file, without requiring modifications to the project's build scripts or source code structure.
+This architectural decoupling ensures that the build logic remains agnostic of the underlying hardware. Retargeting the operating system to a new architecture (e.g., transitioning from \texttt{x86-64} to \texttt{aarch64}) entails only the substitution of the active toolchain file, without requiring modifications to the project's build scripts or source code structure.
 
 \subsubsection{Configuration Management}
 
@@ -798,7 +784,7 @@ To solve this, a \textbf{Third-Party Bootloader} is often utilized. This program
 \draw[arrow] (trampoline) -- node[right, font=\footnotesize] {Enable Features (AVX, Paging)} (kernel);
 
 \end{tikzpicture}
-\caption{Typical Boot Chain for x86\_64}
+\caption{Typical Boot Chain for x86-64}
 \label{fig:boot_chain}
 \end{figure}
 
@@ -1014,7 +1000,7 @@ This enabling phase is critical not only for allowing instruction execution but 
 
 \subsection{Establishment of Basic Communication}
 
-One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on AMD64 desktop platforms) or implement a basic network stack. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing and as development progresses, it is advisable to abandon this communication or disable them via compilation flags. 
+One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on x86-64 desktop platforms) or implement a basic network stack. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing and as development progresses, it is advisable to abandon this communication or disable them via compilation flags. 
 
 % \begin{figure}[h]
 %     \centering
@@ -1076,7 +1062,7 @@ When implementing this abstraction, three distinct classes of interrupts can be 
     \item \textbf{Software Interrupts} -- Initiated by software instructions. For example, on the x86-64 architecture, the instruction \texttt{INT 0x80} triggers an interrupt with the vector number \texttt{0x80}.
 \end{itemize}
 
-Architecture-specific details must also be considered. for example, the AMD64 architecture utilizes the legacy PIC \cite{osdev-pic} and the improved, SMP-supporting APIC \cite{osdev-apic}. Finally, to enable Symmetric Multiprocessing (SMP) and utilize multiple cores, the interrupt mechanism serves as the primary method of inter-core communication.
+Architecture-specific details must also be considered. for example, the x86-64 architecture utilizes the legacy PIC \cite{osdev-pic} and the improved, SMP-supporting APIC \cite{osdev-apic}. Finally, to enable Symmetric Multiprocessing (SMP) and utilize multiple cores, the interrupt mechanism serves as the primary method of inter-core communication.
 
 \subsection{Tracing System}
 
@@ -1494,7 +1480,7 @@ To support the preemptive scheduling model, the kernel requires a robust timing 
 
 \subsection{Clocks}
 
-The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue. On AMD64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio, obviously from the set of supported ones.
+The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue. On x86-64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio, obviously from the set of supported ones.
 
 \subsection{Event Clocks}
 \label{subsec:event_clocks}
@@ -1503,7 +1489,7 @@ At this stage, the approach to timing event logic must be established, depending
 
 The first consideration is sleep granularity. A standard precision of approximately one millisecond is achievable on nearly every architecture using simple periodic interrupts. However, implementing high-precision nanosecond or microsecond sleep requires timer devices capable of extremely rapid reconfiguration. The minimum time interval between consecutive events is strictly limited by the hardware configuration latency. The kernel cannot schedule an interrupt to occur sooner than the time required to program the device. Older timing hardware often requires slow I/O port interactions, rendering them unsuitable for high-precision scheduling, whereas modern devices utilize faster interfaces. Additionally, it is common for a single hardware component to serve a dual purpose, acting as both a timekeeping source (Clock) and an interrupt generator (Event Clock).
 
-Another critical factor is the support for multiple cores. In an SMP environment, it is preferable to utilize timing devices that reside locally on the cores and operate independently, thereby maximizing performance. While most modern architectures provide such devices (e.g., LAPIC Timer on AMD64), some older or embedded SMP platforms may lack them. In such cases, the kernel must utilize a global timer and employ interrupt-driven inter-core communication to simulate local interrupts.
+Another critical factor is the support for multiple cores. In an SMP environment, it is preferable to utilize timing devices that reside locally on the cores and operate independently, thereby maximizing performance. While most modern architectures provide such devices (e.g., LAPIC Timer on x86-64), some older or embedded SMP platforms may lack them. In such cases, the kernel must utilize a global timer and employ interrupt-driven inter-core communication to simulate local interrupts.
 
 Consequently, a suitable timing device must be selected. When supporting multiple architectures, the kernel typically implements drivers for all available options and dynamically selects the appropriate one based on device capabilities.
 
@@ -1515,7 +1501,7 @@ An example of device availability schemes by architecture is as follows:
 \item SMP non-local periodic-only timer $\rightarrow$ owner core of timer interrupts propagates the interrupt to target cores + low precision msleep only available.
 \end{itemize}
 
-Most modern architectures support both local and high-precision timers. For example, on AMD64 with SMP, the presence of local LAPIC Timers \cite{IntelManual-APIC} (high precision, one-shot) is guaranteed, significantly simplifying the implementation.
+Most modern architectures support both local and high-precision timers. For example, on x86-64 with SMP, the presence of local LAPIC Timers \cite{IntelManual-APIC} (high precision, one-shot) is guaranteed, significantly simplifying the implementation.
 
 \subsection{Keyboard}
 
@@ -1715,7 +1701,7 @@ Once multiple tasks are established, the system can perform context switching. A
     \item Restore the state (registers and flags) from the new stack.
 \end{itemize}
 
-\noindent Based on AMD64 assembly, the implementation resembles the following:
+\noindent Based on x86-64 assembly, the implementation resembles the following:
 \begin{lstlisting}[style=nasmstyle, caption={Context Switch Pseudocode}, label={lst:context_switch_example}]
 ; RDI must store a pointer to next thread structure
 ContextSwitch:
@@ -2011,7 +1997,7 @@ Userspace programs require a well-defined runtime initialization sequence to pre
 \subsubsection{OS-Specific Toolchain Adaptation}
 \label{subsubsec:os-specific-toolchain}
 
-While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86\_64-elf}) is sufficient for compiling the kernel itself, it presents limitations for userspace development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively  (e.g., via a target like \texttt{x86\_64-alkos}) \cite{osdev-os-specific-toolchain}. This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts. From this point onward, one should provide its own toolchain source code (or patches), alongside the OS source code, instead of relying on an upstream one.
+While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86-64-elf}) is sufficient for compiling the kernel itself, it presents limitations for userspace development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively  (e.g., via a target like \texttt{x86-64-alkos}) \cite{osdev-os-specific-toolchain}. This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts. From this point onward, one should provide its own toolchain source code (or patches), alongside the OS source code, instead of relying on an upstream one.
 
 \paragraph{System Root (Sysroot)}
 
@@ -3973,7 +3959,7 @@ The build and execution workflow consists of three sequential stages:
     \begin{verbatim}
     ./scripts/config/configure.bash <platform> <build_type> [options...]
     \end{verbatim}
-    Here, \texttt{<platform>} denotes the target architecture (e.g., \texttt{x86\_64}), \texttt{<build\_type>} specifies either \texttt{Debug} or \texttt{Release}. A complete list of options can be obtained using the \texttt{\text{-}\text{-}help} flag.
+    Here, \texttt{<platform>} denotes the target architecture (e.g., \texttt{x86-64}), \texttt{<build\_type>} specifies either \texttt{Debug} or \texttt{Release}. A complete list of options can be obtained using the \texttt{\text{-}\text{-}help} flag.
 
     \item \textbf{Compilation and Execution:}
     In the final stage, the kernel and all registered userspace applications are compiled, the root filesystem image and bootable ISO are generated, and the operating system is launched using the QEMU emulator. This process can be initiated with the command:
@@ -4045,11 +4031,11 @@ Certain low-level system interactions are beyond the scope of the standard C lib
 
 \subsection{Syscalls}
 
-The system call interface represents the controlled boundary between userspace applications executing in Ring 3 and the kernel executing in Ring 0. On the \texttt{x86\_64} architecture, AlkOS utilizes the \texttt{int 0x80} software interrupt mechanism to invoke system calls.
+The system call interface represents the controlled boundary between userspace applications executing in Ring 3 and the kernel executing in Ring 0. On the \texttt{x86-64} architecture, AlkOS utilizes the \texttt{int 0x80} software interrupt mechanism to invoke system calls.
 
 \subsubsection{Calling Convention}
 
-The calling convention is largely inspired by the System V AMD64 ABI, with modifications to accommodate system call semantics. The register usage is summarized in Table \ref{tab:syscall_abi}.
+The calling convention is largely inspired by the System V x86-64 ABI, with modifications to accommodate system call semantics. The register usage is summarized in Table \ref{tab:syscall_abi}.
 
 \begin{table}[htbp]
 \centering
@@ -4064,7 +4050,7 @@ The calling convention is largely inspired by the System V AMD64 ABI, with modif
 \texttt{R8} & Argument 5 \\ \hline
 \texttt{R9} & Argument 6 \\ \hline
 \end{tabular}
-\caption{System Call Register Mapping on x86\_64}
+\caption{System Call Register Mapping on x86-64}
 \label{tab:syscall_abi}
 \end{table}
 
@@ -4470,7 +4456,7 @@ Developing an operating system kernel is an inherently complex task, further com
     \item \textbf{64-bit Architecture} -- The system supports only 64-bit instructions. Compatibility libraries for 32-bit applications are not provided. 
     \item \textbf{AVX2 Support} -- The system requires AVX2 support. Implementation was restricted to this specific instruction set to avoid the complexity of supporting every possible vector extension. 
     \item \textbf{SWAPGS Instruction} -- The architecture must support the \texttt{swapgs} instruction, which is utilized to efficiently swap the GS register base address for Core Local Storage management. 
-    \item \textbf{Invariant TSC} -- To avoid implementing a driver for every possible AMD64 timer, the system relies on the Time Stamp Counter (TSC) as the primary clock source. The hardware must support an invariant TSC to ensure timing consistency regardless of frequency scaling.
+    \item \textbf{Invariant TSC} -- To avoid implementing a driver for every possible x86-64 timer, the system relies on the Time Stamp Counter (TSC) as the primary clock source. The hardware must support an invariant TSC to ensure timing consistency regardless of frequency scaling.
     \item \textbf{HPET} -- The High Precision Event Timer (HPET) must be available, as it serves as the reference source for calibrating both the TSC and the LAPIC Timer. 
     \item \textbf{APIC} -- Although SMP is not fully enabled, the system architecture was designed with SMP compatibility in mind, necessitating the presence of an Advanced Programmable Interrupt Controller (APIC). 
     \item \textbf{ACPI} -- It is assumed that device discovery is performed via the Advanced Configuration and Power Interface (ACPI), a standard supported by the majority of modern platforms. 
@@ -4483,7 +4469,7 @@ Developing an operating system kernel is an inherently complex task, further com
 TODO: KRYCZKA DODAJ SWOJE
 TODO: ADAM DODAJ SWOJE
 
-The following section outlines the internal constraints established during development. These constants are hardcoded within the codebase, and multiple system mechanisms rely on them for correct operation.
+The following section outlines the internal constraints established during development. These constants are hardcoded within the codebase, and multiple system mechanisms rely on them for correct operation. While these are compile-time values that can be modified, we cannot guarantee correct functionality if they are changed.
 
 \begin{itemize} 
     \item \textbf{Max Process Name Size} -- 128 bytes -- Defined by the static storage size within the process structure. 
