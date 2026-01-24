@@ -487,7 +487,8 @@ The build system must support compilation profiles to accommodate different phas
 In addition to general optimization settings, architecture-specific constraints must be enforced explicitly. On x86-64, the System~V ABI permits the use of a so-called \textbf{red zone}, a fixed region below the stack pointer that leaf functions (functions that do not call other functions) may use without adjusting the stack pointer. In kernel mode, interrupts may overwrite this region, leading to memory corruption. As a result, the red zone must be explicitly disabled.
 
 \subsection{Emulation}
-TODO: KRYCZKA
+
+Additionally we should consider how we will be testing our code and how to make it efficient. In that place emulation comes in place. We have two major paths we can follow. We can either have some testing machine and each time create the image and boot it up on the machine. It is even nevessary to verify the correct behaviour of the kernel on real hardware, but it may be time consuming for develeopment type of runs and can be a sort of bottleneck. To address that issue we have multiple emulation solutions available on the market including qemu, bochs or virtual box. This tools allow us to specify the target machine architecture and run it locally inside the host system in emulated environemnt. Such setup may speedup quick reruns checks or debugging or simple space exploration inside the virtual environment. The ideal solution is to combine both of these to maximize both development speed and quality.
 
 \section{General Design Considerations}
 
@@ -1039,7 +1040,7 @@ This enabling phase is critical not only for allowing instruction execution but 
 
 \cite{Intel-XSAVE}
 
-\subsection{Establishment of Basic Communication}
+\section{Establishment of Basic Communication}
 
 One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on x86-64 desktop platforms) or implement a basic network stack. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing and as development progresses, it is advisable to abandon this communication or disable them via compilation flags. 
 
@@ -1052,10 +1053,10 @@ One of the primary objectives when initializing code on a target architecture is
 
 % As shown in Figure \ref{fig:qemu_comms}, alongside typical output to the screen and keyboard input, the kernel transmits text to the QEMU serial port, which is then streamed to the host shell. This approach enables host-side scripts to parse logs, detect bugs or failures, and allow manual inspection of the system state immediately preceding a crash.
 
-\subsection{Enabling Interrupts and Exceptions}
+\section{Enabling Interrupts and Exceptions}
 \label{subsec:os-tutorial-interrupts}
 
-Prior to the implementation of memory management (Section \ref{subsec:os_tutorial_mem}), it is essential to establish a basic interrupt handling mechanism. On most platforms, the exception system relies entirely on interrupt mappings. Consequently, without a functional interrupts, the kernel is unable to display debug information on the designated communication device when an error occurs.
+Prior to the implementation of memory management (Section \ref{subsubsec:physical_memory_management}), it is essential to establish a basic interrupt handling mechanism. On most platforms, the exception system relies entirely on interrupt mappings. Consequently, without a functional interrupts, the kernel is unable to display debug information on the designated communication device when an error occurs.
 
 Exception handlers should output a descriptive message detailing the failure. This message must include the CPU state, the source of the exception, the instruction pointer where the error occurred, and, if applicable, an error code explaining the cause. An example of a x86-64 kernel dump following an exception is presented below:
 
@@ -1087,7 +1088,7 @@ Exception handlers should output a descriptive message detailing the failure. Th
 
 Before initializing Memory Management, exception handling is the primary function required from the interrupt system. At this stage, there is typically no use case for interrupt-driven devices, as the consumers (processes) have not yet been booted, and multicore operations (which require memory for bookkeeping structures) are not active. However, the design of the interrupt subsystem must account for future extensibility and requirements.
 
-\subsubsection{Design Considerations}
+\subsection{Design Considerations}
 
 It is important to note that, hardware-compliant interrupt handlers differ significantly from standard compiled functions. They often require specific entry and exit instructions, making the runtime swapping of these functions difficult. A robust solution is to create a low-level assembly wrapper that efficiently performs all architecture-dependent operations before invoking a high-level function responsible for the kernel's logic. However, this approach has limitations. The high-level function is typically hardcoded into the low-level handler, preventing runtime reconfiguration.
 
@@ -1105,23 +1106,19 @@ When implementing this abstraction, three distinct classes of interrupts can be 
 
 Architecture-specific details must also be considered. for example, the x86-64 architecture utilizes the legacy PIC \cite{osdev-pic} and the improved, SMP-supporting APIC \cite{osdev-apic}. Finally, to enable Symmetric Multiprocessing (SMP) and utilize multiple cores, the interrupt mechanism serves as the primary method of inter-core communication.
 
-\subsection{Tracing System}
+\section{Tracing System}
 
 As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. This can be achieved by allocating a large circular buffer for messages, which is then asynchronously flushed to the output device by a dedicated, low-priority task. Furthermore, to facilitate effective debugging in a multi-threaded and multi-core environment, each log entry may automatically capture essential context metadata, specifically the high-precision timestamp, the current Core ID, or the Process ID.
 
 This goes about the general design, but during initial development system there is no need to have full tracing system, simple print with formatting is enough to proceed.
 
-\subsection{Testing framework}
+\section{Testing framework}
 
 The reliability of an operating system kernel cannot be guaranteed solely through compilation checks or host-based logic verification. While some algorithmic components can be tested in a hosted environment (e.g., on a Linux host), the core kernel functionalities depend heavily on the specific hardware architecture, physical memory layout, and privileged CPU instructions. Consequently, a robust testing framework must be implemented to execute directly within the kernel on the target hardware or emulator.
 
 This in-kernel framework should function similarly to user-space unit testing libraries but operates without the support of an underlying operating system. It allows developers to define test cases for critical subsystems, such as memory allocators, intrusive data structures, and scheduling algorithms and execute them in the actual runtime environment. This approach is the only way to detect architecture-specific issues, such as unaligned memory accesses, incorrect register usage during context switches, or paging faults caused by invalid table entries, which would remain undetected in a hosted simulation.
 
 A critical design requirement for such a framework is test isolation. In a kernel environment, a failure often results in a system panic, infinite loop, or silent memory corruption that compromises the global state. To prevent side effects from a failed test influencing subsequent assertions (creating false positives or negatives), the framework should ideally ensure a clean state for each test suite. In early development stages, this often necessitates designing tests to be self-contained or implementing mechanisms to reset subsystems between test executions, ensuring that results are deterministic and reproducible.
-
-\section{Memory Management}
-\label{subsec:os_tutorial_mem}
-TODO: KRYCZKA
 
 \section{Physical Memory Management}
 \label{subsubsec:physical_memory_management}
@@ -1438,7 +1435,7 @@ Finally, the PMM must respect the physical limitations of the hardware. Not all 
 
 A common solution is to partition the physical address space into disjoint \textbf{regions} or \textbf{zones}, each managed by a separate allocator instance. Allocation requests carry metadata (flags or capabilities) indicating which regions are acceptable. The allocator attempts the preferred region first and falls back to others only if permitted. Critically, a request for DMA-capable memory \textit{cannot} fall back to high memory-the hardware simply cannot address those frames.
 
-\subsubsection{Kernel Space Allocation API}
+\section{Kernel Space Allocation API}
 TODO: KRYCZKA
 
 \section{Virtual Memory Management}
@@ -3279,11 +3276,6 @@ void ArchInit(const RawBootArguments &) {
 }
 \end{lstlisting}
 
-
-\section{Memory Management}
-\label{sec:memory}
-TODO: KRYCZKA
-
 \section{Interrupts}
 \label{sec:interrupts}
 
@@ -4100,7 +4092,7 @@ The process state has less significance than the Thread State (described later) 
 
 \subsubsection{Address Space}
 
-The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to Memory Management \ref{sec:memory} for further details.
+The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to Memory Management \ref{sec:vmm} for further details.
 
 \subsubsection{File Descriptor Table}
 
