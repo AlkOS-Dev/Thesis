@@ -689,7 +689,7 @@ A fundamental challenge in this sequence is the source of the initial instructio
 To resolve this, hardware architects map the Reset Vector address to a non-volatile memory region, typically Flash Memory or Read-Only Memory (ROM), which retains data without power.
 
 \subsection{Embedded vs. Complex Architectures}
-In simple embedded architectures (e.g., microcontrollers used in automotive braking systems or household appliances), the entire application code is often stored in this non-volatile memory. The memory controller maps this storage directly into the CPU's addressable space. This technique, known as \textbf{Execute In Place (XIP)}, allows the CPU to fetch and execute the developer's code from the very first clock cycle \cite{ARM-CortexM4-Generic-User-Guide}. The developer "owns" the machine from the first nanosecond.
+In simple embedded architectures (e.g., microcontrollers used in household appliances like washing machines or microwaves), the entire application code is often stored in this non-volatile memory. The memory controller maps this storage directly into the CPU's addressable space. This technique, known as \textbf{Execute In Place (XIP)}, allows the CPU to fetch and execute the developer's code from the very first clock cycle \cite{ARM-CortexM4-Generic-User-Guide}. The developer "owns" the machine from the first nanosecond.
 
 In contrast, more complex architectures (such as ARM-based smartphones or single-board computers like the Raspberry Pi) often store the main operating system on external, complex storage media like SD cards or eMMC chips. The CPU cannot simply memory-map an SD card. It requires a sophisticated software driver to communicate with the storage controller. To bridge this gap, manufacturers embed a tiny, immutable piece of software called the \textbf{BootROM} directly into the silicon. This code initializes the minimal required hardware (often internal SRAM) and loads a secondary bootloader from the external storage into that SRAM, which in turn loads the main software.
 
@@ -789,13 +789,12 @@ On modern "heavy" machines, such as x86-64 workstations, the initialization proc
     \item \textbf{Clock Stabilization:} Phase-Locked Loops (PLLs) must be tuned and stabilized to generate the gigahertz-range frequencies required by the cores.
     \item \textbf{DRAM Training:} Modern DDR4/DDR5 memory requires a complex calibration process to align signal timing before it becomes usable.
 \end{enumerate}
-\cite{Intel-Datasheet-Vol1}
 
-To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution.
+To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution \cite{Intel-Datasheet-Vol1}. 
 
 \subsection{The Chain of Trust and Abstraction}
 \label{subsubsec:chain_of_trust_and_abstraction}
-By the time a modern Operating System kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for defining the interface between the hardware and the OS is the \textbf{System Firmware} \cite{UEFI-Base-Spec, UEFI-PI-Spec}.
+By the time a kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for defining the interface between the hardware and the OS is the \textbf{System Firmware} \cite{UEFI-Base-Spec, UEFI-PI-Spec}.
 
 The firmware's responsibility is to abstract the diverse implementations of different motherboards (e.g., how the disk controller is wired) and provide a mechanism to load an OS from a disk into RAM. However, relying solely on firmware is often insufficient for a portable operating system:
 \begin{itemize}
@@ -988,19 +987,15 @@ The DTB format encodes the device tree into a linear, pointerless data structure
     \item \textbf{Strings Block}: A pool of null-terminated property names referenced by offset.
 \end{enumerate}
 
-The kernel parses this blob at boot to discover available RAM.
-
-\cite{Devicetree-Spec}
+The kernel parses this blob at boot to discover available RAM. \cite{Devicetree-Spec}
 
 \subsection{Firmware Interrogation}
 
 On general-purpose platforms (x86-64), the hardware is modular. The kernel cannot predict the amount of installed RAM or the physical address map. In this scenario, the kernel must query the system firmware directly. This introduces a dependency on the firmware interface:
 \begin{itemize}
-    \item \textbf{Legacy BIOS:} Requires invoking interrupt vectors (e.g., \texttt{INT 0x15, EAX=0xE820}) to retrieve a list of memory ranges.
-    \item \textbf{UEFI:} Requires calling specific boot services (\texttt{GetMemoryMap}) to retrieve descriptors of physical pages and their attributes.
+    \item \textbf{Legacy BIOS:} Requires invoking interrupt vectors (e.g., \texttt{INT 0x15, EAX=0xE820}) to retrieve a list of memory ranges \cite{osdev-int15}.
+    \item \textbf{UEFI:} Requires calling specific boot services (\texttt{GetMemoryMap}) to retrieve descriptors of physical pages and their attributes \cite{UEFI-Base-Spec}.
 \end{itemize}
-
-\cite{UEFI-Base-Spec}
 
 \subsection{Hardware Abstraction}
 How does the kernel handle such diverse set of methods of querying the memory? This is a part of a bigger topic - namely Hardware / Architecture Abstraction - and wil be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
@@ -1008,7 +1003,7 @@ How does the kernel handle such diverse set of methods of querying the memory? T
 \subsection{Discovering and Enabling CPU Features}
 \label{subsec:cpu_discovery}
 
-Modern Central Processing Units (CPUs) are not monolithic entities with a fixed feature set. Instead, they represent an accumulation of decades of architectural extensions. A generic x86-64 processor guarantees a baseline instruction set (User-level ISA), but specific capabilities regarding vectorization (AVX, AVX-512), cryptography (AES-NI), security (SMEP, SMAP), and performance (PCID, TSC-Deadline) vary significantly between processor generations and manufacturers.
+Modern CPUs are not monolithic entities with a fixed feature set. Instead, they represent an accumulation of decades of architectural extensions. A generic x86-64 processor guarantees a baseline instruction set (User-level ISA), but specific capabilities regarding vectorization (AVX, AVX-512), cryptography (AES-NI), security (SMEP, SMAP), and performance (PCID, TSC-Deadline) vary significantly between processor generations and manufacturers.
 \cite{Intel-AVX}
 
 An operating system kernel cannot blindly execute advanced instructions. Doing so on hardware that lacks support results in an \textit{Invalid Opcode} exception, causing a kernel panic. Therefore, a robust kernel must perform a feature discovery handshake during the early initialization phase.
@@ -5046,6 +5041,18 @@ USB & Universal Serial Bus \\
 VFS & Virtual File System \\
 VMM & Virtual Memory Manager \\
 WAD & Where's All the Data \\
+XIP & eXecute In Place \\
+SD & Secure Digital \\
+MMC & MultiMediaCard \\
+CPU & Central Processing Unit \\
+SRAM & Static Random Access Memory \\
+RAM & Random Access Memory \\
+PLL & Phase-Locked Loop \\
+RAM & Random Access Memory \\
+DRAM & Dynamic Random Access Memory \\
+DDR5 & Double Data Rate 5 \\
+
+
 \end{supertabular}
 \\
 \thispagestyle{empty}
