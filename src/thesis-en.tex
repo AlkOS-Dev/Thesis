@@ -500,7 +500,7 @@ Kernel development frequently involves managing collections of objects, such as 
 
 A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
 
-By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is illustrated below:
+By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is shown in \ref{lst:intrusiveNodesExample}.
 \begin{lstlisting}[caption={Intrusive Data Structures Example}, label={lst:intrusiveNodesExample}]
 template<class T>
 struct ListNode {
@@ -558,8 +558,160 @@ The usage of intrusive data structures offers multiple benefits critical for sys
     \item \textbf{Independent Removal} -- Removal operations do not require access to the double linked list head or the container object.
 \end{itemize}
 
-\subsection{Ref-counting}
-TODO: ADAM
+\subsection{Reference Counting}
+\label{subsec:refcounting}
+
+In a multitasking operating system, processes and kernel subsystems continuously acquire and release resources such as files, memory objects, and synchronization primitives. These resources are often shared: multiple processes may hold references to the same open file, or several kernel subsystems may access the same internal object concurrently. As long as at least one reference holder exists, the resource must remain valid; however, once the final holder releases its reference, the resource should be reclaimed promptly to avoid memory leaks and resource exhaustion.
+
+\textbf{Reference counting} provides a deterministic mechanism for managing such shared lifetimes. Each managed object maintains a counter representing the number of active references to it. The counter is incremented whenever a new reference is acquired and decremented when a reference is released. When the counter reaches zero, indicating that no execution context retains a reference, the object is safely deallocated. This approach allows the kernel to reclaim resources precisely at the moment they become unused, without requiring global coordination or non-deterministic garbage collection.
+
+
+\subsubsection{Storage Strategies}
+
+A central design decision in reference counting is the placement of the control metadata, namely the reference counter. As illustrated in Figure~\ref{fig:refcount_strategies_detail}, three principal strategies exist, each with distinct trade-offs in terms of allocation behavior, cache locality, and usability:
+
+\begin{enumerate}
+    \item \textbf{Intrusive Model (Embedded):} The reference counter is embedded directly within the object's data structure. Smart pointers maintain a single raw pointer to the object.
+    \item \textbf{External (Decoupled):} Common in userspace libraries (e.g., \texttt{std::shared\_ptr}), where the control block is allocated separately and the smart pointer stores two pointers.
+    \item \textbf{External (Indirection):} The smart pointer references a control block that in turn references the object, effectively introducing a level of indirection.
+\end{enumerate}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        font=\sffamily\small,
+        % Style for the pointer variable on stack
+        smartptr/.style={
+            rectangle split,
+            rectangle split parts=1,
+            draw=black!80,
+            fill=blue!5,
+            minimum height=0.8cm,
+            text width=2.5cm,
+            align=center,
+            rounded corners=1pt
+        },
+        % Style for the heap object container
+        heapblock/.style={
+            rectangle split,
+            rectangle split parts=1,
+            draw=black!70,
+            fill=white,
+            text width=3cm,
+            align=center,
+            minimum height=0.8cm
+        },
+        % Style for the Control Block (Metadata)
+        ctrlblock/.style={
+            rectangle split parts=1,
+            draw=black!70,
+            fill=gray!20,
+            text width=3cm,
+            align=center,
+            minimum height=0.6cm
+        },
+        % Arrow style
+        ptr/.style={
+            -{Latex[length=3mm]},
+            thick,
+            draw=black!70
+        },
+        labeltext/.style={
+            font=\bfseries,
+            anchor=west
+        }
+    ]
+
+    % ==========================================================
+    % 1. INTRUSIVE MODEL
+    % ==========================================================
+    \node[labeltext] at (-1, 0) {1. Intrusive Model};
+    
+    % Smart Pointer
+    \node[smartptr] (sp1) at (0, -1.5) {\texttt{ptr\_object}};
+    \node[above=0.1cm of sp1, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % The Object (One contiguous block)
+    \node[ctrlblock] (rc1) at (5, -1.2) {\texttt{ref\_count}};
+    \node[heapblock, below=0cm of rc1] (data1) {Object Data};
+    % Draw outline around the whole fused object
+    \node[draw=black!70, fit=(rc1) (data1), inner sep=0pt] (obj1) {};
+    \node[above=0.1cm of obj1, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrow
+    \draw[ptr] (sp1.east) -- (obj1.north  west);
+
+
+    % ==========================================================
+    % 2. DECOUPLED (Two Pointers in SmartPtr)
+    % ==========================================================
+    \node[labeltext] at (-1, -3.5) {2. External: Decoupled};
+
+    % Smart Pointer (Split in two)
+    \node[smartptr, rectangle split parts=2] (sp2) at (0, -5) {
+        \texttt{ptr\_object}
+        \nodepart{second}
+        \texttt{ptr\_control}
+    };
+    \node[above=0.1cm of sp2, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % Control Block (Count Only)
+    \node[ctrlblock] (cb2) at (5, -6) {\texttt{ref\_count}};
+    \node[above=0.1cm of cb2, font=\scriptsize\itshape, color=gray] {Control Block};
+
+    % Object Data
+    \node[heapblock] (obj2) at (5, -4.75) {Object Data};
+    \node[above=0.1cm of obj2, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrows
+    % Arrow from first part of SP to Object
+    \draw[ptr] (sp2.text east) -- (obj2.west);
+    % Arrow from second part of SP to Control Block
+    \draw[ptr] (sp2.second east) -- (cb2.north west);
+
+
+    % ==========================================================
+    % 3. INDIRECTION (Pointer in Control Block)
+    % ==========================================================
+    \node[labeltext] at (-1, -7.5) {3. External: Indirection};
+
+    % Smart Pointer (One Pointer)
+    \node[smartptr] (sp3) at (0, -9) {\texttt{ptr\_control}};
+    \node[above=0.1cm of sp3, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % Control Block (Count + Pointer)
+    \node[ctrlblock, rectangle split, rectangle split parts=2] (cb3) at (3.5, -9) {
+        \texttt{ref\_count}
+        \nodepart{second}
+        \texttt{ptr\_object}
+    };
+    \node[above=0.1cm of cb3, font=\scriptsize\itshape, color=gray] {Control Block};
+
+    % Object Data
+    \node[heapblock] (obj3) at (7.5, -9) {Object Data};
+    \node[above=0.1cm of obj3, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrows
+    \draw[ptr] (sp3.east) -- (cb3.north west);
+    \draw[ptr] (cb3.second east) -- (obj3.west);
+
+    \end{tikzpicture}
+    \caption{Comparison of Reference Counting Storage Strategies}
+    \label{fig:refcount_strategies_detail}
+\end{figure}
+
+\subsubsection{Rationale for the Intrusive Model in Kernel Space}
+
+Most kernels employ the \textbf{intrusive reference counting model}. Although external models offer greater flexibility by avoiding modifications to object layouts, their associated costs are not justifiable within the kernel context. The intrusive model ensures that the reference counter is colocated with the object itself, which guarantees a single allocation per object. Furthermore, with an intrusive design, any subsystem holding a raw pointer can acquire ownership by incrementing the embedded counter, allowing objects to move freely between low-level components and higher-level abstractions without compromising correctness.
+
+The usage of reference counting offers multiple benefits critical for systems programming:
+\begin{itemize}
+    \item \textbf{Deterministic deallocation} -- Resources are freed at the precise moment they become unused, without relying on garbage collection or deferred cleanup.
+    \item \textbf{Shared ownership} -- Multiple subsystems can safely share references to the same object without explicit coordination.
+    \item \textbf{Cache efficiency} -- The intrusive model ensures metadata is colocated with object data, improving memory access patterns.
+    \item \textbf{Lock-free operation} -- Atomic hardware primitives ensure safe concurrent access and correct object destruction in SMP environments without incurring the overhead of locks.
+    \item \textbf{Compile-time safety} -- Encapsulation within RAII-compliant wrappers (e.g., smart pointers) allows the compiler to enforce ownership semantics, automating reference management and structurally preventing resource leaks.
+\end{itemize}
 
 \subsection{Archtiecture Abstraction}
 TODO: KRYCZKA
@@ -594,7 +746,7 @@ To address this, the library is split into a userspace variant (\texttt{libc}) a
 \subsubsection{Program Initialization and the C Runtime (CRT)}
 \label{subsubsec:theory_crt}
 
-In addition to exposing user-facing APIs, the runtime environment must be initialized before control is transferred to the program’s entry function. Userspace programs do not begin execution at \texttt{main}; instead, execution starts at a library-provided entry point, conventionally named \texttt{\_start}, which is supplied by a startup object file \cite{osdev_crt}.
+In addition to exposing user-facing APIs, the runtime environment must be initialized before control is transferred to the program's entry function. Userspace programs do not begin execution at \texttt{main}; instead, execution starts at a library-provided entry point, conventionally named \texttt{\_start}, which is supplied by a startup object file \cite{osdev_crt}.
 
 This initialization sequence is realized through coordinated interaction between the linker, compiler, and standard library, and typically involves a set of well-defined object files:
 
@@ -3595,7 +3747,7 @@ FdResult<fd_t> FdManager::Open(const vfs::Path &path, OpenMode flags)
 
 \subsubsection{Resource Lifecycle Management}
 
-To ensure efficient memory usage and prevent resource leaks, the life cycle of \texttt{OpenFileEntry} and \texttt{File} objects is managed through intrusive reference counting. Both structures inherit from a \texttt{RefCounted} base class and are managed via smart pointers (\texttt{RefPtr} and \texttt{TaggedPointer}).
+To ensure efficient memory usage and prevent resource leaks, the life cycle of \texttt{OpenFileEntry} and \texttt{File} objects is managed through intrusive reference counting (Section~\ref{subsec:refcounting}). Both structures inherit from a \texttt{RefCounted} base class and are managed via smart pointers (\texttt{RefPtr} and \texttt{TaggedPointer}).
 
 When a process closes a file descriptor (or terminates), the reference to the corresponding \texttt{OpenFileEntry} in the process's \texttt{FdTable} is released. If the reference count drops to zero - indicating that no other file descriptors (across any process) refer to this open stream - the \texttt{OpenFileEntry} is automatically deallocated and removed from the global \texttt{OpenFileTable}.
 
@@ -4598,6 +4750,7 @@ GDT & Global Descriptor Table \\
 IDT & Interrupt Descriptor Table \\
 IPC & Inter-Process Communication \\
 ISR & Interrupt Service Routine \\
+JSON & JavaScript Object Notation \\
 LAPIC & Local Advanced Programmable Interrupt Controller \\
 LBA & Linear Block Addressing \\
 LIT & Logical Interrupt Table \\
@@ -4615,6 +4768,7 @@ PID & Process IDentifier \\
 PIT & Programmable Interval Timer \\
 PMM & Physical Memory Manager \\
 POSIX & Portable Operating System Interface \\
+RAII & Resource Acquisition Is Initialization \\
 REPL & Read-Eval-Print Loop \\
 RTC & Real-Time Clock \\
 SATA & Serial Advanced Technology Attachment \\
@@ -4622,12 +4776,14 @@ SIMD & Single Instruction, Multiple Data \\
 SMP & Symmetric MultiProcessing \\
 SSOT & Single Source Of Truth \\
 TID & Thread IDentifier \\
+TOML & Tom's Obvious, Minimal Language \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
 USB & Universal Serial Bus \\
 VFS & Virtual File System \\
 VMM & Virtual Memory Manager \\
 WAD & Where's All the Data \\
+YAML & YAML Ain't Markup Language \\
 \end{supertabular}
 \\
 \thispagestyle{empty}
