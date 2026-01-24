@@ -422,7 +422,7 @@ The division of work regarding the written thesis mirrors the distribution of co
 \chapter{Creating an Operating System from Scratch}
 \label{chap:os_from_scratch}
 
-This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the general purpose monolithic kernel design with memory virtualization, where every module resides within the same address space - the kernel address space. Given that our work was primarily conducted on x86-64 machines, we will use this architecture as the basis for further discussion.
+This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the general purpose monolithic kernel design with memory virtualization, where every module resides within the same address space --- the kernel address space. Given that our work was primarily conducted on x86-64 machines, we will use this architecture as the basis for further discussion.
 
 \section{Host Environment Preparation}
 
@@ -1002,7 +1002,7 @@ On general-purpose platforms (x86-64), the hardware is modular. The kernel canno
 \cite{UEFI-Base-Spec}
 
 \subsection{Hardware Abstraction}
-How does the kernel handle such diverse set of methods of querying the memory? This is a part of a bigger topic - namely Hardware / Architecture Abstraction - and wil be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
+How does the kernel handle such diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and wil be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
 
 \subsection{Discovering and Enabling CPU Features}
 \label{subsec:cpu_discovery}
@@ -1144,7 +1144,7 @@ If an allocator simply handed out memory sequentially and never had to accept re
     \item \textbf{External Fragmentation:} This occurs when free memory exists in the system, but it is scattered in small, non-contiguous holes such that a request for a large contiguous block cannot be satisfied. The total free memory might be sufficient, but the geometry of the holes prevents allocation.
 \end{itemize}
 
-\textbf{The Root Cause: Isolated Deaths.} Fragmentation fundamentally arises from \textit{isolated deaths} - when an object is freed but its neighbors remain allocated, creating an unusable hole. If adjacent objects always died together, their combined space would be reclaimed as one contiguous block. The allocator's core challenge is predicting which objects will die at similar times and placing them contiguously. Since the allocator cannot know future behavior, it must rely on heuristics that exploit regularities in program behavior~\cite{wilson1995survey}.
+\textbf{The Root Cause: Isolated Deaths.} Fragmentation fundamentally arises from \textit{isolated deaths} --- when an object is freed but its neighbors remain allocated, creating an unusable hole. If adjacent objects always died together, their combined space would be reclaimed as one contiguous block. The allocator's core challenge is predicting which objects will die at similar times and placing them contiguously. Since the allocator cannot know future behavior, it must rely on heuristics that exploit regularities in program behavior~\cite{wilson1995survey}.
 
 The goal of any allocator is to balance the minimization of these two types of fragmentation against the computational cost (latency) of the allocation operation.
 
@@ -1348,7 +1348,7 @@ The core innovation of TLSF is how it finds a suitable free block in constant ti
     \item A bit is set to \textbf{0} if the list is empty.
 \end{itemize}
 
-When a request arrives, the allocator maps the size to indices $(f, s)$. It checks the bitmap for that list. If the bit is 0 (empty), it does not need to loop through lists. Instead, it uses a hardware instruction - \textit{Find First Set} (\texttt{ffs}) or \textit{Count Leading Zeros} (\texttt{clz}) - to atomically find the index of the next available bit in the bitmap. This operation allows the allocator to skip over empty size classes instantly, guaranteeing $O(1)$ allocation time regardless of the heap state.
+When a request arrives, the allocator maps the size to indices $(f, s)$. It checks the bitmap for that list. If the bit is 0 (empty), it does not need to loop through lists. Instead, it uses a hardware instruction --- \textit{Find First Set} (\texttt{ffs}) or \textit{Count Leading Zeros} (\texttt{clz}) --- to atomically find the index of the next available bit in the bitmap. This operation allows the allocator to skip over empty size classes instantly, guaranteeing $O(1)$ allocation time regardless of the heap state.
 
 \subsubsection{Physical Block Management: Boundary Tags}
 The Buddy System calculates the address of a neighbor using bitwise XOR. This is fast, but it restricts merging: a block at address 0x2000 of size 0x1000 can \textit{only} merge with its specific buddy at 0x3000. It cannot merge with a free block at 0x1000, even though they are physically adjacent.
@@ -1425,7 +1425,7 @@ To solve this, modern allocators use a two-tiered hierarchy:
 \subsubsection{The Hoard Allocator}
 A naive implementation of per-CPU heaps suffers from a specific pathology known as \textit{blowup}. Consider a "Producer-Consumer" pattern where Thread A (on CPU 1) continuously allocates packets, and Thread B (on CPU 2) consumes and frees them. CPU 1's heap constantly empties (requesting more from global), and CPU 2's heap constantly fills up (never returning to global). The system runs out of memory despite having ample free space, because that space is trapped on CPU 2.
 
-The \textbf{Hoard Allocator} \cite{berger2000hoard} addresses this by organizing memory into \textit{Superblocks} - large chunks of memory containing multiple objects of the same size. Hoard tracks the "emptiness" of these superblocks. If a superblock on a local heap becomes mostly empty, it is moved to the global heap, allowing other processors to reuse the memory. This guarantees that the memory consumption of the allocator is bounded within a constant factor of the ideal required memory, solving the blowup problem while maintaining scalability.
+The \textbf{Hoard Allocator} \cite{berger2000hoard} addresses this by organizing memory into \textit{Superblocks} --- large chunks of memory containing multiple objects of the same size. Hoard tracks the "emptiness" of these superblocks. If a superblock on a local heap becomes mostly empty, it is moved to the global heap, allowing other processors to reuse the memory. This guarantees that the memory consumption of the allocator is bounded within a constant factor of the ideal required memory, solving the blowup problem while maintaining scalability.
 
 \subsection{Hardware Constraints: Zoning}
 
@@ -2155,7 +2155,7 @@ In a production environment, this structure would naturally include additional f
 
 \subsection{Thread}
 
-The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution - the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer. Although same thing may be archieved with different solution
+The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution --- the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer. Although same thing may be archieved with different solution
 
 This approach simplifies the architecture significantly and enhances performance. It is worth noting that while certain architectures provide hardware-assisted context switching mechanisms (such as the legacy Hardware Task Switching on x86), these are rarely utilized in modern general-purpose kernels due to performance overhead and portability concerns. Instead, the standard approach is to unify context storage using the stack. Since the stack is heavily utilized, it is typically cached, eliminating the need to allocate separate memory regions for saving context. When saving context, registers are pushed onto the stack. When initializing a thread, the stack is artificially populated with boot-up values.
 
@@ -2346,7 +2346,7 @@ With the foundational kernel components established, the development process tra
     \item \textbf{User Space Libraries} --- The porting or implementation of standard libraries (such as \texttt{libc}) to run on top of the kernel interface.
     \item \textbf{Executable Loading} --- A loader capable of parsing a standard executable format (e.g., ELF) and correctly loading the code into memory.
     \item \textbf{Memory Protection} --- The enforcement of isolation through separate address spaces and the configuration of appropriate page-level privilege flags.
-    \item \textbf{Userspace Transition} --- A bootstrapping mechanism within the kernel to finalize initialization and jump to user space to begin executing user code - strictly depends on architecture.
+    \item \textbf{Userspace Transition} --- A bootstrapping mechanism within the kernel to finalize initialization and jump to user space to begin executing user code --- strictly depends on architecture.
     \item \textbf{Compilation Toolchain} --- The extension and configuration of the compiler to support targeting the specific operating system.
 \end{itemize}
 
@@ -3408,7 +3408,7 @@ This separation of concerns ensures that the kernel code remains decoupled from 
 
 \subsection{Page Metadata Management}
 
-A fundamental challenge in physical memory management is tracking the state of every page frame — whether it is free, allocated, part of a slab cache, or serving as a page table — without consuming excessive memory or creating circular dependencies. Storing this metadata inside the page frames themselves is impossible for allocated pages, as the user data would overwrite the metadata. Conversely, dynamically allocating metadata nodes (e.g., using \texttt{malloc}) is not feasible because the memory manager itself is required to perform those allocations.
+A fundamental challenge in physical memory management is tracking the state of every page frame --- whether it is free, allocated, part of a slab cache, or serving as a page table --- without consuming excessive memory or creating circular dependencies. Storing this metadata inside the page frames themselves is impossible for allocated pages, as the user data would overwrite the metadata. Conversely, dynamically allocating metadata nodes (e.g., using \texttt{malloc}) is not feasible because the memory manager itself is required to perform those allocations.
 
 To resolve this, AlkOS implements a system inspired by the Linux \texttt{struct page} architecture. We pre-allocate a global array of metadata structures, called the \texttt{PageMetaTable}, where the index $i$ corresponds directly to Physical Frame Number (PFN) $i$.
 
@@ -3533,7 +3533,7 @@ When a request for a block of order $k$ is received, the allocator inspects the 
 
 \subsubsection{Deallocation and Coalescing}
 
-The strength of the Buddy System lies in its ability to rapidly defragment memory. When a page frame is freed, the allocator attempts to merge it with its "buddy"—the unique adjacent block of the same size that makes up a larger aligned block.
+The strength of the Buddy System lies in its ability to rapidly defragment memory. When a page frame is freed, the allocator attempts to merge it with its "buddy" --- the unique adjacent block of the same size that makes up a larger aligned block.
 
 Because block sizes are powers of two, the physical frame number (PFN) of a block's buddy can be calculated instantly using bitwise operations, without traversing any lists.
 
@@ -4301,7 +4301,7 @@ concept VFSInterface = VFSIO<IO> and requires(T<IO> fs, IO io) {
 };
 \end{lstlisting}
 
-The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, filesystem drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends - such as RAM disks, physical partitions, or network storage - without requiring implementation changes.
+The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, filesystem drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends --- such as RAM disks, physical partitions, or network storage --- without requiring implementation changes.
 
 \begin{lstlisting}[caption={VFSIO Concept Definition}, label={lst:vfsioConcept}]
 template <typename IO>
@@ -4440,7 +4440,7 @@ FdResult<fd_t> FdManager::Open(const vfs::Path &path, OpenMode flags)
 
 To ensure efficient memory usage and prevent resource leaks, the life cycle of \texttt{OpenFileEntry} and \texttt{File} objects is managed through intrusive reference counting. Both structures inherit from a \texttt{RefCounted} base class and are managed via smart pointers (\texttt{RefPtr} and \texttt{TaggedPointer}).
 
-When a process closes a file descriptor (or terminates), the reference to the corresponding \texttt{OpenFileEntry} in the process's \texttt{FdTable} is released. If the reference count drops to zero - indicating that no other file descriptors (across any process) refer to this open stream - the \texttt{OpenFileEntry} is automatically deallocated and removed from the global \texttt{OpenFileTable}.
+When a process closes a file descriptor (or terminates), the reference to the corresponding \texttt{OpenFileEntry} in the process's \texttt{FdTable} is released. If the reference count drops to zero --- indicating that no other file descriptors (across any process) refer to this open stream --- the \texttt{OpenFileEntry} is automatically deallocated and removed from the global \texttt{OpenFileTable}.
 
 Consequently, the destruction of an \texttt{OpenFileEntry} releases its hold on the underlying \texttt{File} object. Similarly, if the reference count of the \texttt{File} object reaches zero, it implies that no active streams are reading from or writing to that specific file. The system then automatically reclaims the associated memory from the \texttt{FileTable}. This cascading deallocation mechanism ensures that kernel memory is only consumed for files that are actively in use by at least one process.
 
