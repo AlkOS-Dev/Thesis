@@ -291,7 +291,10 @@
 \title
 \end{center}
 
-TODO: KRYCZKA
+Operating system development constitutes one of the most challenging disciplines in computer science, requiring deep knowledge of hardware architecture and systems programming. This thesis presents the design and implementation of AlkOS, a monolithic general-purpose operating system kernel for the x86-64 architecture (through a hardware abstraction layer), developed from scratch using C++. The project addresses the scarcity of structured educational resources by serving both as a functional kernel implementation and a comprehensive guide to independent OS development.
+
+Technically, AlkOS features a custom two-stage bootloader that transitions the machine to Long Mode and establishes a higher-half kernel environment. The system implements advanced memory management with paging and a physical memory manager, alongside a Virtual File System (VFS) with FAT support. The process scheduler utilizes a tickless, meta-scheduler architecture supporting multiple policies, including Round-Robin, Priority Queues, and Multi-Level Feedback Queues (MLFQ), ensuring efficient task management. The validation of the system's capabilities culminated in the successful execution of the Doom engine within a custom graphical shell, a task necessitating the implementation of a C/C++ standard library and a comprehensive system call interface.
+
 
 \end{abstract}
 }
