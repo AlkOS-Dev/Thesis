@@ -1488,136 +1488,155 @@ To store these mappings efficiently, architectures employ \textbf{Multi-level Pa
     \begin{tikzpicture}[
         font=\sffamily\small,
         >={Latex[length=2mm, width=1.5mm]},
+        node distance=1.5cm and 0.8cm,
         % Styles
-        table/.style={
-            draw=black!50, 
-            fill=white, 
-            rounded corners=2pt, 
-            minimum width=1.2cm, 
-            minimum height=1.8cm, 
-            inner sep=0pt
+        addrbox/.style={
+            draw=black!70,
+            fill=#1!15,
+            minimum height=1.0cm,
+            minimum width=2.2cm,
+            inner sep=4pt,
+            align=center,
+            font=\sffamily\bfseries\small
         },
-        entry/.style={
-            draw=black!40, 
-            fill=white, 
-            minimum width=1.2cm, 
-            minimum height=0.35cm, 
-            inner sep=0pt,
-            anchor=north
+        bitrange/.style={
+            font=\sffamily\scriptsize,
+            text=black!60,
+            anchor=north,
+            yshift=-2pt
+        },
+        tablebox/.style={
+            draw=black!60,
+            fill=white,
+            minimum width=1.8cm,
+            minimum height=2.5cm,
+            rounded corners=2pt
+        },
+        entrybox/.style={
+            draw=black!50,
+            fill=white,
+            minimum width=1.6cm,
+            minimum height=0.5cm,
+            font=\sffamily\scriptsize
         },
         highlight/.style={
-            fill=#1, 
+            fill=#1!20,
             draw=#1!80!black,
             thick
         },
-        labelnode/.style={
-            font=\bfseries\footnotesize,
-            anchor=south,
-            yshift=2pt
+        arrow/.style={
+            ->,
+            thick,
+            draw=black!70,
+            rounded corners=5pt
         },
-        addrblock/.style={
-            draw=black!40,
-            minimum height=0.7cm,
-            minimum width=#1,
-            fill=white,
-            anchor=west,
-            outer sep=0pt
-        },
-        % Colors
-        cL4/.style={fill=violet!15, draw=violet!60!black, text=violet!30!black},
-        cL3/.style={fill=blue!15, draw=blue!60!black, text=blue!30!black},
-        cL2/.style={fill=teal!15, draw=teal!60!black, text=teal!30!black},
-        cL1/.style={fill=orange!15, draw=orange!60!black, text=orange!30!black},
-        cOff/.style={fill=gray!15, draw=gray!60!black, text=gray!30!black}
+        indexarrow/.style={
+            ->,
+            draw=black!60,
+            dashed
+        }
     ]
 
-    % --- Address Bar ---
-    \node[anchor=west, font=\small\bfseries] at (0, 1.2) {Virtual Address: \texttt{0x0000\_0080\_0020\_0000}};
-
-    % Bar container
-    \coordinate (barstart) at (0, 0);
+    % --- 1. Virtual Address Bar (The Spine) ---
     
-    % L4
-    \node[addrblock=1.8cm, cL4] (bar4) at (barstart) {\textbf{L4} [1]};
-    \node[anchor=north, font=\tiny, text=gray] at (bar4.south) {47:39};
+    \node[addrbox=violet] (l4) at (0,0) {L4 Index};
+    \node[bitrange] at (l4.south) {47:39};
+
+    \node[addrbox=blue, right=0.3cm of l4] (l3) {L3 Index};
+    \node[bitrange] at (l3.south) {38:30};
+
+    \node[addrbox=teal, right=0.3cm of l3] (l2) {L2 Index};
+    \node[bitrange] at (l2.south) {29:21};
+
+    \node[addrbox=orange, right=0.3cm of l2] (l1) {L1 Index};
+    \node[bitrange] at (l1.south) {20:12};
+
+    \node[addrbox=gray, right=0.3cm of l1, minimum width=2.5cm] (off) {Offset};
+    \node[bitrange] at (off.south) {11:0};
+
+    % Address Bits (Replacing the Title)
+    \node[anchor=south, font=\ttfamily\small, text=violet] at ($(l4.north)+(0,0.3)$) {000000001};
+    \node[anchor=south, font=\ttfamily\small, text=blue] at ($(l3.north)+(0,0.3)$) {000000000};
+    \node[anchor=south, font=\ttfamily\small, text=teal] at ($(l2.north)+(0,0.3)$) {000000001};
+    \node[anchor=south, font=\ttfamily\small, text=orange] at ($(l1.north)+(0,0.3)$) {000000000};
+    \node[anchor=south, font=\ttfamily\small, text=gray] at ($(off.north)+(0,0.3)$) {000000000000};
+    \node[anchor=south west, font=\sffamily\bfseries\small] at ($(l4.west)+(-2.5,0.82)$) {Virtual Address:};
+
+
+    % --- 2. The Tables (The Teeth - Aligned below) ---
     
-    % L3
-    \node[addrblock=1.8cm, cL3] (bar3) at (bar4.east) {\textbf{L3} [0]};
-    \node[anchor=north, font=\tiny, text=gray] at (bar3.south) {38:30};
+    % CR3 - Anchored Left
+    \node[draw=black, fill=gray!20, minimum width=1.2cm, minimum height=0.8cm, left=1.5cm of l4 |- l4, shift={(0,-3)}] (cr3) {\textbf{CR3}};
+
+    % Function to draw a table with a highlighted entry
+    % #1: Name, #2: Position, #3: Color, #4: Label
+    \def\drawtable#1#2#3#4{
+        \node[tablebox] (#1) at (#2) {};
+        \node[anchor=north, font=\sffamily\bfseries\small, yshift=-2pt] at (#1.south) {#4};
+        % Decoration lines
+        \draw[gray!30] (#1.west) -- (#1.east);
+        \draw[gray!30] ($(#1.west)+(0,0.8)$) -- ($(#1.east)+(0,0.8)$);
+        \draw[gray!30] ($(#1.west)+(0,-0.8)$) -- ($(#1.east)+(0,-0.8)$);
+        % The Entry
+        \node[entrybox, highlight=#3] (#1_entry) at (#1.center) {Entry};
+    }
+
+    \drawtable{pml4}{$(l4.south) + (0, -2.5)$}{violet}{PML4}
+    \drawtable{pdpt}{$(l3.south) + (0, -2.5)$}{blue}{PDPT}
+    \drawtable{pd}{$(l2.south) + (0, -2.5)$}{teal}{Page Dir}
+    \drawtable{pt}{$(l1.south) + (0, -2.5)$}{orange}{Page Table}
+
+
+    % --- 3. Connections ---
+
+    % Vertical Indexing Lines (The "Select" Logic)
+    \draw[indexarrow] (l4.south) -- (pml4.north);
+    \draw[indexarrow] (l3.south) -- (pdpt.north);
+    \draw[indexarrow] (l2.south) -- (pd.north);
+    \draw[indexarrow] (l1.south) -- (pt.north);
+
+    % Horizontal Chain (The "flow" Logic)
     
-    % L2
-    \node[addrblock=1.8cm, cL2] (bar2) at (bar3.east) {\textbf{L2} [1]};
-    \node[anchor=north, font=\tiny, text=gray] at (bar2.south) {29:21};
+    % CR3 -> PML4 Base
+    \draw[arrow] (cr3.east) -- (pml4.west);
+
+    % PML4 Entry -> PDPT Base
+    \draw[arrow] (pml4_entry.east) -- ++(0.4, 0) |- ($(pdpt.north west)!0.25!(pdpt.west)$);
+
+    % PDPT Entry -> PD Base
+    \draw[arrow] (pdpt_entry.east) -- ++(0.4, 0) |- ($(pd.north west)!0.25!(pd.west)$);
+
+    % PD Entry -> PT Base
+    \draw[arrow] (pd_entry.east) -- ++(0.4, 0) |- ($(pt.north west)!0.25!(pt.west)$);
+
+
+    % --- 4. Physical Address Construction (The Merge) ---
+
+    % PT Entry -> Frame Base
+    \coordinate (merge_point) at ($(off.south) + (0.5, -2.5)$);
     
-    % L1
-    \node[addrblock=1.8cm, cL1] (bar1) at (bar2.east) {\textbf{L1} [0]};
-    \node[anchor=north, font=\tiny, text=gray] at (bar1.south) {20:12};
+    % Container for Physical Address
+    \node[draw=black!80, fill=green!5, minimum width=3.5cm, minimum height=1.2cm, align=center] (phys_addr) at (merge_point) {};
+    \node[anchor=south, font=\bfseries] at (phys_addr.north) {Physical Address};
     
-    % Offset
-    \node[addrblock=2.4cm, cOff] (barOff) at (bar1.east) {\textbf{Offset}};
-    \node[anchor=north, font=\tiny, text=gray] at (barOff.south) {11:0};
+    % Split inside
+    \node[draw=black!50, fill=green!20, minimum height=0.6cm, minimum width=2.0cm, anchor=west] (pfn_part) at ($(phys_addr.west)+(0.2, -0.1)$) {\small PFN};
+    \node[draw=black!50, fill=gray!20, minimum height=0.6cm, minimum width=1.1cm, anchor=west] (off_part) at (pfn_part.east) {\small Offset};
 
-    % --- Page Walk Flow ---
-    
-    \coordinate (flowStart) at (0.5, -2);
-    \def\stepX{2.8}
-    \def\stepY{-1.2}
+    % Arrow from PT Entry to PFN part
+    \draw[arrow] (pt_entry.east) -- ++(0.3,0) |- (pfn_part.west);
 
-    % CR3
-    \node[draw=black!60, fill=gray!10, rounded corners, minimum width=1.2cm, minimum height=0.8cm] (cr3) at (0, -2.5) {CR3};
-    \coordinate (cr3out) at (cr3.east);
+    % Arrow from Virtual Offset to Physical Offset (Circular from right)
+    \draw[arrow, dashed] (off.east) to[out=0, in=0, looseness=1.5] node[right, font=\tiny, text=gray, xshift=2pt] {Copy} (off_part.east);
 
-    % PML4 Table
-    \coordinate (pml4pos) at ($(cr3out) + (1.5, 0)$);
-    \node[table] (pml4) at (pml4pos) {};
-    \node[labelnode] at (pml4.north) {PML4};
-    % Entries
-    \draw[gray!30] (pml4.west) -- (pml4.east); % visual lines
-    \node[entry, cL4] (pml4e) at ($(pml4.north) + (0, -0.5)$) {};
-    \node at (pml4e) {\tiny Entry 1};
-    
-    % Link Bar to Table
-    \draw[->, violet, dotted, thick] (bar4.south) to[out=-90, in=90] (pml4e.north);
+    % Final Result -> RAM
+    \node[draw=black, fill=green!20, minimum width=2cm, minimum height=1.5cm, below=0.8cm of phys_addr] (ram) {\textbf{4KB Frame}};
+    \node[anchor=north, font=\tiny] at (ram.south) {Physical Memory};
 
-    % PDPT Table
-    \coordinate (pdptpos) at ($(pml4pos) + (\stepX, \stepY)$);
-    \node[table] (pdpt) at (pdptpos) {};
-    \node[labelnode] at (pdpt.north) {PDPT};
-    \node[entry, cL3] (pdpte) at ($(pdpt.north) + (0, -0.9)$) {}; % Lower down
-    \node at (pdpte) {\tiny Entry 0};
-    
-    \draw[->, blue, dotted, thick] (bar3.south) to[out=-90, in=90] (pdpte.north);
-
-    % PD Table
-    \coordinate (pdpos) at ($(pdptpos) + (\stepX, \stepY)$);
-    \node[table] (pd) at (pdpos) {};
-    \node[labelnode] at (pd.north) {PD};
-    \node[entry, cL2] (pde) at ($(pd.north) + (0, -0.5)$) {};
-    \node at (pde) {\tiny Entry 1};
-    
-    \draw[->, teal, dotted, thick] (bar2.south) to[out=-90, in=90] (pde.north);
-
-    % PT Table
-    \coordinate (ptpos) at ($(pdpos) + (\stepX, \stepY)$);
-    \node[table] (pt) at (ptpos) {};
-    \node[labelnode] at (pt.north) {PT};
-    \node[entry, cL1] (pte) at ($(pt.north) + (0, -0.9)$) {};
-    \node at (pte) {\tiny Entry 0};
-
-    \draw[->, orange, dotted, thick] (bar1.south) to[out=-90, in=90] (pte.north);
-
-    % CONNECTING ARROWS (The "Walk")
-    \draw[->, thick, black!70] (cr3) -- (pml4.west);
-    \draw[->, thick, black!70] (pml4e.east) -- ++(0.3, 0) |- ($(pdpt.north west)!0.2!(pdpt.west)$);
-    \draw[->, thick, black!70] (pdpte.east) -- ++(0.3, 0) |- ($(pd.north west)!0.2!(pd.west)$);
-    \draw[->, thick, black!70] (pde.east) -- ++(0.3, 0) |- ($(pt.north west)!0.2!(pt.west)$);
-    \draw[->, thick, black!70] (pte.east) -- ++(0.5, 0) node[right, draw=black!50, fill=green!15, minimum size=1cm, align=center] (phys) {\textbf{Page}\\ \tiny 4KB Frame};
-
-    % Offset arrow
-    \draw[->, gray, dashed, thick] (barOff.south) to[out=-90, in=90] (phys.north);
+    \draw[arrow] (phys_addr.south) -- (ram.north);
 
 \end{tikzpicture}
-    \caption{Conceptual flow of a Multi-level Page Table Walk}
+    \caption{Conceptual flow of a Multi-level Page Table Walk on x86-64}
     \label{fig:page_walk}
 \end{figure}
 
