@@ -77,6 +77,56 @@
 }
 
 % ==============================================================================
+% Virtual Memory Management
+% ==============================================================================
+
+@inproceedings{rashid1987machine,
+  author    = {Rashid, Richard F. and Tevanian, Avadis and Young, Michael and Golub, David and Baron, Robert and Black, David and Bolosky, William and Chew, Jonathan},
+  title     = {Machine-Independent Virtual Memory Management for Paged Uniprocessor and Multiprocessor Architectures},
+  booktitle = {Architectural Support for Programming Languages and Operating Systems (ASPLOS)},
+  year      = {1987},
+  pages     = {31--39},
+  note      = {Defines the split between the pmap (hardware) and vm\_map (software) layers used in Mach/BSD/macOS.}
+}
+
+@article{denning1968working,
+  author  = {Denning, Peter J.},
+  title   = {The Working Set Model for Program Behavior},
+  journal = {Communications of the ACM},
+  volume  = {11},
+  number  = {5},
+  year    = {1968},
+  pages   = {323--333},
+  note    = {Foundational theory on locality of reference and thrashing.}
+}
+
+@inproceedings{navarro2002practical,
+  author    = {Navarro, Juan and Iyer, Sitaram and Druschel, Peter and Cox, Alan},
+  title     = {Practical, Transparent Operating System Support for Superpages},
+  booktitle = {Operating Systems Design and Implementation (OSDI)},
+  year      = {2002},
+  note      = {Discusses TLB coverage and the trade-offs of using large pages (2MB/1GB).}
+}
+
+@article{sleator1985splay,
+  author  = {Sleator, Daniel D. and Tarjan, Robert E.},
+  title   = {Self-Adjusting Binary Search Trees},
+  journal = {Journal of the ACM},
+  volume  = {32},
+  number  = {3},
+  year    = {1985},
+  note    = {The data structure used by BSD kernels for memory regions due to its property of keeping frequently accessed nodes near the root.}
+}
+
+@book{gorman2004understanding,
+  author    = {Gorman, Mel},
+  title     = {Understanding the Linux Virtual Memory Manager},
+  year      = {2004},
+  publisher = {Prentice Hall},
+  note      = {The definitive reference for practical VMM implementation details on x86.}
+}
+
+% ==============================================================================
 % Interrupts
 % ==============================================================================
 
