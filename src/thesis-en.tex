@@ -335,15 +335,52 @@ TODO: KRYCZKA
 \markboth{}{Introduction}
 \addcontentsline{toc}{chapter}{Introduction}
 
-\section{Motivation}
+\section{Introduction}
 
-The creation of a functional operating system kernel stands as one of the most complex tasks in software engineering. It encompasses a wide range of computer science disciplines and necessitates a rigorous design approach. While the primary focus of this thesis is on the practical design and implementation of a solution rather than theoretical research, it represents a significant challenge for engineers with three years of professional experience, offering a unique opportunity to both acquire new knowledge and refine existing skills.
+The creation of a functional operating system kernel stands as one of the most complex tasks in software engineering. It may implement all and more, a subset of, a combination, or the bare minimum of what will be discussed in this work in the following chapters, but the ultimate goal remains similar - to make more of the machine than running a simple program.
 
-Firstly, the scale of the project necessitates strict adherence to engineering procedures, coding standards, and established design patterns to ensure the system's viability. Engineering proficiency will be rigorously tested, as development takes place in a freestanding environment devoid of standard debugging utilities or established external libraries. The system relies entirely on self-implemented solutions. Consequently, a failure in any foundational component can cascade through the entire system. Through this process, we will understand low-level hardware interaction, device abstraction, scheduling, memory management and the specific challenges inherent to operating system development. Ultimately, from the perspective of professional software engineering, gaining a deep understanding of internal kernel mechanisms, multithreading, and scheduling will significantly enhance our proficiency as programmers.
+Perhaps it's to abstract away the underlying hardware and achieve portability of programs between different machines. Most likely it's the enablement of parallel execution of a different set of programs. Perhaps even the programs can't be trusted - they must be run as if they existed in isolated environments, unaware of each other and incapable of interfering in each other's work. 
+
+If that were to be the case, certainly they'd require a method of receiving parts of memory to use, of compute time, of whatever resources the machine has at its disposal - cameras, microphones, TPU's, GPU's, NIC's or custom chipsets. If the programs had to access these resources, then the OS would need to provision them, to manage them and for that reason to bookkeep and gatekeep them. If a set of programs wanted to communicate with each other, it'd need to facilitate that communication. The OS that has to do it becomes in consequence, the middleman and the orchestrator of the programs, as well as the master of the machine.
+
+One can imagine that errors in the master of the machine would be quite catastrophic for every operation running on the machine. The impact: evident in every single program. Mere slowness of execution is quite the favorable scenario here - a total and utter corruption of the system's state and its following crash - or in more extreme circumstances - the damaging of the hardware itself - are all possible cases. The most insidious being minor bugs that are subtle enough to remain untouched, yet severe enough to impact the outcome of the program, perhaps affecting someone's life in the process, if the system happened to be responsible for a matter of such importance. 
+
+The creation of an OS is therefore not a trivial matter. It requires a precise understanding of the machine, its hardware, its resources, and a very meticulous approach to creating and testing it. It needs to be fast --- the less time it uses, the more time the other programs have to execute. At the same time it needs to be precise --- resources leaked and unrecovered accumulate over time --- creating a machine that's incapable of running for longer periods of time. 
+
+\subsection{Motivation}
+
+Precisely for the beforementioned reasons, implementing an operating system becomes such a rewarding task. Creating this apex software, deconstructing it into bits and pieces and untangling the problems it deals with, requires the highest standards of software engineering. In order to understand, why someone would one create an operating system from scratch as a Hobby - not for money, or a task at a job, or perspective of material gain - we'll bring a quote, the only one in this entire thesis: 
+"But why, some say, the moon? Why choose this as our goal? And they may well ask why climb the highest mountain? Why, 35 years ago, fly the Atlantic?
+[...]
+We choose to go to the moon. We choose to go to the moon in this decade and do the other things, not because they are easy, but because they are hard, because that goal will serve to organize and measure the best of our energies and skills, because that challenge is one that we are willing to accept, one we are unwilling to postpone, and one which we intend to win"
+
+\subsection{Scale}
+
+For these reasons an operating system is almost always created as an enterprise level initiative. Teams of seasoned profesionals are involved in working on it. Hobbyist OS'es created by one person or a handfull of people are on the other hand very few and far in between. 
+
+To bring that into scale. We count the total number of pc games in tens of thousands, with the number of pc games on steam (the current biggest market for pc games) is estimated to be around ~121_000 as of early 2026 with 20k being made in 2025 alone. The number of mobile applications we count in milions, the number of apps on the play store (biggest app market for android) - around 2.180 mln with a similar number on the apple's equivalent store https://42matters.com/google-play-statistics-and-trends. The number of websites? We count that in billions, with 1.34 billion being the current estimate for the total number of websites on the internet https://www.internetlivestats.com/total-number-of-websites/. All are consumers of the operating system they are embedded in. What about OS'es?
+What is listed here is by no means an exact number, since that is a really hard thing to estimate. It has to be taken into account that in the early era of computers, each new mainframe basically came with it's own OS. It will serve however as a rough estimate that'll allow to understand the scale of things.
+The number of open source operating systems - mostly forks of linux and freebsd - is actively kept track of at https://distrowatch.com/search.php?status=All and totals 900+ entries. When talking about notable proprietary and historical OS'es,wikipedia lists around 250-300 operating systems on its page dedicated to them https://en.wikipedia.org/wiki/List_of_operating_systems.
+Real time operating systems? Around 100-150 market leading ones https://en.wikipedia.org/wiki/Comparison_of_real-time_operating_systems.
+The hobby ones created from scratch? An active list maintained at https://wiki.osdev.org/Projects suggests just around 175 projects as the current total.
+[tldr, linux forks are plenty, systems made from scratch? proprietary and much less. Real time ssytems? same thing. Hobby OS'es? That's a really rare breed with only around 175 being there as of early 2026.]
+Creation of one, from scratch, by three hobbyists, is therefore not an every day thing.
+
+\subsection{Difficulties}
+
+The number one difficulty in creation of one is the scarcity of quality educational materials and sources. This is a direct consuequence of the scale problem - too few people are involved in this for the paved paths to already be there. https://wiki.osdev.org/Expanded_Main_Page stands as the best source for hobby os'es. Creation of an OS without this resource would be practially impossible. Where do you start? what do you need to create and how? How does the hardware work? The intel manual doesn't tell you how to create an operating system for the cpu, in the same way as knowing how a motorcycle is constructed doesn't really tell you the whole story on how to drive it well. Perhaps the only site out there that can serve as that is the OS-dev.
+
+The OS-dev site unfortunately suffers from a lack of contributors and broad articles that convey the idea but lack specifics. Articles that are outdated and sometimes (rarely) plain wrong and tutorials that stop not far after the operating system developers equivalent of "Hello world". 
+
+One can of course read the source code of linux or minix, but this tasks proves very difficult for a beginner operating systems developer (even if otherwise a skillfull programmer). Without understanding what the components are for, what they achieve and what problems they solve, this task is more similar to reverse engineering than learning and understanding. Introduction into the problem space is a heavy difficulty in opearting systems. You either somehow know everything about them, or you know nothing and have a hard time enter this world. A gentle gradual introduction is non existent. 
+
+There are of course very heavy technical difficulties that must be addressed, tasks of creating drivers, abstracting away hardware, creating optimized algorithms for memory management, task scheduling, file operations etc. But for someone that didn't have the experience of creatin an OS, and wanted to create one right now, the biggest problem would be exactly not knowing where to even start, and what's the theorey of, not of how a specific distribution works, but overall OS creation.
+
+This document is partially about how we created our own operating system, which solutions we used, what problems we encountered and how we solved them and what came out of it [add here reference to the section our solution]. But it also is about introduction into the problem space of OS'dev and we wish for it to help as a reference for other developers trying their best to create their own OS [reference to label here about creating os ffrom scratch section]
 
 \section{Scope of the Thesis}
 
-The primary objective of this thesis, as initially defined, was to implement a functional scheduler capable of executing tasks within isolated address spaces. Specifically, the project aimed to achieve the following technical goals:
+The primary objective of this project, as initially defined, was to implement a functional scheduler capable of executing tasks within isolated address spaces. Specifically, the project aimed to achieve the following technical goals:
 
 \begin{itemize} 
     \item Bootloading -- the ability to start the system on bare metal hardware. 
@@ -355,7 +392,7 @@ The primary objective of this thesis, as initially defined, was to implement a f
     \item Monolithic design -- implementing the kernel within a single address space. 
 \end{itemize}
 
-At the inception of the project, the specific requirements were not rigidly defined, as the complexity and effort required to complete the implementation were initially uncertain.
+At the inception of it, the specific requirements were not rigidly defined, as the complexity and effort required to complete the implementation were uncertain.
 
 \subsection{Functional Requirements}
 \label{subsec:functional}
@@ -385,7 +422,7 @@ Responsible for storage and filesystem management (including the abstraction lay
 
 \subsubsection{Łukasz Kryczka} TODO: KRYCZKA CHECK
 
-Responsible for virtual memory, physical memory management, allocation strategies, memory initialization, and the management of address spaces.
+Responsible primarily for virtual memory, physical memory management, allocation strategies, bootloaders and graphics.
 
 \section{Work Division -- Thesis}
 
