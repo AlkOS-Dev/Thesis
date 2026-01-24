@@ -405,7 +405,7 @@ The division of labor regarding the source code was determined by the distinct a
 
 Responsible for scheduling, process and thread lifecycle management, context switching, scheduling algorithms, thread sleeping mechanisms, interrupts and timer devices.
 
-\subsubsection{Adam Ogieniewski} TODO: ADAM CHECK
+\subsubsection{Adam Ogieniewski}
 
 Responsible for storage and filesystem management (including the abstraction layer and implementation of the FAT filesystem family), the standard C library (libc), the system interface (syscalls and libc extensions), and hardware interaction via ACPI and other drivers.
 
@@ -500,7 +500,7 @@ Kernel development frequently involves managing collections of objects, such as 
 
 A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
 
-By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is shown in \ref{lst:intrusiveNodesExample}.
+By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is shown in Listing \ref{lst:intrusiveNodesExample}.
 \begin{lstlisting}[caption={Intrusive Data Structures Example}, label={lst:intrusiveNodesExample}]
 template<class T>
 struct ListNode {
@@ -561,7 +561,7 @@ The usage of intrusive data structures offers multiple benefits critical for sys
 \subsection{Reference Counting}
 \label{subsec:refcounting}
 
-In a multitasking operating system, processes and kernel subsystems continuously acquire and release resources such as files, memory objects, and synchronization primitives. These resources are often shared: multiple processes may hold references to the same open file, or several kernel subsystems may access the same internal object concurrently. As long as at least one reference holder exists, the resource must remain valid; however, once the final holder releases its reference, the resource should be reclaimed promptly to avoid memory leaks and resource exhaustion.
+In a multitasking operating system, processes and kernel subsystems continuously acquire and release resources such as files, memory objects, and synchronization primitives. These resources are often shared: multiple processes may hold references to the same open file, or several kernel subsystems may access the same internal object concurrently. As long as at least one reference holder exists, the resource must remain valid. However, once the final holder releases its reference, the resource should be reclaimed promptly to avoid memory leaks and resource exhaustion.
 
 \textbf{Reference counting} provides a deterministic mechanism for managing such shared lifetimes. Each managed object maintains a counter representing the number of active references to it. The counter is incremented whenever a new reference is acquired and decremented when a reference is released. When the counter reaches zero, indicating that no execution context retains a reference, the object is safely deallocated. This approach allows the kernel to reclaim resources precisely at the moment they become unused, without requiring global coordination or non-deterministic garbage collection.
 
@@ -739,7 +739,7 @@ Alternatively, the standard library may be developed specifically for the operat
 
 \subsubsection{Userspace vs. Kernel Variants}
 
-Standard library functionality is required in both user space and kernel space; however, these environments impose fundamentally different constraints. Userspace code executes without privileges and relies on system call interface, whereas kernel code executes in a privileged context, invokes kernel services directly rather than through system calls, and must comply with constraints imposed by the kernel execution environment, such as interrupt safety. As a result, a single, uniform library implementation is insufficient.
+Standard library functionality is required in both user space and kernel space. These environments, however, impose fundamentally different constraints. Userspace code executes without privileges and relies on system call interface, whereas kernel code executes in a privileged context, invokes kernel services directly rather than through system calls, and must comply with constraints imposed by the kernel execution environment, such as interrupt safety. As a result, a single, uniform library implementation is insufficient.
 
 To address this, the library is split into a userspace variant (\texttt{libc}) and a kernel variant (\texttt{libk}), each compiled with different configuration flags and assumptions. This separation enforces correct usage and prevents kernel code from accidentally relying on functionality that is unavailable or unsafe in kernel context.
 
@@ -4627,7 +4627,7 @@ We successfully fulfilled all functional requirements defined in Section \ref{su
     \item \textbf{Advanced Scheduling Policies} -- Implementation of multiple algorithms including Round Robin, Priority Queue, and Multi-Level Feedback Queue (MLFQ).
     \item \textbf{Process \& Thread Management} -- Full lifecycle management including creation, execution, detaching, joining, and termination of tasks.
     \item \textbf{Wait Queues} -- A synchronization primitive allowing threads to block efficiently until specific conditions or events occur.
-    \item \textbf{System Call Interface} -- A high-performance dispatch mechanism utilizing `syscall`/`sysret` instructions with a wide array of implemented services.
+    \item \textbf{System Call Interface} -- A dispatch mechanism utilizing \texttt{int 0x80} instruction with a wide array of implemented services.
     \item \textbf{Standard C Library (libc)} -- A custom implementation of the C standard library (stdio, stdlib, string, math) tailored for the kernel environment.
     \item \textbf{Virtual File System (VFS)} -- An abstraction layer supporting mount points, file descriptors, and generic I/O operations.
     \item \textbf{FAT Filesystem Support} -- Full read/write drivers for FAT12, FAT16, and FAT32 file systems.
@@ -4635,17 +4635,17 @@ We successfully fulfilled all functional requirements defined in Section \ref{su
     \item \textbf{ELF64 Loader} -- A static parser capable of validating, loading, and relocating standard 64-bit executables.
     \item \textbf{Userspace Shell} -- An interactive command-line environment with built-in commands and process execution capabilities.
     \item \textbf{Graphical Output} -- A linear framebuffer driver supporting double-buffering and direct pixel manipulation.
-    \item \textbf{Window Manager} -- A session-based compositing system allowing switching between different graphical applications.
+    \item \textbf{Window Manager} -- A session-based system allowing switching between different graphical applications.
     \item \textbf{Doom Port} -- A successful port of the Doom game engine, validating the stability of the kernel's subsystems.
     \item \textbf{ACPI Integration} -- A subsystem for parsing ACPI tables to discover hardware topology and manage system power states.
     \item \textbf{In-Kernel Testing Framework} -- A custom unit-testing suite running directly on bare metal to verify kernel logic.
     \item \textbf{Build Infrastructure} -- A fully automated CMake-based pipeline capable of bootstrapping a custom cross-compilation toolchain.
+    \item \textbf{Scripts} -- A collection of scripts that streamline common development tasks, manage build configurations, and automate the environment setup.
 \end{itemize}
 
 \section{Limitations and Assumptions}
 
 TODO: KRYCZKA DODAJ SWOJE
-TODO: ADAM DODAJ SWOJE
 
 Developing an operating system kernel is an inherently complex task, further complicated by the intricacies of hardware architectures. To maintain a steady development pace and avoid getting stalled by exhaustive driver implementation or edge-case handling, several strategic assumptions were made. Consequently, for AlkOS to function correctly, the underlying hardware must meet the following requirements:
 
@@ -4658,13 +4658,15 @@ Developing an operating system kernel is an inherently complex task, further com
     \item \textbf{APIC} -- Although SMP is not fully enabled, the system architecture was designed with SMP compatibility in mind, necessitating the presence of an Advanced Programmable Interrupt Controller (APIC). 
     \item \textbf{ACPI} -- It is assumed that device discovery is performed via the Advanced Configuration and Power Interface (ACPI), a standard supported by the majority of modern platforms. 
     \item \textbf{PS/2 Keyboard} -- Input is handled via a PS/2 keyboard controller. A USB stack was not implemented due to the significant development effort required. 
+    \item \textbf{FAT12/16/32 Support} -- The system supports the FAT12, FAT16, and FAT32 filesystem variants. Long file name (LFN) support is not implemented; filenames are therefore limited to the 8.3 format.
+    \item \textbf{Ramdisk} -- The system is bootstrapped using an in-memory filesystem mounted as the initial root filesystem. Loading a root filesystem from persistent storage is not supported, and thus no permanent modifications are possible. The expected filesystem is hardcoded to FAT16.
+    \item \textbf{ELF64} -- Userspace applications must be compiled as ELF64 binaries. Dynamic linking is not supported. In particular, binaries containing a \texttt{PT\_INTERP} segment \cite{elf-spec-dynamic} or relying on shared libraries cannot be executed.
 \end{itemize}
 
 \subsection{Known Limitations}
 \label{subsec:limitations}
 
 TODO: KRYCZKA DODAJ SWOJE
-TODO: ADAM DODAJ SWOJE
 
 The following section outlines the internal constraints established during development. These constants are hardcoded within the codebase, and multiple system mechanisms rely on them for correct operation. While these are compile-time values that can be modified, we cannot guarantee correct functionality if they are changed.
 
@@ -4677,23 +4679,39 @@ The following section outlines the internal constraints established during devel
     \item \textbf{User Space Address Range} -- \texttt{0x0 - 0x00007FFFFFFFFFFF}. 
     \item \textbf{Kernel Space Address Range} -- \texttt{0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF}. 
     \item \textbf{Max Cores} -- 512 -- This limit exceeds the core count of most current processors and simplifies various internal data structures. 
+    \item \textbf{Max Path Length} -- 1024 -- The absolute maximum length of a file path string accepted by the VFS.
+    \item \textbf{Max Path Depth} -- 64 -- The maximum number of directory components (slashes) allowed in a single path.
+    \item \textbf{Max Filename Length} -- 128 -- The maximum length permitted for a single file or directory name component.
+    \item \textbf{Max Open Files per Process} -- 128 -- The hard limit on file descriptors allocated to a single process.
+    \item \textbf{Max System Open Files} -- 1024 -- The capacity of the global open-file table, limiting the total number of files that may be open system-wide at any given time.
+    \item \textbf{Max Active Files Cache} -- 512 -- The limit of the internal file objects, restricting how many unique files can be actively referenced by the system simultaneously.
+    \item \textbf{Pipe Buffer Size} -- 4~KB -- The fixed circular buffer size used for standard I/O streams.
+    \item \textbf{Max Heap Size} -- 16~GB -- The maximum virtual address range available for a userspace process's heap.
+    \item \textbf{Max Syscall Arguments} -- 6 -- The maximum number of arguments that can be passed to a system call.
 \end{itemize}
 
 \section{Future Work}
 
 TODO: KRYCZKA DODAJ SWOJE
-TODO: ADAM DODAJ SWOJE
 
 The current solution can be extended and improved in several areas: 
 \begin{itemize} 
     \item \textbf{SMP Support} -- As most components were designed with multicore execution in mind, implementing SMP support is a feasible next step. This would involve reinforcing locking schemes, implementing core boot-up sequences, inter-core communication, and a scheduler load balancer. 
+    \item \textbf{CPU Frequency Scaling} -- Implement a mechanism to dynamically adjust the CPU frequency based on system load and thermal conditions.
     \item \textbf{Relocatable Code and Dynamic Libraries} -- Currently, the system supports only statically linked binaries. Future work could include a dynamic linker to support shared libraries. 
     \item \textbf{General Driver Interface} -- Establishing a standardized driver model to facilitate the easy addition of new devices. 
     \item \textbf{Refining Scheduling Algorithms} -- Improving the scheduler to enhance fairness and reduce latency. 
     \item \textbf{Completing Libc Implementation} -- Extending the standard library to support a wider range of third-party applications. 
-    \item \textbf{Physical Storage Drivers} -- Replacing the RAM disk with drivers for physical storage media (e.g., AHCI/NVMe). 
     \item \textbf{Task Synchronization Primitives} -- Implementing full support for mutexes, semaphores, and condition variables.
-    \item \textbf{Networking Stack} -- Adding a network layer to support TCP/IP communication. 
+    \item \textbf{Networking Stack} -- Adding a network layer to support TCP/IP communication.
+    \item \textbf{USB Controller Driver} -- Implementing a USB controller driver to support USB devices.
+    \item \textbf{Physical Storage Drivers} -- Replacing the RAM disk with drivers for physical storage media (e.g., AHCI/NVMe). 
+    \item \textbf{Abstract Filesystems} -- Add pseudo-filesystems (e.g., \texttt{procfs}, \texttt{sysfs}) for extensible system interfaces.
+    \item \textbf{Filesystem Caching} -- Introduce caching to improve filesystem performance.
+    \item \textbf{Filesystem Permissions} -- Implement file and directory permissions for security and access control.
+    \item \textbf{Fast System Call} -- Replace the current interrupt-based syscall mechanism with the \texttt{syscall}/\texttt{sysret} instructions to reduce overhead and improve kernel entry performance.
+    \item \textbf{Syscall Restriction} -- Implement a mechanism to restrict access to system calls based on process privileges or roles.
+    \item \textbf{Compositing Window Manager} -- Implementing a compositing window manager to support a window-based graphical user interface.
 \end{itemize}
 
 \section{Tests}
@@ -4753,6 +4771,7 @@ ISR & Interrupt Service Routine \\
 JSON & JavaScript Object Notation \\
 LAPIC & Local Advanced Programmable Interrupt Controller \\
 LBA & Linear Block Addressing \\
+LFN & Long File Name \\
 LIT & Logical Interrupt Table \\
 LKM & Loadable Kernel Module \\
 MLFQ & Multi-Level Feedback Queue \\
