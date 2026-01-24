@@ -1451,11 +1451,11 @@ While the Physical Memory Manager (discussed in Section \ref{subsubsec:physical_
 
 In a physical addressing model, every application must share a single global address space. This tight coupling implies that a programming error in one task—such as a buffer overflow or a wild pointer dereference—can corrupt the data structures of another task or even the kernel itself, leading to immediate system instability. Furthermore, compiling software becomes arduous, as every program requires a unique load address to avoid collision, rendering the execution of multiple instances of the same program nearly impossible without complex, position-independent code generation.
 
-To resolve these architectural limitations, modern general-purpose operating systems implement Virtual Memory (VM). Fundamentally, Virtual Memory is not merely a technique for expanding available RAM via secondary storage (swapping), but rather an abstraction layer that decouples the \textit{logical view} of memory from the \textit{physical reality} of the hardware. 
+To resolve these architectural limitations, modern general-purpose operating systems implement Virtual Memory (VM). Fundamentally, Virtual Memory is an abstraction layer that decouples the \textit{logical view} of memory from the \textit{physical reality} of the hardware. 
 
 By introducing this layer of indirection, the operating system provides each process with the illusion of a private, contiguous, and isolated address space. Address $0x400000$ in Process $A$ and address $0x400000$ in Process $B$ are distinct virtual entities that may map to disjoint physical frames, or to the same frame (in the case of shared libraries), or to no frame at all.
 
-Although many commercial operating systems utilize this abstraction to overcommit memory by swapping pages to a hard disk (a mechanism historically associated with the term Virtual Memory), the primary focus in kernel design remains on the protection and organization capabilities of the architecture. Even in the absence of swap, the VMM is essential for:
+The primary focus in kernel design remains on the protection and organization capabilities of the architecture. The VMM is essential for:
 \begin{itemize}
     \item \textbf{Isolation:} Enforcing privilege boundaries so that user-space applications cannot modify kernel memory or interfere with each other.
     \item \textbf{Flexibility:} Allowing programs to be linked to fixed virtual addresses regardless of their actual physical location or the amount of installed RAM.
@@ -1598,11 +1598,11 @@ While generic balanced trees (such as AVL trees) provide worst-case guarantees, 
 
 This behavioral characteristic motivates the use of \textbf{Splay Trees}. A Splay Tree is a self-adjusting binary search tree with a unique property: whenever a node is accessed, it is rotated to the root of the tree. Consequently, frequently accessed memory regions tend to stay near the top of the tree, allowing subsequent lookups to occur in near-constant time $O(1)$.
 
-This approach, pioneered by Sleator and Tarjan, is notably utilized by the BSD family of operating systems (FreeBSD, NetBSD) for their VM map structures. It trades the strict balance of other trees for an amortized efficiency that adapts to the specific runtime behavior of the process.
+This approach, pioneered by Sleator and Tarjan~\cite{sleator1985splay}, is notably utilized by the BSD family of operating systems (FreeBSD, NetBSD) for their VM map structures. It trades the strict balance of other trees for an amortized efficiency that adapts to the specific runtime behavior of the process.
 
 \subsubsection{Red-Black Trees}
 
-In contrast, the Linux kernel employs \textbf{Red-Black Trees} (RB-Trees) for managing virtual memory areas (\texttt{vm\_area\_struct}). RB-Trees enforce a stricter balancing invariant, guaranteeing that the longest path from root to leaf is no more than twice as long as the shortest path. 
+In contrast, the Linux kernel employs \textbf{Red-Black Trees} (RB-Trees) for managing virtual memory areas (\texttt{vm\_area\_struct})~\cite{gorman2004understanding}. RB-Trees enforce a stricter balancing invariant, guaranteeing that the longest path from root to leaf is no more than twice as long as the shortest path. 
 
 While RB-Trees do not adapt to access patterns like Splay Trees, they offer predictable worst-case performance and are generally faster for insertion and deletion operations when rebalancing is required. The choice between Splay Trees (adaptive) and Red-Black Trees (deterministic) represents a classic trade-off in kernel engineering, balancing the speed of the "hot path" (page faults) against the latency of modification (mmap/munmap).
 
@@ -1611,9 +1611,9 @@ While RB-Trees do not adapt to access patterns like Splay Trees, they offer pred
 
 With the software architecture and data structures established, the operating system must adopt a strategy for mapping physical memory to virtual addresses. A naive approach is \textbf{Eager Allocation}: when a process requests memory (e.g., loading a program or calling \texttt{malloc}), the kernel immediately finds free physical frames, zeroes them, and updates the page tables.
 
-While simple, eager allocation is inefficient. Observation of real-world program behavior reveals that applications rarely utilize their entire allocated address space simultaneously. Instead, they exhibit \textbf{Locality of Reference}. As formalized by Peter J. Denning in the \textit{Working Set Model}, the subset of memory pages a process is actively using at any specific time interval (its working set) is typically a small fraction of its total virtual size.
+While simple, eager allocation is inefficient. Observation of real-world program behavior reveals that applications rarely utilize their entire allocated address space simultaneously. Instead, they exhibit \textbf{Locality of Reference}. As formalized by Peter J. Denning in the \textit{Working Set Model}~\cite{denning1968working}, the subset of memory pages a process is actively using at any specific time interval (its working set) is typically a small fraction of its total virtual size.
 
-Even in a system that does not utilize swap files (backing store on disk), understanding this theory is crucial for optimizing physical RAM usage and system responsiveness.
+Understanding this theory is crucial for optimizing physical RAM usage and system responsiveness.
 
 \subsubsection{Justification for Laziness}
 
@@ -1661,7 +1661,11 @@ When a process is duplicated, copying its entire physical memory to the child pr
     \item All shared pages are marked as \textbf{Read-Only} in both processes.
 \end{enumerate}
 
-As long as the processes only read memory, they share the physical RAM. The moment either process attempts to modify a page, a write-protection fault occurs. The kernel handles this by allocating a new physical frame, copying the content of the specific page being modified, and remapping that single page as Read-Write for the faulting process. This ensures that the expensive operation of memory copying occurs only when strictly necessary, and only at the granularity of a single page.
+This ensures that the expensive operation of memory copying occurs only when strictly necessary, and only at the granularity of a single page.
+
+\subsubsection{Swapping}
+
+It is worth noting that a complete virtual memory subsystem typically includes a swapping mechanism to support memory overcommitment. This allows inactive pages to be evicted to secondary storage, freeing physical RAM for active tasks. However, the theory presented in this section focuses on the fundamental aspects of memory virtualization: isolation, protection, and hardware abstraction. The implementation of swap and page replacement algorithms is considered a separate, advanced topic extending beyond these core principles.
 
 \section{Scheduling Design}
 \label{sec:scheduling_approaches}
