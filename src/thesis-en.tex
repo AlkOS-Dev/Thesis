@@ -381,6 +381,7 @@ Beyond the educational barrier lie the technical hurdles: implementing device dr
 This thesis aims to address both aspects. It documents the technical creation of the AlkOS kernel --- our design choices, the problems we encountered, and the solutions we engineered (detailed in Chapter \ref{chap:implementation}). Simultaneously, it serves as a guide to the problem space itself (specifically in Chapter \ref{chap:os_from_scratch}), intended to assist future developers in their attempt to create an operating system from scratch.
 
 \section{Scope of the Thesis}
+\label{subsec:functional}
 
 The primary objective of this project, as initially defined, was to implement a functional scheduler capable of executing tasks within isolated address spaces. Specifically, the project aimed to achieve the following minimal technical goals:
 
@@ -4472,7 +4473,7 @@ We successfully fulfilled all functional requirements defined in Section \ref{su
     \item \textbf{Lazy Allocation} -- A demand-paging mechanism that allocates physical memory only when accessed, utilizing page fault handling.
     \item \textbf{Tickless Kernel Architecture} -- A dynamic timing subsystem that schedules interrupts only when necessary, improving CPU efficiency.
     \item \textbf{Advanced Scheduling Policies} -- Implementation of multiple algorithms including Round Robin, Priority Queue, and Multi-Level Feedback Queue (MLFQ).
-    \item \textbf{Process & Thread Management} -- Full lifecycle management including creation, execution, detaching, joining, and termination of tasks.
+    \item \textbf{Process \& Thread Management} -- Full lifecycle management including creation, execution, detaching, joining, and termination of tasks.
     \item \textbf{Wait Queues} -- A synchronization primitive allowing threads to block efficiently until specific conditions or events occur.
     \item \textbf{System Call Interface} -- A high-performance dispatch mechanism utilizing `syscall`/`sysret` instructions with a wide array of implemented services.
     \item \textbf{Standard C Library (libc)} -- A custom implementation of the C standard library (stdio, stdlib, string, math) tailored for the kernel environment.
