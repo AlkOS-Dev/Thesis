@@ -481,14 +481,14 @@ The build system must support compilation profiles to accommodate different phas
 \begin{itemize}
     \item \textbf{Debug Profile:} Optimized for observability and correctness. Compiler optimizations are generally disabled to preserve a close correspondence between source code and generated machine instructions, simplifying debugging. Debug symbols are enabled, and additional safety mechanisms such as stack protection or sanitizers may be included to detect errors early.
     
-    \item \textbf{Release Profile:} Optimized for performance and efficiency. Higher optimization levels are enabled to increase performance and reduce code size. However, optimizations must be carefully selected in a kernel context. For instance, on x86-64 systems, automatic vectorization should be disabled, as the use of SIMD registers requires saving and restoring additional processor state during interrupts and context switches, incurring significant overhead.
+    \item \textbf{Release Profile:} Optimized for performance and efficiency. Higher optimization levels are enabled to increase performance and reduce code size. However, optimizations must be carefully selected in a kernel context. For instance, on x86-64 systems, automatic vectorization should be disabled, as the uncontrolled use of SIMD operations may lead to execution attempts before they are properly enabled.
 \end{itemize}
 
 In addition to general optimization settings, architecture-specific constraints must be enforced explicitly. On x86-64, the System~V ABI permits the use of a so-called \textbf{red zone}, a fixed region below the stack pointer that leaf functions (functions that do not call other functions) may use without adjusting the stack pointer. In kernel mode, interrupts may overwrite this region, leading to memory corruption. As a result, the red zone must be explicitly disabled.
 
 \subsection{Emulation}
 
-Additionally we should consider how we will be testing our code and how to make it efficient. In that place emulation comes in place. We have two major paths we can follow. We can either have some testing machine and each time create the image and boot it up on the machine. It is even nevessary to verify the correct behaviour of the kernel on real hardware, but it may be time consuming for develeopment type of runs and can be a sort of bottleneck. To address that issue we have multiple emulation solutions available on the market including qemu, bochs or virtual box. This tools allow us to specify the target machine architecture and run it locally inside the host system in emulated environemnt. Such setup may speedup quick reruns checks or debugging or simple space exploration inside the virtual environment. The ideal solution is to combine both of these to maximize both development speed and quality.
+It is essential to establish an efficient testing strategy. In this context, hardware emulation becomes a critical tool. Two primary approaches exist for testing kernel software. The first involves utilizing a dedicated physical test machine, where the system image is flashed and booted for each iteration. While verifying kernel behavior on real hardware is strictly necessary to guarantee correctness, this process is time-consuming and often becomes a bottleneck during rapid development cycles. To address this efficiency issue, various emulation solutions are available, including QEMU \cite{qemu_website}, Bochs (x86 only) \cite{bochs_website}, and VirtualBox \cite{virtualbox_website}. These tools allow for the specification of the target machine architecture, enabling the kernel to run locally within the host system in an emulated environment. This setup significantly accelerates the workflow by facilitating quick execution, debugging, and state exploration. Consequently, the ideal solution combines both methods to maximize development speed while ensuring software quality.
 
 \section{General Design Considerations}
 
@@ -497,7 +497,7 @@ Developing an operating system kernel is a complex software engineering challeng
 \subsection{Intrusive Data Structures}
 \label{subsec:intrusive}
 
-Kernel development frequently involves managing collections of objects, such as linked lists of threads. Standard library containers (e.g., \texttt{std::list}) typically manage these collections by allocating a separate node structure for every element to hold the data and the navigation pointers. In a kernel environment, where objects are inserted and removed from lists with high frequency, the overhead of repeated allocation and deallocation is often unacceptable due to performance costs and memory fragmentation.
+Kernel development frequently involves managing collections of objects, such as linked lists or binary trees. Standard library implementations typically manage these collections by allocating a separate node structure for every element to hold the data and the navigation pointers. In a kernel environment, where objects are inserted and removed from lists with high frequency, the overhead of repeated allocation and deallocation is often unacceptable due to performance costs and memory fragmentation.
 
 A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
 
@@ -580,7 +580,7 @@ When developing an operating system, two principal approaches exist for providin
 
 \paragraph{Using Existing Libraries}
 
-Several open-source \texttt{libc} implementations are explicitly designed for portability. Notable examples include \textbf{Newlib}, which is widely adopted in embedded systems, and \textbf{mlibc}, which targets hobbyist operating systems. Integrating such libraries typically involves the implementation of required syscalls. The kernel developer supplies backend implementations for a set of low-level system calls, while the library itself provides higher-level functionality such as formatted output or mathematical routines. This approach substantially reduces development effort and enables the early execution of complex userspace software.
+Several open-source \texttt{libc} implementations are explicitly designed for portability. Notable examples include \textbf{Newlib}\cite{newlib_home}, which is widely adopted in embedded systems, and \textbf{mlibc}\cite{mlibc_repo}, which targets hobbyist operating systems. Integrating such libraries typically involves the implementation of required syscalls. The kernel developer supplies backend implementations for a set of low-level system calls, while the library itself provides higher-level functionality such as formatted output or mathematical routines. This approach substantially reduces development effort and enables the early execution of complex userspace software.
 
 \paragraph{Implementation from Scratch}
 
@@ -588,14 +588,14 @@ Alternatively, the standard library may be developed specifically for the operat
 
 \subsubsection{Userspace vs. Kernel Variants}
 
-Standard library functionality is required in both user space and kernel space; however, these environments impose fundamentally different constraints. Userspace code executes without privileges and relies on system call interface, whereas kernel code executes in a privileged context, invokes kernel services directly rather than through system calls, and must comply with constraints imposed by the kernel execution environment, such as interrupt safety. As a result, a single, uniform library implementation is insufficient.
+Standard library functionality is required in both user space and kernel space. However, these environments impose fundamentally different constraints. Userspace code executes without privileges and relies on system call interface, whereas kernel code executes in a privileged context, invokes kernel services directly rather than through system calls, and must comply with constraints imposed by the kernel execution environment, such as interrupt safety. As a result, a single, uniform library implementation is insufficient.
 
 To address this, the library is split into a userspace variant (\texttt{libc}) and a kernel variant (\texttt{libk}), each compiled with different configuration flags and assumptions. This separation enforces correct usage and prevents kernel code from accidentally relying on functionality that is unavailable or unsafe in kernel context.
 
 \subsubsection{Program Initialization and the C Runtime (CRT)}
 \label{subsubsec:theory_crt}
 
-In addition to exposing user-facing APIs, the runtime environment must be initialized before control is transferred to the program’s entry function. Userspace programs do not begin execution at \texttt{main}; instead, execution starts at a library-provided entry point, conventionally named \texttt{\_start}, which is supplied by a startup object file \cite{osdev_crt}.
+In addition to exposing user-facing APIs, the runtime environment must be initialized before control is transferred to the program's entry function. Userspace programs do not begin execution at \texttt{main}. Instead, execution starts at a library-provided entry point, conventionally named \texttt{\_start}, which is supplied by a startup object file \cite{osdev_crt}.
 
 This initialization sequence is realized through coordinated interaction between the linker, compiler, and standard library, and typically involves a set of well-defined object files:
 
@@ -676,7 +676,7 @@ The overall control flow of the C runtime initialization and termination process
     \label{fig:crt-init-flow}
 \end{figure}
 
-Failure to link these components in the correct order results in an incomplete runtime environment, in which global constructors are not executed and program behavior becomes undefined --- particularly for C++ applications or code relying on constructor or destructor attributes.
+Failure to link these components in the correct order results in an incomplete runtime environment, in which global constructors are not executed and program behavior becomes undefined - particularly for C++ applications or code relying on constructor or destructor attributes.
 
 \section{Bootloader}
 \label{subsec:theory_bootloader}
@@ -1434,9 +1434,6 @@ Finally, the PMM must respect the physical limitations of the hardware. Not all 
 \end{itemize}
 
 A common solution is to partition the physical address space into disjoint \textbf{regions} or \textbf{zones}, each managed by a separate allocator instance. Allocation requests carry metadata (flags or capabilities) indicating which regions are acceptable. The allocator attempts the preferred region first and falls back to others only if permitted. Critically, a request for DMA-capable memory \textit{cannot} fall back to high memory-the hardware simply cannot address those frames.
-
-\section{Kernel Space Allocation API}
-TODO: KRYCZKA
 
 \section{Virtual Memory Management}
 \label{sec:vmm}
@@ -3276,6 +3273,10 @@ void ArchInit(const RawBootArguments &) {
 }
 \end{lstlisting}
 
+\section{Memory Management}
+\label{sec:memory}
+TODO: KRYCZKA
+
 \section{Interrupts}
 \label{sec:interrupts}
 
@@ -4092,7 +4093,7 @@ The process state has less significance than the Thread State (described later) 
 
 \subsubsection{Address Space}
 
-The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to Memory Management \ref{sec:vmm} for further details.
+The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to Memory Management \ref{sec:memory} for further details.
 
 \subsubsection{File Descriptor Table}
 
