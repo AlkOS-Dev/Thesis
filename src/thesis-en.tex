@@ -1626,8 +1626,8 @@ To store these mappings efficiently, architectures employ \textbf{Multi-level Pa
     % Arrow from PT Entry to PFN part
     \draw[arrow] (pt_entry.east) -- ++(0.3,0) |- (pfn_part.west);
 
-    % Arrow from Virtual Offset to Physical Offset (Circular from right)
-    \draw[arrow, dashed] (off.east) to[out=0, in=0, looseness=1.5] node[right, font=\tiny, text=gray, xshift=2pt] {Copy} (off_part.east);
+    % Arrow from Virtual Offset to Physical Offset (Square from right)
+    \draw[arrow, dashed] (off.east) -- ++(1.5, 0) |- (off_part.east) node[pos=0.25, auto, font=\tiny, text=gray] {Copy};
 
     % Final Result -> RAM
     \node[draw=black, fill=green!20, minimum width=2cm, minimum height=1.5cm, below=0.8cm of phys_addr] (ram) {\textbf{4KB Frame}};
