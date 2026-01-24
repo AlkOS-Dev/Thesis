@@ -1483,19 +1483,90 @@ To store these mappings efficiently, architectures employ \textbf{Multi-level Pa
 \begin{figure}[htbp]
     \centering
     % Placeholder for a figure showing 4-level paging translation
-    \begin{tikzpicture}
-        \node[draw, minimum width=3cm, minimum height=1cm] (cr3) {Root Register};
-        \node[draw, minimum width=2cm, minimum height=3cm, right=2cm of cr3] (l4) {Level 4 Table};
-        \node[draw, minimum width=2cm, minimum height=3cm, right=1cm of l4] (l3) {Level 3 Table};
-        \node[draw, minimum width=2cm, minimum height=3cm, right=1cm of l3] (l2) {Level 2 Table};
-        \node[draw, minimum width=2cm, minimum height=3cm, right=1cm of l2] (l1) {Level 1 Table};
-        \node[draw, minimum width=2cm, minimum height=1cm, right=1cm of l1] (phys) {Physical Frame};
-        
-        \draw[->] (cr3) -- (l4);
-        \draw[->] (l4) -- (l3);
-        \draw[->] (l3) -- (l2);
-        \draw[->] (l2) -- (l1);
-        \draw[->] (l1) -- (phys);
+    \begin{tikzpicture}[
+        font=\sffamily\scriptsize,
+        table/.style={draw, fill=white, minimum width=0.8cm, minimum height=2.5cm},
+        entry/.style={draw, fill=blue!20, minimum width=0.8cm, minimum height=0.2cm},
+        reg/.style={draw, fill=gray!10, minimum width=1.5cm, minimum height=0.6cm},
+        arrow/.style={-Latex},
+        label/.style={font=\tiny, text=gray}
+    ]
+
+    % Example Address Calculation
+    \node[anchor=west] at (0, 4.5) {\textbf{Example Virtual Address:}};
+    \node[anchor=west, font=\ttfamily] at (0, 4.0) {0x0000\_0080\_4020\_1000};
+    
+    % Address Bar (MSB -> LSB)
+    \node[draw, minimum width=10cm, minimum height=0.6cm] (va) at (6, 3) {};
+    \node[anchor=south west] at (va.north west) {Virtual Address (64-bit) - MSB on Left};
+
+    % Bit Fields: L4 (47:39), L3 (38:30), L2 (29:21), L1 (20:12), Offset (11:0)
+    % Total width 10cm. 
+    % 9 bits * 4 + 12 bits = 48 bits. (ignoring top 16 canonical).
+    % Let's distribute roughly.
+    \draw (va.north west) rectangle ++(1.5, -0.6) node[midway] (l4box) {L4 (1)};
+    \draw (va.north west) ++(1.5,0) rectangle ++(1.5, -0.6) node[midway] (l3box) {L3 (0)};
+    \draw (va.north west) ++(3.0,0) rectangle ++(1.5, -0.6) node[midway] (l2box) {L2 (1)};
+    \draw (va.north west) ++(4.5,0) rectangle ++(1.5, -0.6) node[midway] (l1box) {L1 (0)};
+    \draw (va.north west) ++(6.0,0) rectangle ++(4.0, -0.6) node[midway] {Offset (0x000)};
+
+    % Labels for bits
+    \node[above] at (0.75+6.0-6.0, 3) {47:39};
+    \node[above] at (2.25+6.0-6.0, 3) {38:30};
+    \node[above] at (3.75+6.0-6.0, 3) {29:21};
+    \node[above] at (5.25+6.0-6.0, 3) {20:12};
+    \node[above] at (8.0+6.0-6.0, 3) {11:0};
+
+    % CPU
+    \node[reg] (cr3) at (0, 0) {CR3};
+    \node[anchor=south] at (cr3.north) {CPU};
+
+    % Tables (Top-Left to Bottom-Right flow)
+    
+    % PML4
+    \node[table] (pml4) at (2.0, 0) {};
+    \node[entry] (pml4e) at (2.0, 0.5) {}; % Entry 1 (High up)
+    \node[anchor=south] at (pml4.north) {PML4};
+    \node[right, font=\tiny] at (pml4e.east) {Idx: 1};
+
+    % PDPT
+    \node[table] (pdpt) at (4.5, -0.5) {};
+    \node[entry] (pdpte) at (4.5, -1.0) {}; % Entry 0 (Bottom)
+    \node[anchor=south] at (pdpt.north) {PDPT};
+    \node[right, font=\tiny] at (pdpte.east) {Idx: 0};
+
+    % PD
+    \node[table] (pd) at (7.0, -1.0) {};
+    \node[entry] (pde) at (7.0, -0.5) {}; % Entry 1
+    \node[anchor=south] at (pd.north) {PD};
+    \node[right, font=\tiny] at (pde.east) {Idx: 1};
+
+    % PT
+    \node[table] (pt) at (9.5, -1.5) {};
+    \node[entry] (pte) at (9.5, -2.0) {}; % Entry 0
+    \node[anchor=south] at (pt.north) {PT};
+    \node[right, font=\tiny] at (pte.east) {Idx: 0};
+
+    % Frame
+    \node[draw, fill=green!10, minimum width=1.5cm, minimum height=1.5cm] (frame) at (12.0, -1.5) {Data};
+    \node[anchor=north] at (frame.south) {Physical RAM};
+
+    % Connections
+    \draw[arrow] (cr3) -- (pml4);
+    
+    % Indices from VA to Entries (Dashed) - Flowing DOWN/RIGHT
+    \draw[arrow, dashed, red!70!black] (l4box.south) -- (pml4e.north west);
+    \draw[arrow] (pml4e.east) -- (pdpt.north west);
+    
+    \draw[arrow, dashed, red!70!black] (l3box.south) -- (pdpte.north west);
+    \draw[arrow] (pdpte.east) -- (pd.north west);
+
+    \draw[arrow, dashed, red!70!black] (l2box.south) -- (pde.north west);
+    \draw[arrow] (pde.east) -- (pt.north west);
+
+    \draw[arrow, dashed, red!70!black] (l1box.south) -- (pte.north west);
+    \draw[arrow] (pte.east) -- (frame.west);
+
     \end{tikzpicture}
     \caption{Conceptual flow of a Multi-level Page Table Walk}
     \label{fig:page_walk}
@@ -1542,30 +1613,38 @@ The responsibility of this layer is strictly mechanical: it translates the abstr
 
 \begin{figure}[htbp]
     \centering
-    \begin{tikzpicture}
-        % High Level Block
-        \node[draw, fill=blue!10, minimum width=6cm, minimum height=1.5cm, rounded corners] (mi) at (0, 2) {\textbf{Machine Independent (MI)}};
-        \node[below=0.1cm] at (mi.north) {\scriptsize Manage Regions, Trees, Policies};
-        
-        % Interface
-        \node[draw, dashed, minimum width=6cm] (api) at (0, 0.8) {PMap Interface};
-        
-        % Low Level Block
-        \node[draw, fill=green!10, minimum width=6cm, minimum height=1.5cm, rounded corners] (md) at (0, -0.5) {\textbf{Machine Dependent (MD)}};
-        \node[below=0.1cm] at (md.north) {\scriptsize Manage Page Tables, TLB, Control Regs};
-        
-        % Hardware
-        \node[draw, fill=gray!20, minimum width=4cm, minimum height=1cm] (hw) at (0, -2.5) {Hardware (MMU)};
-        
-        % Arrows
-        \draw[->, thick] (mi) -- (api);
-        \draw[->, thick] (api) -- (md);
-        \draw[->, thick] (md) -- (hw);
-        
-        % Labels
-        \node[right=3.2cm, align=left] at (mi) {Logical View\\(Regions)};
-        \node[right=3.2cm, align=left] at (md) {Physical View\\(PTEs)};
-        
+    \begin{tikzpicture}[
+        font=\sffamily\footnotesize,
+        layer/.style={draw, fill=white, minimum width=8cm, minimum height=1.5cm, rounded corners},
+        component/.style={draw, fill=gray!10, minimum width=2cm, minimum height=0.8cm},
+        arrow/.style={-Latex, thick}
+    ]
+
+    % MI Layer
+    \node[layer, fill=blue!8, minimum width=8cm, minimum height=2.2cm] (mi) at (0, 3) {};
+    \node[anchor=north west] at (mi.north west) {\textbf{Machine Independent (MI)}};
+    \node[component, fill=white] (vmmap) at (-1.5, 3) {VM Map};
+    \node[component, fill=white] (regions) at (1.5, 3) {Regions};
+    \node[anchor=south] at (mi.south) {\textit{"Address Space", "Protection", "Sharing"}};
+
+    % Interface
+    \draw[dashed] (-4.5, 1.5) -- (4.5, 1.5);
+    \node[fill=white, inner sep=2pt] at (-1.5, 1.5) {\textbf{pmap Interface}};
+
+    % MD Layer
+    \node[layer, fill=green!8, minimum width=8cm, minimum height=2.2cm] (md) at (0, 0) {};
+    \node[anchor=north west] at (md.north west) {\textbf{Machine Dependent (MD)}};
+    \node[component, fill=white] (pt) at (-1.5, 0) {Page Tables};
+    \node[component, fill=white] (tlb) at (1.5, 0) {TLB Flush};
+    \node[anchor=south] at (md.south) {\textit{"PTE Bits", "CR3 Reload", "Invlpg"}};
+
+    % Hardware
+    \node[draw, fill=gray!20, minimum width=6cm, minimum height=1cm] (hw) at (0, -2) {Hardware (MMU)};
+
+    % Arrows
+    \draw[arrow] (mi) -- (md);
+    \draw[arrow] (md) -- (hw);
+    
     \end{tikzpicture}
     \caption{Separation of Concerns in Virtual Memory Management}
     \label{fig:vmm_architecture}
@@ -1598,7 +1677,47 @@ While generic balanced trees (such as AVL trees) provide worst-case guarantees, 
 
 This behavioral characteristic motivates the use of \textbf{Splay Trees}. A Splay Tree is a self-adjusting binary search tree with a unique property: whenever a node is accessed, it is rotated to the root of the tree. Consequently, frequently accessed memory regions tend to stay near the top of the tree, allowing subsequent lookups to occur in near-constant time $O(1)$.
 
-This approach, pioneered by Sleator and Tarjan~\cite{sleator1985splay}, is notably utilized by the BSD family of operating systems (FreeBSD, NetBSD) for their VM map structures. It trades the strict balance of other trees for an amortized efficiency that adapts to the specific runtime behavior of the process.
+This approach, pioneered by Sleator and Tarjan~\cite{sleator1985splay}, is notably utilized by the BSD family of operating systems (FreeBSD, NetBSD) for their VM map structures. It trades the strict balance of other trees for an amortized efficiency that adapts to the specific runtime behavior of the process. (Figure~\ref{fig:splay_tree})
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    font=\sffamily\scriptsize,
+    node/.style={circle, draw, minimum size=0.6cm, fill=white},
+    target/.style={circle, draw, minimum size=0.6cm, fill=red!20, thick},
+    arrow/.style={-Latex}
+]
+
+% BEFORE SPLAY
+\node[anchor=south] at (0, 0.2) {\textbf{Before Access}};
+\node[node] (root) at (0, 0) {A};
+\node[node] (b) at (-1, -1) {B};
+\node[target] (c) at (-0.5, -2) {C};
+
+\draw (root) -- (b);
+\draw (b) -- (c);
+\draw (root) -- (1, -1);
+
+% ARROW
+\draw[-Latex, ultra thick, blue] (1.5, -1) -- (2.5, -1) node[midway, above] {Splay(C)};
+
+% AFTER SPLAY
+\node[anchor=south] at (4, 0.2) {\textbf{After Access}};
+\node[target] (newroot) at (4, 0) {C};
+\node[node] (newb) at (3, -1) {B};
+\node[node] (newa) at (5, -1) {A};
+
+\draw (newroot) -- (newb);
+\draw (newroot) -- (newa);
+\draw (newa) -- (5.5, -2);
+\draw (newb) -- (2.5, -2);
+
+\node[align=center, anchor=north] at (2, -2.5) {Node C rotates to root,\\optimizing future access};
+
+\end{tikzpicture}
+\caption{Splay Tree Optimization: Deep nodes move to the root upon access.}
+\label{fig:splay_tree}
+\end{figure}
 
 \subsubsection{Red-Black Trees}
 
@@ -1613,7 +1732,48 @@ With the software architecture and data structures established, the operating sy
 
 While simple, eager allocation is inefficient. Observation of real-world program behavior reveals that applications rarely utilize their entire allocated address space simultaneously. Instead, they exhibit \textbf{Locality of Reference}. As formalized by Peter J. Denning in the \textit{Working Set Model}~\cite{denning1968working}, the subset of memory pages a process is actively using at any specific time interval (its working set) is typically a small fraction of its total virtual size.
 
-Understanding this theory is crucial for optimizing physical RAM usage and system responsiveness.
+Understanding this theory is crucial for optimizing physical RAM usage and system responsiveness. (Figure~\ref{fig:working_set})
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    font=\sffamily\scriptsize,
+    page/.style={draw, fill=white, minimum width=0.4cm, minimum height=0.6cm},
+    active/.style={draw, fill=red!30, minimum width=0.4cm, minimum height=0.6cm},
+    window/.style={draw=blue, thick, rounded corners, dashed}
+]
+
+% Timeline
+\draw[->] (0, 0) -- (10, 0) node[right] {Time};
+
+% Page Trace at t=1
+\node[page] at (0.5, 0.5) {1};
+\node[page] at (1.0, 0.5) {2};
+\node[active] at (1.5, 0.5) {1};
+\node[active] at (2.0, 0.5) {1};
+\node[active] at (2.5, 0.5) {2};
+
+% Window 1
+\draw[window] (1.2, 0.1) rectangle (2.8, 1.0);
+\node[blue, below] at (2.0, 0) {$WS(t_1)$};
+
+% Page Trace at t=5 (Phase Change)
+\node[page] at (4.0, 0.5) {3};
+\node[active] at (4.5, 0.5) {4};
+\node[active] at (5.0, 0.5) {5};
+\node[active] at (5.5, 0.5) {4};
+
+% Window 2
+\draw[window] (4.2, 0.1) rectangle (5.8, 1.0);
+\node[blue, below] at (5.0, 0) {$WS(t_2)$};
+
+% Explanation
+\node[align=left, anchor=west] at (6.5, 0.5) {Working Set $\Delta$\\Changes over time.};
+
+\end{tikzpicture}
+\caption{The Working Set Model: Localized access patterns over time.}
+\label{fig:working_set}
+\end{figure}
 
 \subsubsection{Justification for Laziness}
 
@@ -1639,8 +1799,45 @@ When the CPU attempts to access such an address, the MMU raises a Page Fault. Th
     \item \textbf{Validation:} The kernel checks if the faulting address lies within a valid Region. If not, the process is terminated (e.g., Segmentation Fault).
     \item \textbf{Allocation:} If the access is valid, the PMM allocates a physical frame.
     \item \textbf{Mapping:} The kernel updates the page tables to map the new frame to the faulting virtual address.
-    \item \textbf{Resume:} The kernel executes the \texttt{IRET} instruction. The CPU retries the memory access, which now succeeds transparently.
+    \item \textbf{Resume:} The kernel executes the \texttt{IRET} instruction. The CPU retries the memory access, which now succeeds transparently. (Figure~\ref{fig:demand_paging_flow})
 \end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    font=\sffamily\footnotesize,
+    state/.style={draw, rounded corners, fill=white, minimum height=1cm, align=center},
+    decision/.style={draw, diamond, aspect=2, fill=yellow!10, font=\scriptsize},
+    arrow/.style={-Latex, thick}
+]
+
+% Nodes
+\node[state, fill=blue!5] (alloc) at (0, 4.5) {1. Virtual Alloc (mmap)\\ \textit{Update VMA List}};
+\node[state, dashed] (access) at (0, 3.0) {2. User Accesses Memory\\ \textit{Hardware Checks PTE}};
+\node[decision] (check) at (0, 1.0) {PTE Present?};
+
+% Success to the Left
+\draw[arrow] (check.west) -- node[above] {Yes} (-2.5, 1.0) node[left, align=center] (success) {\textbf{Success}\\ \textit{Process Continues}};
+
+% Fault Path to the Right
+\node[state, fill=red!10] (fault) at (4.0, 1.0) {3. Page Fault (\#PF)\\ \textit{Kernel Handler}};
+\node[state, fill=green!10] (phys) at (4.0, -1.5) {4. Physical Alloc (PMM)\\ \textit{Get Frame}};
+\node[state] (update) at (0, -1.5) {5. Update Page Table\\ \textit{Map Frame -> Page}};
+
+% Flow Connections
+\draw[arrow] (alloc) -- (access);
+\draw[arrow] (access) -- (check);
+\draw[arrow] (check.east) -- node[above] {No} (fault);
+\draw[arrow] (fault) -- (phys);
+\draw[arrow] (phys) -- (update);
+
+% Resume Loop (Wrapping around the Left)
+\draw[arrow] (update.west) to[out=180, in=180, looseness=2.5] node[left, pos=0.8] {6. Resume (Retry)} (access.west);
+
+\end{tikzpicture}
+\caption{The Cycle of Demand Paging}
+\label{fig:demand_paging_flow}
+\end{figure}
 
 \subsubsection{The Zero Page Optimization}
 
