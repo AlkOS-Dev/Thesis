@@ -349,34 +349,33 @@ The creation of an OS is therefore not a trivial matter. It requires a precise u
 
 \subsection{Motivation}
 
-Precisely for the beforementioned reasons, implementing an operating system becomes such a rewarding task. Creating this apex software, deconstructing it into bits and pieces and untangling the problems it deals with, requires the highest standards of software engineering. In order to understand, why someone would one create an operating system from scratch as a Hobby - not for money, or a task at a job, or perspective of material gain - we'll bring a quote, the only one in this entire thesis: 
-"But why, some say, the moon? Why choose this as our goal? And they may well ask why climb the highest mountain? Why, 35 years ago, fly the Atlantic?
-[...]
-We choose to go to the moon. We choose to go to the moon in this decade and do the other things, not because they are easy, but because they are hard, because that goal will serve to organize and measure the best of our energies and skills, because that challenge is one that we are willing to accept, one we are unwilling to postpone, and one which we intend to win"
+It is precisely because of the aforementioned complexities that the implementation of an operating system stands as such a uniquely rewarding endeavor. Developing this "apex software" --- deconstructing it into its fundamental components and untangling the intricate problems it manages --- demands adherence to the highest standards of software engineering. One might ask why an individual would undertake the creation of an operating system from scratch as a hobby, driven neither by financial incentive nor professional obligation. The answer is best captured by President John F. Kennedy's address at Rice University, which articulates the spirit of tackling the insurmountable:
+
+\begin{quote}
+"But why, some say, the moon? Why choose this as our goal? And they may well ask why climb the highest mountain? Why, 35 years ago, fly the Atlantic? [...] We choose to go to the moon. We choose to go to the moon in this decade and do the other things, not because they are easy, but because they are hard, because that goal will serve to organize and measure the best of our energies and skills, because that challenge is one that we are willing to accept, one we are unwilling to postpone, and one which we intend to win."
+\end{quote}
 
 \subsection{Scale}
 
-For these reasons an operating system is almost always created as an enterprise level initiative. Teams of seasoned profesionals are involved in working on it. Hobbyist OS'es created by one person or a handfull of people are on the other hand very few and far in between. 
+Given the magnitude of the task, operating system development is predominantly an enterprise-level initiative involving large teams of seasoned professionals. Independent or hobbyist operating systems, developed by individuals or small groups, are exceptionally rare.
 
-To bring that into scale. We count the total number of pc games in tens of thousands, with the number of pc games on steam (the current biggest market for pc games) is estimated to be around ~121_000 as of early 2026 with 20k being made in 2025 alone. The number of mobile applications we count in milions, the number of apps on the play store (biggest app market for android) - around 2.180 mln with a similar number on the apple's equivalent store https://42matters.com/google-play-statistics-and-trends. The number of websites? We count that in billions, with 1.34 billion being the current estimate for the total number of websites on the internet https://www.internetlivestats.com/total-number-of-websites/. All are consumers of the operating system they are embedded in. What about OS'es?
-What is listed here is by no means an exact number, since that is a really hard thing to estimate. It has to be taken into account that in the early era of computers, each new mainframe basically came with it's own OS. It will serve however as a rough estimate that'll allow to understand the scale of things.
-The number of open source operating systems - mostly forks of linux and freebsd - is actively kept track of at https://distrowatch.com/search.php?status=All and totals 900+ entries. When talking about notable proprietary and historical OS'es,wikipedia lists around 250-300 operating systems on its page dedicated to them https://en.wikipedia.org/wiki/List_of_operating_systems.
-Real time operating systems? Around 100-150 market leading ones https://en.wikipedia.org/wiki/Comparison_of_real-time_operating_systems.
-The hobby ones created from scratch? An active list maintained at https://wiki.osdev.org/Projects suggests just around 175 projects as the current total.
-[tldr, linux forks are plenty, systems made from scratch? proprietary and much less. Real time ssytems? same thing. Hobby OS'es? That's a really rare breed with only around 175 being there as of early 2026.]
-Creation of one, from scratch, by three hobbyists, is therefore not an every day thing.
+To put this scarcity into perspective, consider the software landscape. The number of PC games is estimated in the tens of thousands, with over 121,000 available on Steam alone as of early 2026. Mobile applications number in the millions, with approximately 2.18 million on the Google Play Store \cite{stats_google_play}. The web is even more vast, with the total number of websites estimated at 1.34 billion \cite{stats_websites}. All of these software artifacts rely on the operating system as their host.
+
+In contrast, the number of operating systems is orders of magnitude smaller. While exact figures are difficult to determine due to the historical prevalence of proprietary mainframe systems, current estimates are telling. The number of active open-source operating systems --- the majority being forks of Linux and BSD --- is tracked at around 900 \cite{stats_distrowatch}. Wikipedia lists approximately 300 notable proprietary and historical operating systems \cite{wiki_list_os}, and there are roughly 100 to 150 market-leading real-time operating systems (RTOS) \cite{wiki_rtos}. As for hobbyist kernels created from scratch? The OSDev wiki lists only about 175 active projects \cite{osdev_projects}.
+
+The creation of a functional kernel from scratch by a team of three students is, therefore, a statistically significant undertaking.
 
 \subsection{Difficulties}
 
-The number one difficulty in creation of one is the scarcity of quality educational materials and sources. This is a direct consuequence of the scale problem - too few people are involved in this for the paved paths to already be there. https://wiki.osdev.org/Expanded_Main_Page stands as the best source for hobby os'es. Creation of an OS without this resource would be practially impossible. Where do you start? what do you need to create and how? How does the hardware work? The intel manual doesn't tell you how to create an operating system for the cpu, in the same way as knowing how a motorcycle is constructed doesn't really tell you the whole story on how to drive it well. Perhaps the only site out there that can serve as that is the OS-dev.
+The primary challenge in independent operating system development is the scarcity of high-quality educational materials. This is a direct consequence of the scale of the field; the community is simply too small to sustain a paved learning path. The OSDev Wiki \cite{osdev_main} stands as the central resource for hobbyist developers, yet without it, the task would be nearly impossible. Creating an operating system requires knowledge not just of how the hardware is constructed (as detailed in manuals), but of how to effectively drive it --- a distinction akin to knowing how a car is built versus knowing how to drive it at a professional level.
 
-The OS-dev site unfortunately suffers from a lack of contributors and broad articles that convey the idea but lack specifics. Articles that are outdated and sometimes (rarely) plain wrong and tutorials that stop not far after the operating system developers equivalent of "Hello world". 
+While the OSDev community is invaluable, its resources often suffer from a lack of depth or coherence. Many articles convey high-level ideas but lack specific implementation details, while others are outdated or incorrect. Tutorials frequently stop shortly after the "Hello World" stage --- establishing a minimal bootable kernel that prints to the screen --- leaving the developer to bridge the massive gap to a fully functional system alone. It is important to note the distinction here: in OS development, "Hello World" is not merely print statement, but represents the significant milestone of successfully booting the machine and establishing a basic runtime environment.
 
-One can of course read the source code of linux or minix, but this tasks proves very difficult for a beginner operating systems developer (even if otherwise a skillfull programmer). Without understanding what the components are for, what they achieve and what problems they solve, this task is more similar to reverse engineering than learning and understanding. Introduction into the problem space is a heavy difficulty in opearting systems. You either somehow know everything about them, or you know nothing and have a hard time enter this world. A gentle gradual introduction is non existent. 
+Studying existing kernels like Linux or MINIX is often suggested, yet this proves exceptionally difficult for beginners. Without a foundational understanding of the problem space --- why specific components exist, what problems they solve, and how they interact --- reading production kernel code becomes an exercise in reverse engineering rather than learning. There is a distinct absence of a "gentle slope"; one is often faced with a binary choice: knowing nothing, or needing to know everything simultaneously.
 
-There are of course very heavy technical difficulties that must be addressed, tasks of creating drivers, abstracting away hardware, creating optimized algorithms for memory management, task scheduling, file operations etc. But for someone that didn't have the experience of creatin an OS, and wanted to create one right now, the biggest problem would be exactly not knowing where to even start, and what's the theorey of, not of how a specific distribution works, but overall OS creation.
+Beyond the educational barrier lie the technical hurdles: implementing device drivers, creating memory management algorithms, and designing task schedulers. However, for the uninitiated, the lack of a structured theoretical framework remains the most formidable obstacle.
 
-This document is partially about how we created our own operating system, which solutions we used, what problems we encountered and how we solved them and what came out of it [add here reference to the section our solution]. But it also is about introduction into the problem space of OS'dev and we wish for it to help as a reference for other developers trying their best to create their own OS [reference to label here about creating os ffrom scratch section]
+This thesis aims to address both aspects. It documents the technical creation of the AlkOS kernel --- our design choices, the problems we encountered, and the solutions we engineered (detailed in Chapter \ref{chap:implementation}). Simultaneously, it serves as a guide to the problem space itself (specifically in Chapter \ref{chap:os_from_scratch}), intended to assist future developers in their attempt to create an operating system from scratch.
 
 \section{Scope of the Thesis}
 
@@ -431,6 +430,7 @@ The division of work regarding the written thesis mirrors the distribution of co
 % ==================================================================
 
 \chapter{Creating an Operating System from Scratch}
+\label{chap:os_from_scratch}
 
 This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the general purpose monolithic kernel design with memory virtualization, where every module resides within the same address space - the kernel address space. Given that our work was primarily conducted on x86-64 machines, we will use this architecture as the basis for further discussion.
 
@@ -2364,6 +2364,7 @@ System calls are dispatched to specialized servers according to their functional
 The kernel acts solely as a transport mechanism and remains agnostic to the semantics of the system call. After processing a request, the server returns a reply message to the calling process, thereby unblocking it and delivering the result.
 
 \chapter{Our Implementation} 
+\label{chap:implementation} 
 
 This chapter presents the implementation details of the AlkOS operating system. It focuses on the core subsystems and architectural decisions that form the foundation of the kernel. The specific mechanisms described herein correspond directly to the source code attached to this thesis.
 
