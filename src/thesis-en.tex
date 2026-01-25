@@ -340,13 +340,13 @@ Technically, AlkOS features a custom two-stage bootloader that transitions the m
 
 \section{Introduction}
 
-The creation of a functional operating system kernel stands as one of the most complex tasks in software engineering. It may implement all and more, a subset of, a combination, or the bare minimum of what will be discussed in this work in the following chapters, but the ultimate goal remains similar - to make more of the machine than running a simple program.
+The creation of a functional operating system kernel stands as one of the most complex tasks in software engineering. It may implement all and more, a subset of, a combination, or the bare minimum of what will be discussed in this work in the following chapters, but the ultimate goal remains similar --- to make more of the machine than running a simple program.
 
-Perhaps it's to abstract away the underlying hardware and achieve portability of programs between different machines. Most likely it's the enablement of parallel execution of a different set of programs. Perhaps even the programs can't be trusted - they must be run as if they existed in isolated environments, unaware of each other and incapable of interfering in each other's work. 
+Perhaps it's to abstract away the underlying hardware and achieve portability of programs between different machines. Most likely it's the enablement of parallel execution of a different set of programs. Perhaps even the programs can't be trusted --- they must be run as if they existed in isolated environments, unaware of each other and incapable of interfering in each other's work. 
 
 If that were to be the case, certainly they'd require a method of receiving parts of memory to use, of compute time, of whatever resources the machine has at its disposal - cameras, microphones, TPU's, GPU's, NIC's or custom chipsets. If the programs had to access these resources, then the OS would need to provision them, to manage them and for that reason to bookkeep and gatekeep them. If a set of programs wanted to communicate with each other, it'd need to facilitate that communication. The OS that has to do it becomes in consequence, the middleman and the orchestrator of the programs, as well as the master of the machine.
 
-One can imagine that errors in the master of the machine would be quite catastrophic for every operation running on the machine. The impact: evident in every single program. Mere slowness of execution is quite the favorable scenario here - a total and utter corruption of the system's state and its following crash - or in more extreme circumstances - the damaging of the hardware itself - are all possible cases. The most insidious being minor bugs that are subtle enough to remain untouched, yet severe enough to impact the outcome of the program, perhaps affecting someone's life in the process, if the system happened to be responsible for a matter of such importance. 
+One can imagine that errors in the master of the machine would be quite catastrophic for every operation running on the machine. The impact: evident in every single program. Mere slowness of execution is quite the favorable scenario here --- a total and utter corruption of the system's state and its following crash --- or in more extreme circumstances --- the damaging of the hardware itself --- are all possible cases. The most insidious being minor bugs that are subtle enough to remain untouched, yet severe enough to impact the outcome of the program, perhaps affecting someone's life in the process, if the system happened to be responsible for a matter of such importance. 
 
 The creation of an OS is therefore not a trivial matter. It requires a precise understanding of the machine, its hardware, its resources, and a very meticulous approach to creating and testing it. It needs to be fast --- the less time it uses, the more time the other programs have to execute. At the same time it needs to be precise --- resources leaked and unrecovered accumulate over time --- creating a machine that's incapable of running for longer periods of time. 
 
@@ -405,11 +405,11 @@ The division of labor regarding the source code was determined by the distinct a
 
 Responsible for scheduling, process and thread lifecycle management, context switching, scheduling algorithms, thread sleeping mechanisms, interrupts and timer devices.
 
-\subsubsection{Adam Ogieniewski} TODO: ADAM CHECK
+\subsubsection{Adam Ogieniewski}
 
 Responsible for storage and filesystem management (including the abstraction layer and implementation of the FAT filesystem family), the standard C library (libc), the system interface (syscalls and libc extensions), and hardware interaction via ACPI and other drivers.
 
-\subsubsection{Łukasz Kryczka} TODO: KRYCZKA CHECK
+\subsubsection{Łukasz Kryczka}
 
 Responsible primarily for virtual memory, physical memory management, allocation strategies, bootloaders and graphics.
 
@@ -422,7 +422,7 @@ The division of work regarding the written thesis mirrors the distribution of co
 \chapter{Creating an Operating System from Scratch}
 \label{chap:os_from_scratch}
 
-This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the general purpose monolithic kernel design with memory virtualization, where every module resides within the same address space - the kernel address space. Given that our work was primarily conducted on x86-64 machines, we will use this architecture as the basis for further discussion.
+This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the general purpose monolithic kernel design with memory virtualization, where every module resides within the same address space --- the kernel address space. Given that our work was primarily conducted on x86-64 machines, we will use this architecture as the basis for further discussion.
 
 \section{Host Environment Preparation}
 
@@ -501,7 +501,7 @@ Kernel development frequently involves managing collections of objects, such as 
 
 A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
 
-By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is illustrated below:
+By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is shown in Listing \ref{lst:intrusiveNodesExample}.
 \begin{lstlisting}[caption={Intrusive Data Structures Example}, label={lst:intrusiveNodesExample}]
 template<class T>
 struct ListNode {
@@ -559,8 +559,160 @@ The usage of intrusive data structures offers multiple benefits critical for sys
     \item \textbf{Independent Removal} --- Removal operations do not require access to the double linked list head or the container object.
 \end{itemize}
 
-\subsection{Ref-counting}
-TODO: ADAM
+\subsection{Reference Counting}
+\label{subsec:refcounting}
+
+In a multitasking operating system, processes and kernel subsystems continuously acquire and release resources such as files, memory objects, and synchronization primitives. These resources are often shared: multiple processes may hold references to the same open file, or several kernel subsystems may access the same internal object concurrently. As long as at least one reference holder exists, the resource must remain valid. However, once the final holder releases its reference, the resource should be reclaimed promptly to avoid memory leaks and resource exhaustion.
+
+\textbf{Reference counting} provides a deterministic mechanism for managing such shared lifetimes. Each managed object maintains a counter representing the number of active references to it. The counter is incremented whenever a new reference is acquired and decremented when a reference is released. When the counter reaches zero, indicating that no execution context retains a reference, the object is safely deallocated. This approach allows the kernel to reclaim resources precisely at the moment they become unused, without requiring global coordination or non-deterministic garbage collection.
+
+
+\subsubsection{Storage Strategies}
+
+A central design decision in reference counting is the placement of the control metadata, namely the reference counter. As illustrated in Figure~\ref{fig:refcount_strategies_detail}, three principal strategies exist, each with distinct trade-offs in terms of allocation behavior, cache locality, and usability:
+
+\begin{enumerate}
+    \item \textbf{Intrusive Model (Embedded):} The reference counter is embedded directly within the object's data structure. Smart pointers maintain a single raw pointer to the object.
+    \item \textbf{External (Decoupled):} Common in userspace libraries (e.g., \texttt{std::shared\_ptr}), where the control block is allocated separately and the smart pointer stores two pointers.
+    \item \textbf{External (Indirection):} The smart pointer references a control block that in turn references the object, effectively introducing a level of indirection.
+\end{enumerate}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        font=\sffamily\small,
+        % Style for the pointer variable on stack
+        smartptr/.style={
+            rectangle split,
+            rectangle split parts=1,
+            draw=black!80,
+            fill=blue!5,
+            minimum height=0.8cm,
+            text width=2.5cm,
+            align=center,
+            rounded corners=1pt
+        },
+        % Style for the heap object container
+        heapblock/.style={
+            rectangle split,
+            rectangle split parts=1,
+            draw=black!70,
+            fill=white,
+            text width=3cm,
+            align=center,
+            minimum height=0.8cm
+        },
+        % Style for the Control Block (Metadata)
+        ctrlblock/.style={
+            rectangle split parts=1,
+            draw=black!70,
+            fill=gray!20,
+            text width=3cm,
+            align=center,
+            minimum height=0.6cm
+        },
+        % Arrow style
+        ptr/.style={
+            -{Latex[length=3mm]},
+            thick,
+            draw=black!70
+        },
+        labeltext/.style={
+            font=\bfseries,
+            anchor=west
+        }
+    ]
+
+    % ==========================================================
+    % 1. INTRUSIVE MODEL
+    % ==========================================================
+    \node[labeltext] at (-1, 0) {1. Intrusive Model};
+    
+    % Smart Pointer
+    \node[smartptr] (sp1) at (0, -1.5) {\texttt{ptr\_object}};
+    \node[above=0.1cm of sp1, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % The Object (One contiguous block)
+    \node[ctrlblock] (rc1) at (5, -1.2) {\texttt{ref\_count}};
+    \node[heapblock, below=0cm of rc1] (data1) {Object Data};
+    % Draw outline around the whole fused object
+    \node[draw=black!70, fit=(rc1) (data1), inner sep=0pt] (obj1) {};
+    \node[above=0.1cm of obj1, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrow
+    \draw[ptr] (sp1.east) -- (obj1.north  west);
+
+
+    % ==========================================================
+    % 2. DECOUPLED (Two Pointers in SmartPtr)
+    % ==========================================================
+    \node[labeltext] at (-1, -3.5) {2. External: Decoupled};
+
+    % Smart Pointer (Split in two)
+    \node[smartptr, rectangle split parts=2] (sp2) at (0, -5) {
+        \texttt{ptr\_object}
+        \nodepart{second}
+        \texttt{ptr\_control}
+    };
+    \node[above=0.1cm of sp2, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % Control Block (Count Only)
+    \node[ctrlblock] (cb2) at (5, -6) {\texttt{ref\_count}};
+    \node[above=0.1cm of cb2, font=\scriptsize\itshape, color=gray] {Control Block};
+
+    % Object Data
+    \node[heapblock] (obj2) at (5, -4.75) {Object Data};
+    \node[above=0.1cm of obj2, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrows
+    % Arrow from first part of SP to Object
+    \draw[ptr] (sp2.text east) -- (obj2.west);
+    % Arrow from second part of SP to Control Block
+    \draw[ptr] (sp2.second east) -- (cb2.north west);
+
+
+    % ==========================================================
+    % 3. INDIRECTION (Pointer in Control Block)
+    % ==========================================================
+    \node[labeltext] at (-1, -7.5) {3. External: Indirection};
+
+    % Smart Pointer (One Pointer)
+    \node[smartptr] (sp3) at (0, -9) {\texttt{ptr\_control}};
+    \node[above=0.1cm of sp3, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % Control Block (Count + Pointer)
+    \node[ctrlblock, rectangle split, rectangle split parts=2] (cb3) at (3.5, -9) {
+        \texttt{ref\_count}
+        \nodepart{second}
+        \texttt{ptr\_object}
+    };
+    \node[above=0.1cm of cb3, font=\scriptsize\itshape, color=gray] {Control Block};
+
+    % Object Data
+    \node[heapblock] (obj3) at (7.5, -9) {Object Data};
+    \node[above=0.1cm of obj3, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrows
+    \draw[ptr] (sp3.east) -- (cb3.north west);
+    \draw[ptr] (cb3.second east) -- (obj3.west);
+
+    \end{tikzpicture}
+    \caption{Comparison of Reference Counting Storage Strategies}
+    \label{fig:refcount_strategies_detail}
+\end{figure}
+
+\subsubsection{Rationale for the Intrusive Model in Kernel Space}
+
+Most kernels employ the \textbf{intrusive reference counting model}. Although external models offer greater flexibility by avoiding modifications to object layouts, their associated costs are not justifiable within the kernel context. The intrusive model ensures that the reference counter is colocated with the object itself, which guarantees a single allocation per object. Furthermore, with an intrusive design, any subsystem holding a raw pointer can acquire ownership by incrementing the embedded counter, allowing objects to move freely between low-level components and higher-level abstractions without compromising correctness.
+
+The usage of reference counting offers multiple benefits critical for systems programming:
+\begin{itemize}
+    \item \textbf{Deterministic deallocation} -- Resources are freed at the precise moment they become unused, without relying on garbage collection or deferred cleanup.
+    \item \textbf{Shared ownership} -- Multiple subsystems can safely share references to the same object without explicit coordination.
+    \item \textbf{Cache efficiency} -- The intrusive model ensures metadata is colocated with object data, improving memory access patterns.
+    \item \textbf{Lock-free operation} -- Atomic hardware primitives ensure safe concurrent access and correct object destruction in SMP environments without incurring the overhead of locks.
+    \item \textbf{Compile-time safety} -- Encapsulation within RAII-compliant wrappers (e.g., smart pointers) allows the compiler to enforce ownership semantics, automating reference management and structurally preventing resource leaks.
+\end{itemize}
 
 \subsection{Archtiecture Abstraction}
 TODO: KRYCZKA
@@ -998,7 +1150,7 @@ On general-purpose platforms (x86-64), the hardware is modular. The kernel canno
 \end{itemize}
 
 \subsection{Hardware Abstraction}
-How does the kernel handle such diverse set of methods of querying the memory? This is a part of a bigger topic - namely Hardware / Architecture Abstraction - and wil be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
+How does the kernel handle such diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and wil be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
 
 \subsection{Discovering and Enabling CPU Features}
 \label{subsec:cpu_discovery}
@@ -1136,7 +1288,7 @@ If an allocator simply handed out memory sequentially and never had to accept re
     \item \textbf{External Fragmentation:} This occurs when free memory exists in the system, but it is scattered in small, non-contiguous holes such that a request for a large contiguous block cannot be satisfied. The total free memory might be sufficient, but the geometry of the holes prevents allocation.
 \end{itemize}
 
-\textbf{The Root Cause: Isolated Deaths.} Fragmentation fundamentally arises from \textit{isolated deaths} - when an object is freed but its neighbors remain allocated, creating an unusable hole. If adjacent objects always died together, their combined space would be reclaimed as one contiguous block. The allocator's core challenge is predicting which objects will die at similar times and placing them contiguously. Since the allocator cannot know future behavior, it must rely on heuristics that exploit regularities in program behavior~\cite{wilson1995survey}.
+\textbf{The Root Cause: Isolated Deaths.} Fragmentation fundamentally arises from \textit{isolated deaths} --- when an object is freed but its neighbors remain allocated, creating an unusable hole. If adjacent objects always died together, their combined space would be reclaimed as one contiguous block. The allocator's core challenge is predicting which objects will die at similar times and placing them contiguously. Since the allocator cannot know future behavior, it must rely on heuristics that exploit regularities in program behavior~\cite{wilson1995survey}.
 
 The goal of any allocator is to balance the minimization of these two types of fragmentation against the computational cost (latency) of the allocation operation.
 
@@ -1340,7 +1492,7 @@ The core innovation of TLSF is how it finds a suitable free block in constant ti
     \item A bit is set to \textbf{0} if the list is empty.
 \end{itemize}
 
-When a request arrives, the allocator maps the size to indices $(f, s)$. It checks the bitmap for that list. If the bit is 0 (empty), it does not need to loop through lists. Instead, it uses a hardware instruction - \textit{Find First Set} (\texttt{ffs}) or \textit{Count Leading Zeros} (\texttt{clz}) - to atomically find the index of the next available bit in the bitmap. This operation allows the allocator to skip over empty size classes instantly, guaranteeing $O(1)$ allocation time regardless of the heap state.
+When a request arrives, the allocator maps the size to indices $(f, s)$. It checks the bitmap for that list. If the bit is 0 (empty), it does not need to loop through lists. Instead, it uses a hardware instruction --- \textit{Find First Set} (\texttt{ffs}) or \textit{Count Leading Zeros} (\texttt{clz}) --- to atomically find the index of the next available bit in the bitmap. This operation allows the allocator to skip over empty size classes instantly, guaranteeing $O(1)$ allocation time regardless of the heap state.
 
 \subsubsection{Physical Block Management: Boundary Tags}
 The Buddy System calculates the address of a neighbor using bitwise XOR. This is fast, but it restricts merging: a block at address 0x2000 of size 0x1000 can \textit{only} merge with its specific buddy at 0x3000. It cannot merge with a free block at 0x1000, even though they are physically adjacent.
@@ -1417,7 +1569,7 @@ To solve this, modern allocators use a two-tiered hierarchy:
 \subsubsection{The Hoard Allocator}
 A naive implementation of per-CPU heaps suffers from a specific pathology known as \textit{blowup}. Consider a "Producer-Consumer" pattern where Thread A (on CPU 1) continuously allocates packets, and Thread B (on CPU 2) consumes and frees them. CPU 1's heap constantly empties (requesting more from global), and CPU 2's heap constantly fills up (never returning to global). The system runs out of memory despite having ample free space, because that space is trapped on CPU 2.
 
-The \textbf{Hoard Allocator} \cite{berger2000hoard} addresses this by organizing memory into \textit{Superblocks} - large chunks of memory containing multiple objects of the same size. Hoard tracks the "emptiness" of these superblocks. If a superblock on a local heap becomes mostly empty, it is moved to the global heap, allowing other processors to reuse the memory. This guarantees that the memory consumption of the allocator is bounded within a constant factor of the ideal required memory, solving the blowup problem while maintaining scalability.
+The \textbf{Hoard Allocator} \cite{berger2000hoard} addresses this by organizing memory into \textit{Superblocks} --- large chunks of memory containing multiple objects of the same size. Hoard tracks the "emptiness" of these superblocks. If a superblock on a local heap becomes mostly empty, it is moved to the global heap, allowing other processors to reuse the memory. This guarantees that the memory consumption of the allocator is bounded within a constant factor of the ideal required memory, solving the blowup problem while maintaining scalability.
 
 \subsection{Hardware Constraints: Zoning}
 
@@ -1432,8 +1584,6 @@ A common solution is to partition the physical address space into disjoint \text
 
 \section{Virtual Memory Management}
 \label{sec:vmm}
-
-\todo[inline]{refine this section, specifically the diagrams}
 
 \subsection{The Abstraction of Memory}
 \label{subsec:vmm_abstraction}
@@ -1475,91 +1625,157 @@ To store these mappings efficiently, architectures employ \textbf{Multi-level Pa
     \centering
     % Placeholder for a figure showing 4-level paging translation
     \begin{tikzpicture}[
-        font=\sffamily\scriptsize,
-        table/.style={draw, fill=white, minimum width=0.8cm, minimum height=2.5cm},
-        entry/.style={draw, fill=blue!20, minimum width=0.8cm, minimum height=0.2cm},
-        reg/.style={draw, fill=gray!10, minimum width=1.5cm, minimum height=0.6cm},
-        arrow/.style={-Latex},
-        label/.style={font=\tiny, text=gray}
+        font=\sffamily\small,
+        >={Latex[length=2mm, width=1.5mm]},
+        node distance=1.5cm and 0.8cm,
+        % Styles
+        addrbox/.style={
+            draw=black!70,
+            fill=#1!15,
+            minimum height=1.0cm,
+            minimum width=2.2cm,
+            inner sep=4pt,
+            align=center,
+            font=\sffamily\bfseries\small
+        },
+        bitrange/.style={
+            font=\sffamily\scriptsize,
+            text=black!60,
+            anchor=north,
+            yshift=-2pt
+        },
+        tablebox/.style={
+            draw=black!60,
+            fill=white,
+            minimum width=1.8cm,
+            minimum height=2.5cm,
+            rounded corners=2pt
+        },
+        entrybox/.style={
+            draw=black!50,
+            fill=white,
+            minimum width=1.6cm,
+            minimum height=0.5cm,
+            font=\sffamily\scriptsize
+        },
+        highlight/.style={
+            fill=#1!20,
+            draw=#1!80!black,
+            thick
+        },
+        arrow/.style={
+            ->,
+            thick,
+            draw=black!70,
+            rounded corners=5pt
+        },
+        indexarrow/.style={
+            ->,
+            draw=black!60,
+            dashed
+        }
     ]
 
-    % Example Address Calculation
-    \node[anchor=west] at (0, 4.5) {\textbf{Example Virtual Address:}};
-    \node[anchor=west, font=\ttfamily] at (0, 4.0) {0x0000\_0080\_4020\_1000};
+    % --- 1. Virtual Address Bar (The Spine) ---
     
-    % Address Bar (MSB -> LSB)
-    \node[draw, minimum width=10cm, minimum height=0.6cm] (va) at (6, 3) {};
-    \node[anchor=south west] at (va.north west) {Virtual Address (64-bit) - MSB on Left};
+    \node[addrbox=violet] (l4) at (0,0) {L4 Index};
+    \node[bitrange] at (l4.south) {47:39};
 
-    % Bit Fields: L4 (47:39), L3 (38:30), L2 (29:21), L1 (20:12), Offset (11:0)
-    % Total width 10cm. 
-    % 9 bits * 4 + 12 bits = 48 bits. (ignoring top 16 canonical).
-    % Let's distribute roughly.
-    \draw (va.north west) rectangle ++(1.5, -0.6) node[midway] (l4box) {L4 (1)};
-    \draw (va.north west) ++(1.5,0) rectangle ++(1.5, -0.6) node[midway] (l3box) {L3 (0)};
-    \draw (va.north west) ++(3.0,0) rectangle ++(1.5, -0.6) node[midway] (l2box) {L2 (1)};
-    \draw (va.north west) ++(4.5,0) rectangle ++(1.5, -0.6) node[midway] (l1box) {L1 (0)};
-    \draw (va.north west) ++(6.0,0) rectangle ++(4.0, -0.6) node[midway] {Offset (0x000)};
+    \node[addrbox=blue, right=0.3cm of l4] (l3) {L3 Index};
+    \node[bitrange] at (l3.south) {38:30};
 
-    % Labels for bits
-    \node[above] at (0.75+6.0-6.0, 3) {47:39};
-    \node[above] at (2.25+6.0-6.0, 3) {38:30};
-    \node[above] at (3.75+6.0-6.0, 3) {29:21};
-    \node[above] at (5.25+6.0-6.0, 3) {20:12};
-    \node[above] at (8.0+6.0-6.0, 3) {11:0};
+    \node[addrbox=teal, right=0.3cm of l3] (l2) {L2 Index};
+    \node[bitrange] at (l2.south) {29:21};
 
-    % CPU
-    \node[reg] (cr3) at (0, 0) {CR3};
-    \node[anchor=south] at (cr3.north) {CPU};
+    \node[addrbox=orange, right=0.3cm of l2] (l1) {L1 Index};
+    \node[bitrange] at (l1.south) {20:12};
 
-    % Tables (Top-Left to Bottom-Right flow)
+    \node[addrbox=gray, right=0.3cm of l1, minimum width=2.5cm] (off) {Offset};
+    \node[bitrange] at (off.south) {11:0};
+
+    % Address Bits (Replacing the Title)
+    \node[anchor=south, font=\ttfamily\small, text=violet] at ($(l4.north)+(0,0.3)$) {000000001};
+    \node[anchor=south, font=\ttfamily\small, text=blue] at ($(l3.north)+(0,0.3)$) {000000000};
+    \node[anchor=south, font=\ttfamily\small, text=teal] at ($(l2.north)+(0,0.3)$) {000000001};
+    \node[anchor=south, font=\ttfamily\small, text=orange] at ($(l1.north)+(0,0.3)$) {000000000};
+    \node[anchor=south, font=\ttfamily\small, text=gray] at ($(off.north)+(0,0.3)$) {000000000000};
+    \node[anchor=south west, font=\sffamily\bfseries\small] at ($(l4.west)+(-2.5,0.82)$) {Virtual Address:};
+
+
+    % --- 2. The Tables (The Teeth - Aligned below) ---
     
-    % PML4
-    \node[table] (pml4) at (2.0, 0) {};
-    \node[entry] (pml4e) at (2.0, 0.5) {}; % Entry 1 (High up)
-    \node[anchor=south] at (pml4.north) {PML4};
-    \node[right, font=\tiny] at (pml4e.east) {Idx: 1};
+    % CR3 - Anchored Left
+    \node[draw=black, fill=gray!20, minimum width=1.2cm, minimum height=0.8cm, left=1.5cm of l4 |- l4, shift={(0,-3)}] (cr3) {\textbf{CR3}};
 
-    % PDPT
-    \node[table] (pdpt) at (4.5, -0.5) {};
-    \node[entry] (pdpte) at (4.5, -1.0) {}; % Entry 0 (Bottom)
-    \node[anchor=south] at (pdpt.north) {PDPT};
-    \node[right, font=\tiny] at (pdpte.east) {Idx: 0};
+    % Function to draw a table with a highlighted entry
+    % #1: Name, #2: Position, #3: Color, #4: Label
+    \def\drawtable#1#2#3#4{
+        \node[tablebox] (#1) at (#2) {};
+        \node[anchor=north, font=\sffamily\bfseries\small, yshift=-2pt] at (#1.south) {#4};
+        % Decoration lines
+        \draw[gray!30] (#1.west) -- (#1.east);
+        \draw[gray!30] ($(#1.west)+(0,0.8)$) -- ($(#1.east)+(0,0.8)$);
+        \draw[gray!30] ($(#1.west)+(0,-0.8)$) -- ($(#1.east)+(0,-0.8)$);
+        % The Entry
+        \node[entrybox, highlight=#3] (#1_entry) at (#1.center) {Entry};
+    }
 
-    % PD
-    \node[table] (pd) at (7.0, -1.0) {};
-    \node[entry] (pde) at (7.0, -0.5) {}; % Entry 1
-    \node[anchor=south] at (pd.north) {PD};
-    \node[right, font=\tiny] at (pde.east) {Idx: 1};
+    \drawtable{pml4}{$(l4.south) + (0, -2.5)$}{violet}{PML4}
+    \drawtable{pdpt}{$(l3.south) + (0, -2.5)$}{blue}{PDPT}
+    \drawtable{pd}{$(l2.south) + (0, -2.5)$}{teal}{Page Dir}
+    \drawtable{pt}{$(l1.south) + (0, -2.5)$}{orange}{Page Table}
 
-    % PT
-    \node[table] (pt) at (9.5, -1.5) {};
-    \node[entry] (pte) at (9.5, -2.0) {}; % Entry 0
-    \node[anchor=south] at (pt.north) {PT};
-    \node[right, font=\tiny] at (pte.east) {Idx: 0};
 
-    % Frame
-    \node[draw, fill=green!10, minimum width=1.5cm, minimum height=1.5cm] (frame) at (12.0, -1.5) {Data};
-    \node[anchor=north] at (frame.south) {Physical RAM};
+    % --- 3. Connections ---
 
-    % Connections
-    \draw[arrow] (cr3) -- (pml4);
+    % Vertical Indexing Lines (The "Select" Logic)
+    \draw[indexarrow] (l4.south) -- (pml4.north);
+    \draw[indexarrow] (l3.south) -- (pdpt.north);
+    \draw[indexarrow] (l2.south) -- (pd.north);
+    \draw[indexarrow] (l1.south) -- (pt.north);
+
+    % Horizontal Chain (The "flow" Logic)
     
-    % Indices from VA to Entries (Dashed) - Flowing DOWN/RIGHT
-    \draw[arrow, dashed, red!70!black] (l4box.south) -- (pml4e.north west);
-    \draw[arrow] (pml4e.east) -- (pdpt.north west);
+    % CR3 -> PML4 Base
+    \draw[arrow] (cr3.east) -- (pml4.west);
+
+    % PML4 Entry -> PDPT Base
+    \draw[arrow] (pml4_entry.east) -- ++(0.4, 0) |- ($(pdpt.north west)!0.25!(pdpt.west)$);
+
+    % PDPT Entry -> PD Base
+    \draw[arrow] (pdpt_entry.east) -- ++(0.4, 0) |- ($(pd.north west)!0.25!(pd.west)$);
+
+    % PD Entry -> PT Base
+    \draw[arrow] (pd_entry.east) -- ++(0.4, 0) |- ($(pt.north west)!0.25!(pt.west)$);
+
+
+    % --- 4. Physical Address Construction (The Merge) ---
+
+    % PT Entry -> Frame Base
+    \coordinate (merge_point) at ($(off.south) + (0.5, -2.5)$);
     
-    \draw[arrow, dashed, red!70!black] (l3box.south) -- (pdpte.north west);
-    \draw[arrow] (pdpte.east) -- (pd.north west);
+    % Container for Physical Address
+    \node[draw=black!80, fill=green!5, minimum width=3.5cm, minimum height=1.2cm, align=center] (phys_addr) at (merge_point) {};
+    \node[anchor=south, font=\bfseries] at (phys_addr.north) {Physical Address};
+    
+    % Split inside
+    \node[draw=black!50, fill=green!20, minimum height=0.6cm, minimum width=2.0cm, anchor=west] (pfn_part) at ($(phys_addr.west)+(0.2, -0.1)$) {\small PFN};
+    \node[draw=black!50, fill=gray!20, minimum height=0.6cm, minimum width=1.1cm, anchor=west] (off_part) at (pfn_part.east) {\small Offset};
 
-    \draw[arrow, dashed, red!70!black] (l2box.south) -- (pde.north west);
-    \draw[arrow] (pde.east) -- (pt.north west);
+    % Arrow from PT Entry to PFN part
+    \draw[arrow] (pt_entry.east) -- ++(0.3,0) |- (pfn_part.west);
 
-    \draw[arrow, dashed, red!70!black] (l1box.south) -- (pte.north west);
-    \draw[arrow] (pte.east) -- (frame.west);
+    % Arrow from Virtual Offset to Physical Offset (Square from right)
+    \draw[arrow, dashed] (off.east) -- ++(1.5, 0) |- (off_part.east) node[pos=0.25, auto, font=\tiny, text=gray] {Copy};
 
-    \end{tikzpicture}
-    \caption{Conceptual flow of a Multi-level Page Table Walk}
+    % Final Result -> RAM
+    \node[draw=black, fill=green!20, minimum width=2cm, minimum height=1.5cm, below=0.8cm of phys_addr] (ram) {\textbf{4KB Frame}};
+    \node[anchor=north, font=\tiny] at (ram.south) {Physical Memory};
+
+    \draw[arrow] (phys_addr.south) -- (ram.north);
+
+\end{tikzpicture}
+    \caption{Conceptual flow of a Multi-level Page Table Walk on x86-64}
     \label{fig:page_walk}
 \end{figure}
 
@@ -1680,7 +1896,7 @@ This approach, pioneered by Sleator and Tarjan~\cite{sleator1985splay}, is notab
 ]
 
 % BEFORE SPLAY
-\node[anchor=south] at (0, 0.2) {\textbf{Before Access}};
+\node[anchor=south] at (0, 0.4) {\textbf{Before Access}};
 \node[node] (root) at (0, 0) {A};
 \node[node] (b) at (-1, -1) {B};
 \node[target] (c) at (-0.5, -2) {C};
@@ -1693,7 +1909,7 @@ This approach, pioneered by Sleator and Tarjan~\cite{sleator1985splay}, is notab
 \draw[-Latex, ultra thick, blue] (1.5, -1) -- (2.5, -1) node[midway, above] {Splay(C)};
 
 % AFTER SPLAY
-\node[anchor=south] at (4, 0.2) {\textbf{After Access}};
+\node[anchor=south] at (4, 0.4) {\textbf{After Access}};
 \node[target] (newroot) at (4, 0) {C};
 \node[node] (newb) at (3, -1) {B};
 \node[node] (newa) at (5, -1) {A};
@@ -1808,7 +2024,7 @@ When the CPU attempts to access such an address, the MMU raises a Page Fault. Th
 \node[decision] (check) at (0, 1.0) {PTE Present?};
 
 % Success to the Left
-\draw[arrow] (check.west) -- node[above] {Yes} (-2.5, 1.0) node[left, align=center] (success) {\textbf{Success}\\ \textit{Process Continues}};
+\draw[arrow] (check.west) -- node[above] {Yes} (-2.0, 1.0) node[left, align=center] (success) {\textbf{Success}\\ \textit{Process Continues}};
 
 % Fault Path to the Right
 \node[state, fill=red!10] (fault) at (4.0, 1.0) {3. Page Fault (\#PF)\\ \textit{Kernel Handler}};
@@ -1823,7 +2039,7 @@ When the CPU attempts to access such an address, the MMU raises a Page Fault. Th
 \draw[arrow] (phys) -- (update);
 
 % Resume Loop (Wrapping around the Left)
-\draw[arrow] (update.west) to[out=180, in=180, looseness=2.5] node[left, pos=0.8] {6. Resume (Retry)} (access.west);
+\draw[arrow] (update.west) to[out=180, in=180, looseness=2.5] node[left, pos=0.5] {6. Resume (Retry)} (access.west);
 
 \end{tikzpicture}
 \caption{The Cycle of Demand Paging}
@@ -2078,7 +2294,7 @@ In a production environment, this structure would naturally include additional f
 
 \subsection{Thread}
 
-The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution - the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer. Although same thing may be archieved with different solution
+The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution --- the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer. Although same thing may be archieved with different solution
 
 This approach simplifies the architecture significantly and enhances performance. It is worth noting that while certain architectures provide hardware-assisted context switching mechanisms (such as the legacy Hardware Task Switching on x86), these are rarely utilized in modern general-purpose kernels due to performance overhead and portability concerns. Instead, the standard approach is to unify context storage using the stack. Since the stack is heavily utilized, it is typically cached, eliminating the need to allocate separate memory regions for saving context. When saving context, registers are pushed onto the stack. When initializing a thread, the stack is artificially populated with boot-up values.
 
@@ -2269,7 +2485,7 @@ With the foundational kernel components established, the development process tra
     \item \textbf{User Space Libraries} --- The porting or implementation of standard libraries (such as \texttt{libc}) to run on top of the kernel interface.
     \item \textbf{Executable Loading} --- A loader capable of parsing a standard executable format (e.g., ELF) and correctly loading the code into memory.
     \item \textbf{Memory Protection} --- The enforcement of isolation through separate address spaces and the configuration of appropriate page-level privilege flags.
-    \item \textbf{Userspace Transition} --- A bootstrapping mechanism within the kernel to finalize initialization and jump to user space to begin executing user code - strictly depends on architecture.
+    \item \textbf{Userspace Transition} --- A bootstrapping mechanism within the kernel to finalize initialization and jump to user space to begin executing user code --- strictly depends on architecture.
     \item \textbf{Compilation Toolchain} --- The extension and configuration of the compiler to support targeting the specific operating system.
 \end{itemize}
 
@@ -3268,9 +3484,578 @@ void ArchInit(const RawBootArguments &) {
 }
 \end{lstlisting}
 
-\section{Memory Management}
-\label{sec:memory}
-TODO: KRYCZKA
+% ==================================================================
+
+\section{Physical Memory Management}
+\label{sec:impl_pmm}
+
+The Physical Memory Management subsystem of AlkOS acts as the ultimate authority over the machine's random access memory (RAM). Its primary responsibilities are tracking the usage status of every physical page frame, satisfying allocation requests from both the kernel and user space, and reclaiming memory when it is no longer needed. To balance the conflicting requirements of boot-time simplicity, runtime performance, and fragmentation minimization, AlkOS does not rely on a single monolithic allocation algorithm. Instead, it implements a hierarchical architecture composed of specialized allocators, each addressing a specific granularity of memory management.
+
+\subsection{Architecture Overview}
+
+The memory subsystem is structured into five distinct layers, designed to gradually increase the complexity and capability of the allocator as the system boots. This layered approach resolves the "chicken-and-egg" problem inherent in kernel initialization, where complex allocators (like the Buddy System) require dynamic memory for their own metadata before they are fully operational.
+
+The architecture consists of the following components:
+
+\begin{itemize}
+    \item \textbf{Metadata Layer (\texttt{PageMetaTable})} --- The foundation of the entire subsystem. It is a static, global array that exists in a one-to-one mapping with physical page frames. It creates an abstraction layer allowing higher-level allocators to store state (such as free-list pointers or flags) without writing to the physical pages themselves.
+    
+    \item \textbf{Bootstrap Allocator (\texttt{BitmapPmm})} --- A primitive allocator used exclusively during the early boot phase. It manages memory using a simple bitmap provided by the Multiboot2 loader. Its sole purpose is to provide enough memory to initialize the Metadata Layer.
+    
+    \item \textbf{Frame Allocator (\texttt{BuddyPmm})} --- The primary engine for page-level allocation. Once the system is initialized, it takes ownership of all free memory. It uses the binary buddy algorithm to manage memory in power-of-two blocks (orders), facilitating efficient splitting and coalescing of physical frames.
+    
+    \item \textbf{Object Allocator (\texttt{SlabAllocator})} --- Operating on top of the Frame Allocator, this layer subdivides 4 KiB pages into smaller, fixed-size objects (e.g., 32 bytes, 64 bytes). This is essential for minimizing internal fragmentation when allocating kernel structures such as threads or file descriptors.
+    
+    \item \textbf{Global Heap Interface (\texttt{Heap})} --- A unified facade that exposes a standard C-style API (\texttt{KMalloc}, \texttt{KFree}). It acts as a router, dispatching large requests to the Frame Allocator and small requests to the Object Allocator.
+\end{itemize}
+
+This separation of concerns ensures that the kernel code remains decoupled from the specific allocation mechanics. The rest of the kernel interacts primarily with the \texttt{Heap} interface, unaware of the complex machinery operating beneath it.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        node distance=1.0cm,
+        layer/.style={
+            rectangle, 
+            draw=black!70, 
+            rounded corners=3pt, 
+            minimum width=8cm, 
+            minimum height=1.0cm, 
+            align=center, 
+            fill=white,
+            font=\small
+        },
+        arrow/.style={-Latex, thick}
+    ]
+
+    \node (facade) [layer, fill=gray!10] {\textbf{Facade Layer}\\ \texttt{Heap::Malloc(size)}};
+    
+    \node (slab) [layer, below left=1.0cm and -3cm of facade, minimum width=3.5cm, fill=blue!10] {\textbf{Object Layer}\\ \texttt{SlabAllocator}};
+    
+    \node (buddy) [layer, below right=1.0cm and -3cm of facade, minimum width=3.5cm, fill=green!10] {\textbf{Frame Layer}\\ \texttt{BuddyPmm}};
+    
+    \node (meta) [layer, below=2.8cm of facade, fill=orange!10] {\textbf{Metadata Layer}\\ \texttt{PageMetaTable}};
+    
+    \draw[arrow] (facade.south) -- node[left, font=\scriptsize] {$< 4096$ B} (slab.north);
+    \draw[arrow] (facade.south) -- node[right, font=\scriptsize] {$\ge 4096$ B} (buddy.north);
+    \draw[arrow] (slab.east) -- node[above, font=\scriptsize] {Request Pages} (buddy.west);
+    \draw[arrow] (buddy.south) -- node[right, font=\scriptsize] {Manage State} (meta.north);
+
+    \end{tikzpicture}
+    \caption{Hierarchy of Physical Memory Allocators in AlkOS}
+    \label{fig:pmm_hierarchy}
+\end{figure}
+
+\subsection{Page Metadata Management}
+
+A fundamental challenge in physical memory management is tracking the state of every page frame --- whether it is free, allocated, part of a slab cache, or serving as a page table --- without consuming excessive memory or creating circular dependencies. Storing this metadata inside the page frames themselves is impossible for allocated pages, as the user data would overwrite the metadata. Conversely, dynamically allocating metadata nodes (e.g., using \texttt{malloc}) is not feasible because the memory manager itself is required to perform those allocations.
+
+To resolve this, AlkOS implements a system inspired by the Linux \texttt{struct page} architecture. We pre-allocate a global array of metadata structures, called the \texttt{PageMetaTable}, where the index $i$ corresponds directly to Physical Frame Number (PFN) $i$.
+
+\subsubsection{The \texttt{PageMeta} Structure}
+
+To minimize memory overhead, the \texttt{PageMeta} structure utilizes a C++ \texttt{union} to multiplex its data fields. A physical page acts in mutually exclusive roles at any given time: it can be a free block in the Buddy System, a slab cache, or a generic allocated page, but never multiple simultaneously. By overlapping the storage requirements for these roles, the structure remains compact.
+
+As shown in Listing \ref{lst:page_meta}, the structure contains a fixed header (type and order) and a polymorphic data section.
+
+\begin{lstlisting}[caption={Polymorphic Page Metadata Structure}, label={lst:page_meta}]
+struct PageMeta {
+    union {
+        // State: Page is free and resides in Buddy Allocator
+        struct BuddyMeta {
+            VPtr<PageMeta> next; // Intrusive list pointer
+            VPtr<PageMeta> prev; // Intrusive list pointer
+        } buddy;
+
+        // State: Page is being used as a Slab
+        struct SlabMeta {
+            VPtr<PageMeta> next; // List of partial/full/free slabs
+            VPtr<PageMeta> prev;
+            VPtr<KmemCache> cache; // Owner cache
+            VPtr<void> freelist;   // Head of object free list
+            u16 inuse;             // Active object count
+        } slab;
+
+        // State: Page is used as a Page Table (PML4/PDPT/etc)
+        struct PageTableMeta {
+            u16 ref_count;         // For shared mapping management
+        } page_table;
+        
+        // ... other states
+    } data;
+
+    PageMetaType type; // Discriminator (Buddy, Slab, Allocated, etc.)
+    u8 order;          // Size class of the block (2^order pages)
+    
+    // Padding ensures alignment and consistent size (40 bytes)
+    u8 _padding[4]; 
+};
+\end{lstlisting}
+
+This design results in a structure size of exactly 40 bytes. Given a standard page size of 4096 bytes, the metadata overhead is approximately $0.97\%$, representing a highly efficient usage of physical memory for bookkeeping.
+
+\subsubsection{The Metadata Table}
+
+The \texttt{PageMetaTable} class manages the global array of these structures. It serves as the translation layer between physical addresses and their metadata. Since the array is contiguous and indexed by PFN, lookups are performed in $O(1)$ time using simple pointer arithmetic.
+
+\begin{equation}
+    \text{Meta}(Addr) = \text{Base} + \left( \frac{Addr}{\text{PageSize}} \right) \times \text{sizeof}(\text{PageMeta})
+\end{equation}
+
+This table allows high-level allocators to manipulate physical memory conceptually (e.g., "remove this block from the free list") without needing to access the physical page itself, which might not even be mapped into the kernel's virtual address space at the time of manipulation.
+
+
+\subsection{Bootstrap Allocation}
+
+The initialization of the physical memory subsystem presents a dependency cycle. The primary allocator (the Buddy System) relies on the \texttt{PageMetaTable} to function. However, the \texttt{PageMetaTable} itself is a substantial data structure that must be stored in memory. For a system with 32 GiB of RAM, this table requires approximately 320 MiB of contiguous physical memory. Allocating this memory requires an allocator, but the Buddy System is not yet initialized.
+
+To resolve this deadlock, AlkOS implements a transient bootstrap allocator, the \texttt{BitmapPmm}.
+
+\subsubsection{Mechanism}
+The \texttt{BitmapPmm} operates on the raw memory map provided by the Multiboot2-compliant bootloader. During the earliest phase of kernel initialization, it calculates the total size of physical memory and selects a reserved region to store a simple bit array (bitmap). In this bitmap, a single bit represents one 4 KiB physical page frame (0 for free, 1 for used).
+
+The allocation algorithm implemented in \texttt{BitmapPmm::Alloc} is a primitive linear search. To satisfy a request for $N$ pages, it scans the bitmap from the last known allocation index until it finds a run of $N$ contiguous zero bits.
+
+\begin{lstlisting}[caption={Bootstrap Linear Allocation Logic}, label={lst:bitmap_alloc}]
+expected<FindBlockResult, MemError> BitmapPmm::FindContiguousBlock(
+    size_t start_pfn, size_t end_pfn, u64 num_pages)
+{
+    size_t current_pfn = end_pfn - 1;
+    u64 count = 0;
+
+    // Backward linear scan to find free range
+    do {
+        if (IsFree(current_pfn)) {
+            count++;
+        } else {
+            count = 0; // Reset counter on obstruction
+        }
+
+        if (count == num_pages) {
+            return FindBlockResult{current_pfn};
+        }
+    } while (current_pfn-- > start_pfn);
+
+    return unexpected(MemError::OutOfMemory);
+}
+\end{lstlisting}
+
+\subsubsection{Transition to Buddy System}
+While the bitmap allocator is robust, its performance characteristics are poor ($O(N)$ allocation time), and it lacks support for sub-page allocations or efficient fragmentation management. Therefore, its lifespan is strictly limited to the kernel boot sequence.
+
+Once the \texttt{BitmapPmm} has successfully allocated the memory required for the \texttt{PageMetaTable} and the kernel's initial paging structures, the memory module performs a handover. It iterates through the bitmap one final time. Every page marked as "free" in the bitmap is explicitly freed into the Buddy System, effectively transferring ownership of the remaining physical RAM to the advanced allocator. Following this transition, the \texttt{BitmapPmm} is discarded.
+
+\subsection{Page Frame Allocator (The Buddy System)}
+
+Upon system initialization, the \texttt{BuddyPmm} takes over as the authoritative source of physical memory. It implements the classic Binary Buddy System algorithm, managing memory in blocks sized by powers of two, ranging from Order 0 (4 KiB) to Order 10 (4 MiB). This structure allows for efficient splitting of large blocks to satisfy smaller requests and the coalescing of adjacent free blocks to reduce external fragmentation.
+
+\subsubsection{Intrusive Free Lists}
+
+To achieve high performance and zero memory overhead during runtime, the allocator utilizes an array of intrusive doubly-linked lists, one for each order. It leverages the \texttt{PageMeta} structure described previously. When a block is free, its metadata entry functions as a node in the corresponding free list.
+
+\begin{lstlisting}[caption={Buddy System State Management}, label={lst:buddy_lists}]
+class BuddyPmm {
+public:
+    static constexpr u8 kMaxOrder = 10;
+private:
+    // Array of pointers to the head of each order's free list
+    VPtr<PageMeta> freelist_table_[kMaxOrder + 1];
+    
+    // ...
+};
+\end{lstlisting}
+
+This design ensures that pushing or popping a block from the free list involves only pointer manipulation within the pre-allocated metadata table, requiring no auxiliary dynamic allocation.
+
+\subsubsection{Allocation Strategy (Splitting)}
+
+When a request for a block of order $k$ is received, the allocator inspects the free list at index $k$. If the list is empty, it searches for the smallest available block at a higher order $j > k$. Once found, the large block is recursively split in half ("buddies") until a block of the desired order is produced. The unused halves generated during this process are inserted into their respective free lists for future use.
+
+\subsubsection{Deallocation and Coalescing}
+
+The strength of the Buddy System lies in its ability to rapidly defragment memory. When a page frame is freed, the allocator attempts to merge it with its "buddy" --- the unique adjacent block of the same size that makes up a larger aligned block.
+
+Because block sizes are powers of two, the physical frame number (PFN) of a block's buddy can be calculated instantly using bitwise operations, without traversing any lists.
+
+\begin{lstlisting}[caption={Calculating Buddy PFN}, label={lst:buddy_xor}]
+static size_t GetBuddyPfn(size_t pfn, u8 order)
+{
+    // The buddy's PFN is found by XORing the current PFN 
+    // with the block size (1 << order).
+    return pfn ^ (1 << order);
+}
+\end{lstlisting}
+
+The \texttt{Free} operation performs a loop: it calculates the buddy's address and checks the metadata table. If the buddy is currently free and belongs to the same order, it is removed from the free list, combined with the current block, and the order is incremented. This process repeats until a buddy is found to be occupied or the maximum order is reached.
+
+\begin{lstlisting}[caption={Coalescing Logic}, label={lst:buddy_merge}]
+VPtr<PageMeta> BuddyPmm::MergeBlock(VPtr<PageMeta> block)
+{
+    u8 order = block->order;
+    size_t pfn = pmt_->GetPageFrameNumber(block);
+
+    while (order < kMaxOrder) {
+        size_t buddy_pfn = GetBuddyPfn(pfn, order);
+        PageMeta &buddy = pmt_->GetPageMeta(buddy_pfn);
+
+        // Check if buddy is free and has the same order
+        if (buddy.type == PageMetaType::Buddy && buddy.order == order) {
+            ListRemove(&buddy);
+            
+            // Normalize PFN to the start of the merged block
+            pfn = std::min(pfn, buddy_pfn);
+            order++;
+        } else {
+            break; // Buddy is busy, cannot merge further
+        }
+    }
+    
+    // ... update metadata for new larger block
+}
+\end{lstlisting}
+
+
+\subsection{Object Allocator (Slab Allocation)}
+
+While the Buddy System effectively manages memory at the granularity of 4 KiB pages, it is unsuitable for allocating small kernel objects. Allocating a full page for a 64-byte data structure (such as a synchronization primitive) results in over 98\% wasted memory (internal fragmentation). To address this, AlkOS implements a \textbf{Slab Allocator} layered on top of the Buddy System.
+
+The Slab Allocator operates by pre-allocating contiguous blocks of physical memory (Slabs) and carving them into fixed-size slots. These slots are managed via caches (\texttt{KmemCache}), where each cache is dedicated to objects of a specific size class (e.g., 32, 64, 128 ... 4096 bytes).
+
+\subsubsection{Slab Architecture and Lifecycle}
+
+A cache maintains three distinct lists of slabs based on their utilization:
+\begin{itemize}
+    \item \textbf{Full:} All slots contain active objects.
+    \item \textbf{Partial:} Contains at least one allocated object and at least one free slot.
+    \item \textbf{Free:} All slots are unused.
+\end{itemize}
+
+Allocation requests are satisfied from the \texttt{Partial} list to maximize density. If no partial slabs exist, a free slab is utilized. If the free list is empty, the cache requests a new memory block from the Buddy System to construct a new slab. Conversely, when an object is freed, the slab may transition from Full to Partial, or Partial to Free, allowing the underlying pages to be returned to the Buddy System when memory pressure is high.
+
+\subsubsection{Compile-Time Efficiency Optimization}
+
+A naive slab implementation typically assigns one memory page per slab. However, this often leads to poor utilization due to alignment padding. For instance, if an object is 2050 bytes, a 4096-byte page can hold only one object, resulting in nearly 50\% wasted space. If the slab size were increased to 8192 bytes (Order 1), it could hold three objects (3 $\times$ 2050 = 6150 bytes), significantly improving efficiency.
+
+AlkOS employs advanced C++ Template Metaprogramming techniques to solve this optimization problem at compile time. The \texttt{SlabEfficiency} module analyzes every supported object size against every possible Buddy System block order (0 to 10). It calculates the \textbf{Space Efficiency} metric:
+
+\begin{equation}
+    E(S_{obj}, O_{block}) = \frac{N_{capacity} \times S_{obj}}{\text{Size}(O_{block})}
+\end{equation}
+
+The system automatically selects the block order that yields the highest efficiency for a given object size.
+
+\begin{lstlisting}[caption={Compile-Time Slab Efficiency Calculation}, label={lst:slab_efficiency}]
+template <size_t ObjectSize, u8 BlockOrder>
+struct SlabEfficiencyInfo {
+    static constexpr size_t kBlockSize = BuddyPmm::BuddyAreaSize(BlockOrder);
+    
+    // Calculate required metadata size (byte vs word vs dword indices)
+    using FreeListItemType = ...; 
+    static constexpr size_t kTotalStoredBytesPerObj = 
+        ObjectSize + sizeof(FreeListItemType);
+
+    // Calculate how many objects fit
+    static constexpr size_t kCapacity = 
+        (kBlockSize / kTotalStoredBytesPerObj);
+
+    // Final efficiency ratio (0.0 to 1.0)
+    static constexpr f64 kSpaceEfficiency =
+        (static_cast<f64>(kCapacity * ObjectSize) / kBlockSize);
+};
+\end{lstlisting}
+
+This ensures that the allocator statically guarantees the most memory-efficient layout for every cache without runtime overhead.
+
+\subsubsection{Metadata Strategy: On-Slab vs. Off-Slab}
+
+To track free slots within a slab, the allocator maintains a freelist. The storage location of this freelist depends on the object size:
+
+\begin{itemize}
+    \item \textbf{On-Slab (Small Objects):} For small objects, the freelist indices are interleaved with the objects within the slab page itself. This improves cache locality.
+    \item \textbf{Off-Slab (Large Objects):} For larger objects, embedding metadata might reduce the number of objects that fit in a page (e.g., preventing a 4th object from fitting by a few bytes). In these cases, metadata is stored in a separate, dedicated cache.
+\end{itemize}
+
+The allocator determines the optimal strategy automatically based on the efficiency calculations described above.
+
+\subsection{The Global Heap Interface}
+
+The top-most layer of the physical memory subsystem is the \texttt{Heap} class. It functions as a facade, hiding the complexity of the underlying allocators and providing a unified, standard-compliant API to the rest of the kernel. This design allows kernel developers to request memory without needing to decide manually whether to use the Slab allocator or the Buddy System.
+
+\subsubsection{Request Routing}
+
+The implementation of \texttt{Heap::Malloc} acts as a router based on the requested size. The threshold is the system page size (4096 bytes).
+
+\begin{itemize}
+    \item \textbf{Small Allocations ($< 4096$ bytes):} These are routed to the \texttt{SlabAllocator}. The heap requests the appropriate cache for the size class and pops an object. This ensures minimal overhead for small, frequent allocations.
+    \item \textbf{Large Allocations ($\ge 4096$ bytes):} These are routed directly to the \texttt{BuddyPmm}. The heap calculates the required page order ($\lceil \log_2(size / 4096) \rceil$) and requests a block of raw pages.
+\end{itemize}
+
+\subsubsection{Aligned Allocation}
+
+Standard allocations guarantee natural alignment suitable for the object size (e.g., 8-byte alignment for 64-byte objects). However, kernel operations often require stricter alignment (e.g., page alignment for paging structures or 64-byte alignment for AVX vectors).
+
+To support this, AlkOS implements \texttt{KMallocAligned}. Since the underlying allocators cannot arbitrarily shift the start address of a block, this is achieved through over-allocation and pointer adjustment.
+
+\begin{lstlisting}[caption={Aligned Allocation Strategy}, label={lst:aligned_alloc}]
+struct AllocationHeader {
+    VPtr<void> original_ptr;
+};
+
+expected<VPtr<void>, MemError> Heap::MallocAligned(KMallocRequest r) {
+    size_t alloc_size = r.size + r.alignment + sizeof(AllocationHeader);
+    auto raw_ptr = Malloc(alloc_size); // Allocate extra padding
+
+    uptr raw_addr = PtrToUptr(*raw_ptr);
+    
+    // Calculate aligned address with space for header
+    uptr header_end = raw_addr + sizeof(AllocationHeader);
+    uptr aligned_addr = AlignUp(header_end, r.alignment);
+
+    // Store original pointer immediately before the aligned address
+    auto *header = reinterpret_cast<AllocationHeader*>(
+        aligned_addr - sizeof(AllocationHeader)
+    );
+    header->original_ptr = *raw_ptr;
+
+    return reinterpret_cast<VPtr<void>>(aligned_addr);
+}
+\end{lstlisting}
+
+When \texttt{KFreeAligned} is called, the system simply steps back \texttt{sizeof(AllocationHeader)} bytes from the provided pointer to retrieve the \texttt{original\_ptr}, which is then passed to the standard \texttt{Free} routine.
+
+\subsection{Summary of Memory Flow}
+
+The complete flow of a physical memory request in AlkOS can be summarized as follows:
+
+\begin{enumerate}
+    \item \textbf{Request:} The kernel calls \texttt{KMalloc(64)}.
+    \item \textbf{Routing:} The \texttt{Heap} detects size $<$ 4KiB and delegates to \texttt{SlabAllocator}.
+    \item \textbf{Cache Lookup:} \texttt{SlabAllocator} selects the \texttt{KmemCache} for 64-byte objects.
+    \item \textbf{Allocation:}
+    \begin{itemize}
+        \item \textit{Case A (Hot Path):} The cache has a partial slab. An object is popped from the freelist. Cost: $O(1)$.
+        \item \textit{Case B (Cold Path):} The cache is empty. It requests a physical page (Order 0) from \texttt{BuddyPmm}. The Buddy allocator updates the \texttt{PageMetaTable} to mark the page as a Slab, initializes the freelist, and returns the memory.
+    \end{itemize}
+    \item \textbf{Return:} The virtual address is returned to the caller.
+\end{enumerate}
+
+This hierarchical structure ensures that AlkOS balances the fast, low-fragmentation needs of small objects with the efficient, contiguous page management required for virtual memory mappings.
+
+\section{Virtual Memory Management}
+\label{sec:impl_vmm}
+
+While the Physical Memory Manager accounts for raw RAM usage, the Virtual Memory Manager (VMM) allows the kernel to shape the execution environment. Our implementation aims to provide a robust, architecture-agnostic interface that supports advanced features like lazy allocation and efficient kernel-space management, while abstracting away the specifics of the x86-64 paging hardware.
+
+\subsection{Design Overview and Architecture}
+
+The cornerstone of the AlkOS memory layout is the \textbf{Higher-Half Kernel} architecture combined with a \textbf{Direct Physical Mapping}. 
+
+Upon initialization, the bootloader (Loader64) ensures that the kernel executable is linked and loaded at the top of the virtual address space, specifically starting at \texttt{0xFFFFFFFE00000000}. This design choice keeps the lower half of the address space (canonical addresses starting with \texttt{0x0000...}) strictly reserved for user-space applications, enforcing a clean separation between kernel and user contexts.
+
+\subsubsection{The Direct Physical Map (HHDM)}
+
+A specific challenge in OS development is accessing arbitrary physical memory (e.g., modifying page tables or reading ACPI tables) when paging is enabled. Without a specific strategy, the kernel would need to temporarily map individual physical pages into a reserved virtual window every time it needed to read or write to them.
+
+To solve this, we implemented a Direct Physical Mapping strategy. A massive region of the kernel virtual address space (512 GB, starting at \texttt{0xFFFF800000000000}) acts as a linear window into physical RAM. Within this window, virtual address $V$ corresponds to physical address $P$ via a simple linear transformation:
+\[ V = P + \texttt{kDirectMapAddrStart} \]
+
+This allows the kernel to access any physical object instantly, without modifying page tables. This logic is encapsulated in the helper templates found in \texttt{mem/types.hpp}:
+
+\begin{lstlisting}[caption={Physical to Virtual Address Translation helpers}, label={lst:phys_to_virt}]
+template <typename T>
+FORCE_INLINE_F VPtr<T> PhysToVirt(PPtr<T> physAddr)
+{
+    return reinterpret_cast<VPtr<T>>(
+        reinterpret_cast<uintptr_t>(physAddr) + hal::kDirectMapAddrStart
+    );
+}
+
+template <typename T>
+FORCE_INLINE_F PPtr<T> VirtToPhys(VPtr<T> virtAddr)
+{
+    uintptr_t vaddr = reinterpret_cast<uintptr_t>(virtAddr);
+    
+    // Handle Direct Map range
+    if (vaddr >= hal::kDirectMapAddrStart) {
+        return reinterpret_cast<PPtr<T>>(vaddr - hal::kDirectMapAddrStart);
+    }
+
+    // Handle Kernel Linkage range
+    return reinterpret_cast<PPtr<T>>(vaddr - kKernelSpaceStart);
+}
+\end{lstlisting}
+
+\subsubsection{Hardware Abstraction Layer}
+
+To decouple the core VMM logic from the x86-64 specific paging structures (PML4, PDPT, etc.), we utilize the Hardware Abstraction Layer (HAL). The \texttt{hal::Mmu} class exposes high-level operations such as \texttt{Map}, \texttt{Unmap}, and \texttt{SwitchRoot}. 
+
+Crucially, the interface abstracts architecture-specific protection bits into a generic \texttt{PageFlags} structure. The HAL implementation translates these generic flags into the specific bitmask required by the hardware (e.g., the NX bit or the User/Supervisor bit on x86-64).
+
+\begin{lstlisting}[caption={Generic Page Flags Abstraction}, label={lst:page_flags}]
+struct PageFlags {
+    bool Present : 1;
+    bool Writable : 1;
+    bool UserAccessible : 1;
+    bool WriteThrough : 1;
+    bool CacheDisable : 1;
+    bool Global : 1;
+    bool NoExecute : 1;
+};
+\end{lstlisting}
+
+\subsection{The Address Space Abstraction}
+
+In AlkOS, the concept of a virtual memory context is encapsulated by the \texttt{AddressSpace} class. This class serves as the container for all memory mappings associated with a specific process (or the kernel itself). It maintains two parallel representations of the memory state:
+
+\begin{enumerate}
+    \item \textbf{Hardware Representation:} A physical pointer to the root of the page table hierarchy (e.g., the PML4 address). This is the value loaded into the CR3 register during a context switch.
+    \item \textbf{Logical Representation:} A sorted, doubly-linked list of \texttt{VMemArea} objects. This list defines the high-level semantics of memory regions, which are invisible to the hardware MMU.
+\end{enumerate}
+
+To ensure data consistency in a potentially multi-threaded environment (or during interrupt handling), operations on the logical list are protected by a \texttt{Spinlock}.
+
+\subsubsection{User Space Initialization}
+
+When creating a new user address space, the system must ensure that the process can still access essential kernel services (such as interrupt handlers and syscall entry points). The \texttt{AddressSpace::InitUser} method allocates a new, empty PML4 table and immediately copies the kernel-space mappings from the global kernel address space. This creates a "split" view where the lower half is empty (ready for user program code), and the upper half mirrors the kernel.
+
+\subsection{Virtual Memory Areas (VMAs)}
+
+The \texttt{VMemArea} class is the fundamental unit of logical memory management. It is an abstract base class that defines a range of virtual addresses \texttt{[start, start + size)} and a set of permission flags. Crucially, it exposes a virtual method \texttt{HandleFault}, which implements the polymorphic behavior required for demand paging.
+
+When a Page Fault occurs, the VMM locates the VMA corresponding to the faulting address and delegates the resolution logic to that specific object. AlkOS implements three distinct types of VMAs:
+
+\subsubsection{Anonymous Memory}
+
+The \texttt{AnonymousVMemArea} represents standard, volatile RAM used for stacks, heaps, and BSS sections. It does not map to any specific physical address at creation time. Its \texttt{HandleFault} implementation interacts with the Physical Memory Manager (PMM) to allocate a fresh physical frame, zeroes it for security, and maps it into the page table.
+
+\subsubsection{Direct Mapping}
+
+The \texttt{DirectMappingVMemArea} is used when a specific range of physical memory must be exposed to virtual memory. This is essential for:
+\begin{itemize}
+    \item \textbf{Memory Mapped I/O (MMIO):} Mapping hardware device registers.
+    \item \textbf{Framebuffers:} Exposing the video memory to user-space applications (as seen in the Window Manager implementation).
+\end{itemize}
+
+Unlike anonymous memory, this area ignores the "Not Present" fault mechanic for allocation; it simply maps the pre-existing physical range.
+
+\subsubsection{Kernel Synchronization Area}
+
+A unique feature of the AlkOS VMM is the \texttt{KernelSyncVMemArea}. This area covers the entire kernel address range in every user process. 
+
+In a standard x86-64 higher-half kernel, kernel page tables are shared across all processes. However, if the kernel allocates dynamic memory (e.g., via \texttt{vmalloc}) that requires a new entry in the top-level PML4 table, that change is not automatically propagated to existing user processes.
+
+Instead of iterating through every active process to update their page tables whenever the kernel heap grows, we utilize a lazy synchronization approach. If a process accesses a valid kernel address that is missing from its specific PML4, a page fault is triggered. The \texttt{KernelSyncVMemArea::HandleFault} method intercepts this, copies the missing entry from the master kernel page table to the process's page table, and resumes execution.
+
+\begin{lstlisting}[caption={Lazy Kernel Synchronization Logic}, label={lst:kernel_sync}]
+bool KernelSyncVMemArea::HandleFault(
+    VPtr<void> fault_addr, const PageFaultData::ErrorCode &, AddressSpace &as)
+{
+    auto &vmm = MemoryModule::Get().GetVmm();
+    
+    // Master kernel tables
+    auto kernel_root  = vmm.GetKernelAddressSpace().PageTableRoot();
+    auto current_root = as.PageTableRoot();
+
+    // Check if the mapping exists in the master kernel table
+    auto &mmu = MemoryModule::Get().GetMmu();
+    if (mmu.SyncMapping(current_root, kernel_root, fault_addr)) {
+        // Entry copied successfully, invalidate TLB and retry
+        MemoryModule::Get().GetTlb().InvalidatePage(AlignDown(fault_addr));
+        return true;
+    }
+
+    return false; // Genuine crash
+}
+\end{lstlisting}
+
+\subsection{Initialization and Handover}
+
+The transition from the bootloader to the kernel's internal memory management is a critical phase. When the kernel main function receives control, the system is running on page tables created by \texttt{Loader64}. These tables contain a temporary identity mapping (0-10 GB) that is necessary for the loader but undesirable for the kernel, as it exposes physical memory to user-space (NULL pointer dereferences would be valid accesses to physical address 0).
+
+To sanitize this state, we implemented the \texttt{Mem::Boot::BootMmuCleaner}. Its responsibilities are twofold:
+
+\begin{enumerate}
+    \item \textbf{Cleaning Identity Mappings:} It iterates through the lower half of the PML4 table and unmaps all entries. This ensures that the user-space range is completely empty before the first process is spawned.
+    \item \textbf{Metadata Reconstruction:} The physical frames used by the bootloader to store the page tables themselves must be accounted for. The \texttt{BootMmuCleaner} walks the existing page table hierarchy. For every table frame encountered, it updates the global \texttt{PageMetaTable} to mark that frame's type as \texttt{PageTable} and initializes its reference count. This prevents the Physical Memory Manager from accidentally treating these critical frames as free memory.
+\end{enumerate}
+
+\subsection{The Virtual Memory Manager}
+
+The \texttt{VirtualMemoryManager} (VMM) serves as the central orchestrator for all virtual memory operations. Exposed as a singleton via the \texttt{MemoryModule}, it provides the high-level API required by the kernel to create address spaces, allocate stack and heap regions, and switch contexts.
+
+\subsubsection{Allocation Strategy}
+
+Unlike physical memory, virtual memory is abundant (48-bit address space on x86-64). The primary challenge is not finding space, but finding a \textit{contiguous} gap of free addresses that satisfies alignment requirements.
+
+The VMM delegates this geometric search to the \texttt{AddressSpace::FindGap} method. This method iterates through the sorted list of existing VMAs. For every pair of adjacent VMAs, it calculates the free space between the end of the first and the start of the second. If the gap is sufficient, it returns the start address aligned to the page size.
+
+\begin{lstlisting}[caption={Gap Search Logic}, label={lst:find_gap}]
+expected<GapInfo, MemError> AS::FindGap(size_t size, VPtr<void> range_start, VPtr<void> range_end)
+{
+    // ... setup search bounds ...
+    
+    for (auto *vma : area_list_) {
+        uptr curr_start = PtrToUptr(vma->GetStart());
+        
+        // Calculate gap between previous end and current start
+        uptr gap_start = AlignUp(prev_end, hal::kPageSizeBytes);
+        uptr gap_end   = AlignDown(curr_start, hal::kPageSizeBytes);
+
+        if (gap_end > gap_start && (gap_end - gap_start) >= size) {
+            return GapInfo{UptrToPtr<void>(gap_start), size};
+        }
+
+        prev_end = curr_start + vma->GetSize();
+    }
+    // ... check tail gap ...
+}
+\end{lstlisting}
+
+\subsubsection{Specialized Allocators}
+
+To structure the user address space efficiently, the VMM provides specialized allocation helpers that enforce the standard memory layout:
+
+\begin{itemize}
+    \item \textbf{User Stack:} The \texttt{AllocUserStack} method searches for free space starting from the top of the user address space (\texttt{kUserSpaceEndExclusive}) downwards. This ensures that the stack is placed as high as possible, allowing it to grow downwards without colliding with the heap.
+    \item \textbf{User Heap:} The \texttt{AllocUserHeap} method searches from the bottom of the user address space upwards (typically starting after the ELF binary segments).
+\end{itemize}
+
+\subsubsection{Context Switching}
+
+The VMM is also responsible for the low-level mechanics of address space switching. The \texttt{SwitchAddrSpace} method interacts with the HAL to load the new physical root (CR3) into the CPU. Critically, this operation implicitly flushes the Translation Lookaside Buffer (TLB), ensuring that the CPU does not retain stale translations from the previous process.
+
+\subsection{Page Fault Handling Workflow}
+
+The heart of the virtual memory subsystem is the page fault handler. It transforms hardware exceptions into legitimate resource allocation events. The handling flow in AlkOS proceeds as follows:
+
+\begin{enumerate}
+    \item \textbf{Exception Entry:} The CPU triggers interrupt vector 14. The assembly wrapper saves the execution context and calls the C++ dispatcher.
+    \item \textbf{Data Parsing:} The generic interrupt dispatcher invokes \texttt{Mem::PageFaultHandler}. The first step is to convert architecture-specific registers (CR2 for the address, and the error code from the stack) into a platform-agnostic \texttt{PageFaultData} structure using the HAL.
+    
+    \item \textbf{VMA Lookup:} The handler acquires the lock for the current \texttt{AddressSpace} and attempts to find a \texttt{VMemArea} that covers the faulting address.
+    \begin{itemize}
+        \item If no VMA is found, the access is invalid. If the fault originated from user space, the process is terminated (Segmentation Fault). If from kernel space, the kernel panics.
+    \end{itemize}
+
+    \item \textbf{Permission Check:} If a VMA is found, the handler verifies the access type against the VMA flags. For example, attempting to write to a Read-Only area triggers a protection fault, which is treated as a fatal error (unless Copy-on-Write logic intervenes).
+    
+    \item \textbf{Resolution:} If the access is valid but the page is missing (Demand Paging), the VMA's \texttt{HandleFault} method is invoked to allocate and map the required memory.
+\end{enumerate}
+
+\subsection{Address Space Layout}
+
+The Virtual Memory Manager enforces a strict layout for user processes to ensure security and stability. The resulting virtual address space is organized as follows:
+
+\begin{itemize}
+    \item \textbf{\texttt{0x0000000000000000}} --- \textbf{Null Guard}: The first page is strictly unmapped to catch null pointer dereferences immediately.
+    \item \textbf{User Code and Data}: Loaded from the ELF executable, typically starting at a dynamic base address.
+    \item \textbf{User Heap}: Located after the BSS section, growing upwards towards higher addresses.
+    \item \textbf{User Stack}: Located at the very top of the user half of the address space (\texttt{0x00007FFFFFFFFFFF}), growing downwards.
+    \item \textbf{\texttt{0xFFFF800000000000}} --- \textbf{Direct Physical Map}: Kernel-only access window to all physical RAM.
+    \item \textbf{\texttt{0xFFFFFFFE00000000}} --- \textbf{Kernel Image}: The code and static data of the kernel itself.
+\end{itemize}
+
+This layout, combined with the separation of Machine Independent logic and the Hardware Abstraction Layer, provides a flexible foundation for the higher-level operating system services described in subsequent sections.
 
 \section{Interrupts}
 \label{sec:interrupts}
@@ -3871,7 +4656,7 @@ concept VFSInterface = VFSIO<IO> and requires(T<IO> fs, IO io) {
 };
 \end{lstlisting}
 
-The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, filesystem drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends - such as RAM disks, physical partitions, or network storage - without requiring implementation changes.
+The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, filesystem drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends --- such as RAM disks, physical partitions, or network storage --- without requiring implementation changes.
 
 \begin{lstlisting}[caption={VFSIO Concept Definition}, label={lst:vfsioConcept}]
 template <typename IO>
@@ -4008,9 +4793,9 @@ FdResult<fd_t> FdManager::Open(const vfs::Path &path, OpenMode flags)
 
 \subsubsection{Resource Lifecycle Management}
 
-To ensure efficient memory usage and prevent resource leaks, the life cycle of \texttt{OpenFileEntry} and \texttt{File} objects is managed through intrusive reference counting. Both structures inherit from a \texttt{RefCounted} base class and are managed via smart pointers (\texttt{RefPtr} and \texttt{TaggedPointer}).
+To ensure efficient memory usage and prevent resource leaks, the life cycle of \texttt{OpenFileEntry} and \texttt{File} objects is managed through intrusive reference counting (Section~\ref{subsec:refcounting}). Both structures inherit from a \texttt{RefCounted} base class and are managed via smart pointers (\texttt{RefPtr} and \texttt{TaggedPointer}).
 
-When a process closes a file descriptor (or terminates), the reference to the corresponding \texttt{OpenFileEntry} in the process's \texttt{FdTable} is released. If the reference count drops to zero - indicating that no other file descriptors (across any process) refer to this open stream - the \texttt{OpenFileEntry} is automatically deallocated and removed from the global \texttt{OpenFileTable}.
+When a process closes a file descriptor (or terminates), the reference to the corresponding \texttt{OpenFileEntry} in the process's \texttt{FdTable} is released. If the reference count drops to zero --- indicating that no other file descriptors (across any process) refer to this open stream --- the \texttt{OpenFileEntry} is automatically deallocated and removed from the global \texttt{OpenFileTable}.
 
 Consequently, the destruction of an \texttt{OpenFileEntry} releases its hold on the underlying \texttt{File} object. Similarly, if the reference count of the \texttt{File} object reaches zero, it implies that no active streams are reading from or writing to that specific file. The system then automatically reclaims the associated memory from the \texttt{FileTable}. This cascading deallocation mechanism ensures that kernel memory is only consumed for files that are actively in use by at least one process.
 
@@ -4088,7 +4873,7 @@ The process state has less significance than the Thread State (described later) 
 
 \subsubsection{Address Space}
 
-The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to Memory Management \ref{sec:memory} for further details.
+The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to \todo[inline]{Memory Management} for more information.
 
 \subsubsection{File Descriptor Table}
 
@@ -4679,7 +5464,7 @@ Once the session is established, the application treats the video buffer as a li
 
 \subsubsection{Double Buffering and Synchronization}
 
-To prevent screen tearing, AlkOS employs a double-buffering strategy. The user application writes to its private backbuffer. To display the frame, the application calls `blit()` (Listing~\ref{lst:gui_sync}). This system call triggers the kernel's window manager to copy the contents of the user's backbuffer to the physical video memory if its session is currently active.
+To prevent screen tearing, AlkOS employs a double-buffering strategy. The user application writes to its private backbuffer. To display the frame, the application calls \texttt{blit()} (Listing~\ref{lst:gui_sync}). This system call triggers the kernel's window manager to copy the contents of the user's backbuffer to the physical video memory if its session is currently active.
 
 \begin{lstlisting}[caption={Frame Synchronization}, label={lst:gui_sync}]
     // Blit to screen
@@ -4879,82 +5664,100 @@ This chapter summarizes the work accomplished and the assumptions made during th
 We successfully fulfilled all functional requirements defined in Section \ref{subsec:functional}, in addition to implementing several supplementary features. The following list details the additional functionalities achieved:
 
 \begin{itemize} 
-    \item \textbf{Hardware Abstraction Layer (HAL)} --- An architectural interface decoupling high-level kernel logic from platform-specific hardware instructions.
-    \item \textbf{Custom Bootloader} --- A multi-stage loader handling the transition from Multiboot2 to a 64-bit higher-half kernel environment.
-    \item \textbf{Physical Memory Management} --- A robust allocation system combining a Buddy Allocator for pages and a Slab Allocator for kernel objects.
-    \item \textbf{Virtual Memory Management} --- A comprehensive VMM supporting recursive page table mapping, higher-half mapping, and kernel space synchronization.
-    \item \textbf{Lazy Allocation} --- A demand-paging mechanism that allocates physical memory only when accessed, utilizing page fault handling.
-    \item \textbf{Tickless Kernel Architecture} --- A dynamic timing subsystem that schedules interrupts only when necessary, improving CPU efficiency.
-    \item \textbf{Advanced Scheduling Policies} --- Implementation of multiple algorithms including Round Robin, Priority Queue, and Multi-Level Feedback Queue (MLFQ).
-    \item \textbf{Process \& Thread Management} --- Full lifecycle management including creation, execution, detaching, joining, and termination of tasks.
-    \item \textbf{Wait Queues} --- A synchronization primitive allowing threads to block efficiently until specific conditions or events occur.
-    \item \textbf{System Call Interface} --- A high-performance dispatch mechanism utilizing `syscall`/`sysret` instructions with a wide array of implemented services.
-    \item \textbf{Standard C Library (libc)} --- A custom implementation of the C standard library (stdio, stdlib, string, math) tailored for the kernel environment.
-    \item \textbf{Virtual File System (VFS)} --- An abstraction layer supporting mount points, file descriptors, and generic I/O operations.
-    \item \textbf{FAT Filesystem Support} --- Full read/write drivers for FAT12, FAT16, and FAT32 file systems.
-    \item \textbf{Initial Ramdisk (Initrd)} --- Support for loading a temporary root filesystem from memory during the boot process.
-    \item \textbf{ELF64 Loader} --- A static parser capable of validating, loading, and relocating standard 64-bit executables.
-    \item \textbf{Userspace Shell} --- An interactive command-line environment with built-in commands and process execution capabilities.
-    \item \textbf{Graphical Output} --- A linear framebuffer driver supporting double-buffering and direct pixel manipulation.
-    \item \textbf{Window Manager} --- A session-based compositing system allowing switching between different graphical applications.
-    \item \textbf{Doom Port} --- A successful port of the Doom game engine, validating the stability of the kernel's subsystems.
-    \item \textbf{ACPI Integration} --- A subsystem for parsing ACPI tables to discover hardware topology and manage system power states.
-    \item \textbf{In-Kernel Testing Framework} --- A custom unit-testing suite running directly on bare metal to verify kernel logic.
-    \item \textbf{Build Infrastructure} --- A fully automated CMake-based pipeline capable of bootstrapping a custom cross-compilation toolchain.
+    \item \textbf{Hardware Abstraction Layer (HAL)} -- An architectural interface decoupling high-level kernel logic from platform-specific hardware instructions.
+    \item \textbf{Custom Bootloader} -- A multi-stage loader handling the transition from Multiboot2 to a 64-bit higher-half kernel environment.
+    \item \textbf{Physical Memory Management} -- A robust allocation system combining a Buddy Allocator for pages and a Slab Allocator for kernel objects.
+    \item \textbf{Virtual Memory Management} -- A comprehensive VMM supporting recursive page table mapping, higher-half mapping, and kernel space synchronization.
+    \item \textbf{Lazy Allocation} -- A demand-paging mechanism that allocates physical memory only when accessed, utilizing page fault handling.
+    \item \textbf{Tickless Kernel Architecture} -- A dynamic timing subsystem that schedules interrupts only when necessary, improving CPU efficiency.
+    \item \textbf{Advanced Scheduling Policies} -- Implementation of multiple algorithms including Round Robin, Priority Queue, and Multi-Level Feedback Queue (MLFQ).
+    \item \textbf{Process \& Thread Management} -- Full lifecycle management including creation, execution, detaching, joining, and termination of tasks.
+    \item \textbf{Wait Queues} -- A synchronization primitive allowing threads to block efficiently until specific conditions or events occur.
+    \item \textbf{System Call Interface} -- A dispatch mechanism utilizing \texttt{int 0x80} instruction with a wide array of implemented services.
+    \item \textbf{Standard C Library (libc)} -- A custom implementation of the C standard library (stdio, stdlib, string, math) tailored for the kernel environment.
+    \item \textbf{Virtual File System (VFS)} -- An abstraction layer supporting mount points, file descriptors, and generic I/O operations.
+    \item \textbf{FAT Filesystem Support} -- Full read/write drivers for FAT12, FAT16, and FAT32 file systems.
+    \item \textbf{Initial Ramdisk (Initrd)} -- Support for loading a temporary root filesystem from memory during the boot process.
+    \item \textbf{ELF64 Loader} -- A static parser capable of validating, loading, and relocating standard 64-bit executables.
+    \item \textbf{Userspace Shell} -- An interactive command-line environment with built-in commands and process execution capabilities.
+    \item \textbf{Graphical Output} -- A linear framebuffer driver supporting double-buffering and direct pixel manipulation.
+    \item \textbf{Window Manager} -- A session-based system allowing switching between different graphical applications.
+    \item \textbf{Doom Port} -- A successful port of the Doom game engine, validating the stability of the kernel's subsystems.
+    \item \textbf{ACPI Integration} -- A subsystem for parsing ACPI tables to discover hardware topology and manage system power states.
+    \item \textbf{In-Kernel Testing Framework} -- A custom unit-testing suite running directly on bare metal to verify kernel logic.
+    \item \textbf{Build Infrastructure} -- A fully automated CMake-based pipeline capable of bootstrapping a custom cross-compilation toolchain.
+    \item \textbf{Scripts} -- A collection of scripts that streamline common development tasks, manage build configurations, and automate the environment setup.
 \end{itemize}
 
 \section{Limitations and Assumptions}
 
 TODO: KRYCZKA DODAJ SWOJE
-TODO: ADAM DODAJ SWOJE
 
 Developing an operating system kernel is an inherently complex task, further complicated by the intricacies of hardware architectures. To maintain a steady development pace and avoid getting stalled by exhaustive driver implementation or edge-case handling, several strategic assumptions were made. Consequently, for AlkOS to function correctly, the underlying hardware must meet the following requirements:
 
 \begin{itemize} 
-    \item \textbf{64-bit Architecture} --- The system supports only 64-bit instructions. Compatibility libraries for 32-bit applications are not provided. 
-    \item \textbf{AVX2 Support} --- The system requires AVX2 support. Implementation was restricted to this specific instruction set to avoid the complexity of supporting every possible vector extension. 
-    \item \textbf{SWAPGS Instruction} --- The architecture must support the \texttt{swapgs} instruction, which is utilized to efficiently swap the GS register base address for Core Local Storage management. 
-    \item \textbf{Invariant TSC} --- To avoid implementing a driver for every possible x86-64 timer, the system relies on the Time Stamp Counter (TSC) as the primary clock source. The hardware must support an invariant TSC to ensure timing consistency regardless of frequency scaling.
-    \item \textbf{HPET} --- The High Precision Event Timer (HPET) must be available, as it serves as the reference source for calibrating both the TSC and the LAPIC Timer. 
-    \item \textbf{APIC} --- Although SMP is not fully enabled, the system architecture was designed with SMP compatibility in mind, necessitating the presence of an Advanced Programmable Interrupt Controller (APIC). 
-    \item \textbf{ACPI} --- It is assumed that device discovery is performed via the Advanced Configuration and Power Interface (ACPI), a standard supported by the majority of modern platforms. 
-    \item \textbf{PS/2 Keyboard} --- Input is handled via a PS/2 keyboard controller. A USB stack was not implemented due to the significant development effort required. 
+    \item \textbf{64-bit Architecture} -- The system supports only 64-bit instructions. Compatibility libraries for 32-bit applications are not provided. 
+    \item \textbf{AVX2 Support} -- The system requires AVX2 support. Implementation was restricted to this specific instruction set to avoid the complexity of supporting every possible vector extension. 
+    \item \textbf{SWAPGS Instruction} -- The architecture must support the \texttt{swapgs} instruction, which is utilized to efficiently swap the GS register base address for Core Local Storage management. 
+    \item \textbf{Invariant TSC} -- To avoid implementing a driver for every possible x86-64 timer, the system relies on the Time Stamp Counter (TSC) as the primary clock source. The hardware must support an invariant TSC to ensure timing consistency regardless of frequency scaling.
+    \item \textbf{HPET} -- The High Precision Event Timer (HPET) must be available, as it serves as the reference source for calibrating both the TSC and the LAPIC Timer. 
+    \item \textbf{APIC} -- Although SMP is not fully enabled, the system architecture was designed with SMP compatibility in mind, necessitating the presence of an Advanced Programmable Interrupt Controller (APIC). 
+    \item \textbf{ACPI} -- It is assumed that device discovery is performed via the Advanced Configuration and Power Interface (ACPI), a standard supported by the majority of modern platforms. 
+    \item \textbf{PS/2 Keyboard} -- Input is handled via a PS/2 keyboard controller. A USB stack was not implemented due to the significant development effort required. 
+    \item \textbf{FAT12/16/32 Support} -- The system supports the FAT12, FAT16, and FAT32 filesystem variants. Long file name (LFN) support is not implemented; filenames are therefore limited to the 8.3 format.
+    \item \textbf{Ramdisk} -- The system is bootstrapped using an in-memory filesystem mounted as the initial root filesystem. Loading a root filesystem from persistent storage is not supported, and thus no permanent modifications are possible. The expected filesystem is hardcoded to FAT16.
+    \item \textbf{ELF64} -- Userspace applications must be compiled as ELF64 binaries. Dynamic linking is not supported. In particular, binaries containing a \texttt{PT\_INTERP} segment \cite{elf-spec-dynamic} or relying on shared libraries cannot be executed.
 \end{itemize}
 
 \subsection{Known Limitations}
 \label{subsec:limitations}
 
 TODO: KRYCZKA DODAJ SWOJE
-TODO: ADAM DODAJ SWOJE
 
 The following section outlines the internal constraints established during development. These constants are hardcoded within the codebase, and multiple system mechanisms rely on them for correct operation. While these are compile-time values that can be modified, we cannot guarantee correct functionality if they are changed.
 
 \begin{itemize} 
-    \item \textbf{Max Process Name Size} --- 128 bytes --- Defined by the static storage size within the process structure. 
-    \item \textbf{Max Processes} --- 4096 --- This limit simplifies indexing and memory management. Exceeding this number would likely result in memory exhaustion given current constraints.
-    \item \textbf{Max Threads} --- 8192 --- Similar to processes, this limit simplifies data structures and resource allocation. 
-    \item \textbf{Kernel Stack Size} --- 64 KB --- The kernel stack is allocated per thread. Keeping this size minimal prevents excessive memory consumption. 
-    \item \textbf{User Stack Size} --- 8 MB --- A large stack is provided for user-space threads to facilitate the smooth execution of standard applications. 
-    \item \textbf{User Space Address Range} --- \texttt{0x0 - 0x00007FFFFFFFFFFF}. 
-    \item \textbf{Kernel Space Address Range} --- \texttt{0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF}. 
-    \item \textbf{Max Cores} --- 512 --- This limit exceeds the core count of most current processors and simplifies various internal data structures. 
+    \item \textbf{Max Process Name Size} -- 128 bytes -- Defined by the static storage size within the process structure. 
+    \item \textbf{Max Processes} -- 4096 -- This limit simplifies indexing and memory management. Exceeding this number would likely result in memory exhaustion given current constraints.
+    \item \textbf{Max Threads} -- 8192 -- Similar to processes, this limit simplifies data structures and resource allocation. 
+    \item \textbf{Kernel Stack Size} -- 64 KB -- The kernel stack is allocated per thread. Keeping this size minimal prevents excessive memory consumption. 
+    \item \textbf{User Stack Size} -- 8 MB -- A large stack is provided for user-space threads to facilitate the smooth execution of standard applications. 
+    \item \textbf{User Space Address Range} -- \texttt{0x0 - 0x00007FFFFFFFFFFF}. 
+    \item \textbf{Kernel Space Address Range} -- \texttt{0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF}. 
+    \item \textbf{Max Cores} -- 512 -- This limit exceeds the core count of most current processors and simplifies various internal data structures. 
+    \item \textbf{Max Path Length} -- 1024 -- The absolute maximum length of a file path string accepted by the VFS.
+    \item \textbf{Max Path Depth} -- 64 -- The maximum number of directory components (slashes) allowed in a single path.
+    \item \textbf{Max Filename Length} -- 128 -- The maximum length permitted for a single file or directory name component.
+    \item \textbf{Max Open Files per Process} -- 128 -- The hard limit on file descriptors allocated to a single process.
+    \item \textbf{Max System Open Files} -- 1024 -- The capacity of the global open-file table, limiting the total number of files that may be open system-wide at any given time.
+    \item \textbf{Max Active Files Cache} -- 512 -- The limit of the internal file objects, restricting how many unique files can be actively referenced by the system simultaneously.
+    \item \textbf{Pipe Buffer Size} -- 4~KB -- The fixed circular buffer size used for standard I/O streams.
+    \item \textbf{Max Heap Size} -- 16~GB -- The maximum virtual address range available for a userspace process's heap.
+    \item \textbf{Max Syscall Arguments} -- 6 -- The maximum number of arguments that can be passed to a system call.
 \end{itemize}
 
 \section{Future Work}
 
 TODO: KRYCZKA DODAJ SWOJE
-TODO: ADAM DODAJ SWOJE
 
 The current solution can be extended and improved in several areas: 
 \begin{itemize} 
-    \item \textbf{SMP Support} --- As most components were designed with multicore execution in mind, implementing SMP support is a feasible next step. This would involve reinforcing locking schemes, implementing core boot-up sequences, inter-core communication, and a scheduler load balancer. 
-    \item \textbf{Relocatable Code and Dynamic Libraries} --- Currently, the system supports only statically linked binaries. Future work could include a dynamic linker to support shared libraries. 
-    \item \textbf{General Driver Interface} --- Establishing a standardized driver model to facilitate the easy addition of new devices. 
-    \item \textbf{Refining Scheduling Algorithms} --- Improving the scheduler to enhance fairness and reduce latency. 
-    \item \textbf{Completing Libc Implementation} --- Extending the standard library to support a wider range of third-party applications. 
-    \item \textbf{Physical Storage Drivers} --- Replacing the RAM disk with drivers for physical storage media (e.g., AHCI/NVMe). 
-    \item \textbf{Task Synchronization Primitives} --- Implementing full support for mutexes, semaphores, and condition variables.
-    \item \textbf{Networking Stack} --- Adding a network layer to support TCP/IP communication. 
+    \item \textbf{SMP Support} -- As most components were designed with multicore execution in mind, implementing SMP support is a feasible next step. This would involve reinforcing locking schemes, implementing core boot-up sequences, inter-core communication, and a scheduler load balancer. 
+    \item \textbf{CPU Frequency Scaling} -- Implement a mechanism to dynamically adjust the CPU frequency based on system load and thermal conditions.
+    \item \textbf{Relocatable Code and Dynamic Libraries} -- Currently, the system supports only statically linked binaries. Future work could include a dynamic linker to support shared libraries. 
+    \item \textbf{General Driver Interface} -- Establishing a standardized driver model to facilitate the easy addition of new devices. 
+    \item \textbf{Refining Scheduling Algorithms} -- Improving the scheduler to enhance fairness and reduce latency. 
+    \item \textbf{Completing Libc Implementation} -- Extending the standard library to support a wider range of third-party applications. 
+    \item \textbf{Task Synchronization Primitives} -- Implementing full support for mutexes, semaphores, and condition variables.
+    \item \textbf{Networking Stack} -- Adding a network layer to support TCP/IP communication.
+    \item \textbf{USB Controller Driver} -- Implementing a USB controller driver to support USB devices.
+    \item \textbf{Physical Storage Drivers} -- Replacing the RAM disk with drivers for physical storage media (e.g., AHCI/NVMe). 
+    \item \textbf{Abstract Filesystems} -- Add pseudo-filesystems (e.g., \texttt{procfs}, \texttt{sysfs}) for extensible system interfaces.
+    \item \textbf{Filesystem Caching} -- Introduce caching to improve filesystem performance.
+    \item \textbf{Filesystem Permissions} -- Implement file and directory permissions for security and access control.
+    \item \textbf{Fast System Call} -- Replace the current interrupt-based syscall mechanism with the \texttt{syscall}/\texttt{sysret} instructions to reduce overhead and improve kernel entry performance.
+    \item \textbf{Syscall Restriction} -- Implement a mechanism to restrict access to system calls based on process privileges or roles.
+    \item \textbf{Compositing Window Manager} -- Implementing a compositing window manager to support a window-based graphical user interface.
 \end{itemize}
 
 \section{Tests}
@@ -5031,8 +5834,10 @@ IPC & Inter-Process Communication \\
 ISA & Instruction Set Architecture \\
 ISO & International Organization for Standardization \\
 ISR & Interrupt Service Routine \\
+JSON & JavaScript Object Notation \\
 LAPIC & Local Advanced Programmable Interrupt Controller \\
 LBA & Linear Block Addressing \\
+LFN & Long File Name \\
 LIT & Logical Interrupt Table \\
 LKM & Loadable Kernel Module \\
 MD & Machine Dependent \\
@@ -5065,6 +5870,7 @@ POSIX & Portable Operating System Interface \\
 PS/2 & Personal System/2 \\
 PT & Page Table \\
 RAM & Random Access Memory \\
+RAII & Resource Acquisition Is Initialization \\
 REPL & Read-Eval-Print Loop \\
 ROM & Read-Only Memory \\
 RR & Round Robin \\
@@ -5086,6 +5892,7 @@ TID & Thread IDentifier \\
 TLB & Translation Lookaside Buffer \\
 TLSF & Two-Level Segregated Fit \\
 TPU & Tensor Processing Unit \\
+TOML & Tom's Obvious, Minimal Language \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
 UEFI & Unified Extensible Firmware Interface \\
@@ -5098,9 +5905,7 @@ VMM & Virtual Memory Manager \\
 VPN & Virtual Page Number \\
 WAD & Where's All the Data \\
 XIP & eXecute In Place \\
-\end{supertabular}
-
-
+YAML & YAML Ain't Markup Language \\
 \end{supertabular}
 \\
 \thispagestyle{empty}
