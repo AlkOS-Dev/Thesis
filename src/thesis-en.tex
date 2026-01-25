@@ -481,13 +481,14 @@ The build system must support compilation profiles to accommodate different phas
 \begin{itemize}
     \item \textbf{Debug Profile:} Optimized for observability and correctness. Compiler optimizations are generally disabled to preserve a close correspondence between source code and generated machine instructions, simplifying debugging. Debug symbols are enabled, and additional safety mechanisms such as stack protection or sanitizers may be included to detect errors early.
     
-    \item \textbf{Release Profile:} Optimized for performance and efficiency. Higher optimization levels are enabled to increase performance and reduce code size. However, optimizations must be carefully selected in a kernel context. For instance, on x86-64 systems, automatic vectorization should be disabled, as the use of SIMD registers requires saving and restoring additional processor state during interrupts and context switches, incurring significant overhead.
+    \item \textbf{Release Profile:} Optimized for performance and efficiency. Higher optimization levels are enabled to increase performance and reduce code size. However, optimizations must be carefully selected in a kernel context. For instance, on x86-64 systems, automatic vectorization should be disabled, as the uncontrolled use of SIMD operations may lead to execution attempts before they are properly enabled.
 \end{itemize}
 
 In addition to general optimization settings, architecture-specific constraints must be enforced explicitly. On x86-64, the System~V ABI permits the use of a so-called \textbf{red zone}, a fixed region below the stack pointer that leaf functions (functions that do not call other functions) may use without adjusting the stack pointer. In kernel mode, interrupts may overwrite this region, leading to memory corruption. As a result, the red zone must be explicitly disabled.
 
 \subsection{Emulation}
-TODO: KRYCZKA
+
+It is essential to establish an efficient testing strategy. In this context, hardware emulation becomes a critical tool. Two primary approaches exist for testing kernel software. The first involves utilizing a dedicated physical test machine, where the system image is flashed and booted for each iteration. While verifying kernel behavior on real hardware is strictly necessary to guarantee correctness, this process is time-consuming and often becomes a bottleneck during rapid development cycles. To address this efficiency issue, various emulation solutions are available, including QEMU \cite{qemu_website}, Bochs (x86 only) \cite{bochs_website}, and VirtualBox \cite{virtualbox_website}. These tools allow for the specification of the target machine architecture, enabling the kernel to run locally within the host system in an emulated environment. This setup significantly accelerates the workflow by facilitating quick execution, debugging, and state exploration. Consequently, the ideal solution combines both methods to maximize development speed while ensuring software quality.
 
 \section{General Design Considerations}
 
@@ -496,7 +497,7 @@ Developing an operating system kernel is a complex software engineering challeng
 \subsection{Intrusive Data Structures}
 \label{subsec:intrusive}
 
-Kernel development frequently involves managing collections of objects, such as linked lists of threads. Standard library containers (e.g., \texttt{std::list}) typically manage these collections by allocating a separate node structure for every element to hold the data and the navigation pointers. In a kernel environment, where objects are inserted and removed from lists with high frequency, the overhead of repeated allocation and deallocation is often unacceptable due to performance costs and memory fragmentation.
+Kernel development frequently involves managing collections of objects, such as linked lists or binary trees. Standard library implementations typically manage these collections by allocating a separate node structure for every element to hold the data and the navigation pointers. In a kernel environment, where objects are inserted and removed from lists with high frequency, the overhead of repeated allocation and deallocation is often unacceptable due to performance costs and memory fragmentation.
 
 A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
 
@@ -731,7 +732,7 @@ When developing an operating system, two principal approaches exist for providin
 
 \paragraph{Using Existing Libraries}
 
-Several open-source \texttt{libc} implementations are explicitly designed for portability. Notable examples include \textbf{Newlib}, which is widely adopted in embedded systems, and \textbf{mlibc}, which targets hobbyist operating systems. Integrating such libraries typically involves the implementation of required syscalls. The kernel developer supplies backend implementations for a set of low-level system calls, while the library itself provides higher-level functionality such as formatted output or mathematical routines. This approach substantially reduces development effort and enables the early execution of complex userspace software.
+Several open-source \texttt{libc} implementations are explicitly designed for portability. Notable examples include \textbf{Newlib}\cite{newlib_home}, which is widely adopted in embedded systems, and \textbf{mlibc}\cite{mlibc_repo}, which targets hobbyist operating systems. Integrating such libraries typically involves the implementation of required syscalls. The kernel developer supplies backend implementations for a set of low-level system calls, while the library itself provides higher-level functionality such as formatted output or mathematical routines. This approach substantially reduces development effort and enables the early execution of complex userspace software.
 
 \paragraph{Implementation from Scratch}
 
@@ -739,14 +740,14 @@ Alternatively, the standard library may be developed specifically for the operat
 
 \subsubsection{Userspace vs. Kernel Variants}
 
-Standard library functionality is required in both user space and kernel space. These environments, however, impose fundamentally different constraints. Userspace code executes without privileges and relies on system call interface, whereas kernel code executes in a privileged context, invokes kernel services directly rather than through system calls, and must comply with constraints imposed by the kernel execution environment, such as interrupt safety. As a result, a single, uniform library implementation is insufficient.
+Standard library functionality is required in both user space and kernel space. However, these environments impose fundamentally different constraints. Userspace code executes without privileges and relies on system call interface, whereas kernel code executes in a privileged context, invokes kernel services directly rather than through system calls, and must comply with constraints imposed by the kernel execution environment, such as interrupt safety. As a result, a single, uniform library implementation is insufficient.
 
 To address this, the library is split into a userspace variant (\texttt{libc}) and a kernel variant (\texttt{libk}), each compiled with different configuration flags and assumptions. This separation enforces correct usage and prevents kernel code from accidentally relying on functionality that is unavailable or unsafe in kernel context.
 
 \subsubsection{Program Initialization and the C Runtime (CRT)}
 \label{subsubsec:theory_crt}
 
-In addition to exposing user-facing APIs, the runtime environment must be initialized before control is transferred to the program's entry function. Userspace programs do not begin execution at \texttt{main}; instead, execution starts at a library-provided entry point, conventionally named \texttt{\_start}, which is supplied by a startup object file \cite{osdev_crt}.
+In addition to exposing user-facing APIs, the runtime environment must be initialized before control is transferred to the program's entry function. Userspace programs do not begin execution at \texttt{main}. Instead, execution starts at a library-provided entry point, conventionally named \texttt{\_start}, which is supplied by a startup object file \cite{osdev_crt}.
 
 This initialization sequence is realized through coordinated interaction between the linker, compiler, and standard library, and typically involves a set of well-defined object files:
 
@@ -827,7 +828,7 @@ The overall control flow of the C runtime initialization and termination process
     \label{fig:crt-init-flow}
 \end{figure}
 
-Failure to link these components in the correct order results in an incomplete runtime environment, in which global constructors are not executed and program behavior becomes undefined --- particularly for C++ applications or code relying on constructor or destructor attributes.
+Failure to link these components in the correct order results in an incomplete runtime environment, in which global constructors are not executed and program behavior becomes undefined - particularly for C++ applications or code relying on constructor or destructor attributes.
 
 \section{Bootloader}
 \label{subsec:theory_bootloader}
@@ -840,7 +841,7 @@ A fundamental challenge in this sequence is the source of the initial instructio
 To resolve this, hardware architects map the Reset Vector address to a non-volatile memory region, typically Flash Memory or Read-Only Memory (ROM), which retains data without power.
 
 \subsection{Embedded vs. Complex Architectures}
-In simple embedded architectures (e.g., microcontrollers used in automotive braking systems or household appliances), the entire application code is often stored in this non-volatile memory. The memory controller maps this storage directly into the CPU's addressable space. This technique, known as \textbf{Execute In Place (XIP)}, allows the CPU to fetch and execute the developer's code from the very first clock cycle \cite{ARM-CortexM4-Generic-User-Guide}. The developer "owns" the machine from the first nanosecond.
+In simple embedded architectures (e.g., microcontrollers used in household appliances like washing machines or microwaves), the entire application code is often stored in this non-volatile memory. The memory controller maps this storage directly into the CPU's addressable space. This technique, known as \textbf{Execute In Place (XIP)}, allows the CPU to fetch and execute the developer's code from the very first clock cycle \cite{ARM-CortexM4-Generic-User-Guide}. The developer "owns" the machine from the first nanosecond.
 
 In contrast, more complex architectures (such as ARM-based smartphones or single-board computers like the Raspberry Pi) often store the main operating system on external, complex storage media like SD cards or eMMC chips. The CPU cannot simply memory-map an SD card. It requires a sophisticated software driver to communicate with the storage controller. To bridge this gap, manufacturers embed a tiny, immutable piece of software called the \textbf{BootROM} directly into the silicon. This code initializes the minimal required hardware (often internal SRAM) and loads a secondary bootloader from the external storage into that SRAM, which in turn loads the main software.
 
@@ -940,13 +941,12 @@ On modern "heavy" machines, such as x86-64 workstations, the initialization proc
     \item \textbf{Clock Stabilization:} Phase-Locked Loops (PLLs) must be tuned and stabilized to generate the gigahertz-range frequencies required by the cores.
     \item \textbf{DRAM Training:} Modern DDR4/DDR5 memory requires a complex calibration process to align signal timing before it becomes usable.
 \end{enumerate}
-\cite{Intel-Datasheet-Vol1}
 
-To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution.
+To manage this, modern chipsets often include a smaller, dedicated processor (e.g., the Intel Management Engine or AMD Platform Security Processor) that starts before the main CPU. This co-processor initializes the platform hardware to a state where the main CPU can begin execution \cite{Intel-Datasheet-Vol1}. 
 
 \subsection{The Chain of Trust and Abstraction}
 \label{subsubsec:chain_of_trust_and_abstraction}
-By the time a modern Operating System kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for defining the interface between the hardware and the OS is the \textbf{System Firmware} \cite{UEFI-Base-Spec, UEFI-PI-Spec}.
+By the time a kernel begins execution, it is likely the fourth or fifth program in the boot chain. The entity responsible for defining the interface between the hardware and the OS is the \textbf{System Firmware} \cite{UEFI-Base-Spec, UEFI-PI-Spec}.
 
 The firmware's responsibility is to abstract the diverse implementations of different motherboards (e.g., how the disk controller is wired) and provide a mechanism to load an OS from a disk into RAM. However, relying solely on firmware is often insufficient for a portable operating system:
 \begin{itemize}
@@ -1139,19 +1139,15 @@ The DTB format encodes the device tree into a linear, pointerless data structure
     \item \textbf{Strings Block}: A pool of null-terminated property names referenced by offset.
 \end{enumerate}
 
-The kernel parses this blob at boot to discover available RAM.
-
-\cite{Devicetree-Spec}
+The kernel parses this blob at boot to discover available RAM. \cite{Devicetree-Spec}
 
 \subsection{Firmware Interrogation}
 
 On general-purpose platforms (x86-64), the hardware is modular. The kernel cannot predict the amount of installed RAM or the physical address map. In this scenario, the kernel must query the system firmware directly. This introduces a dependency on the firmware interface:
 \begin{itemize}
-    \item \textbf{Legacy BIOS:} Requires invoking interrupt vectors (e.g., \texttt{INT 0x15, EAX=0xE820}) to retrieve a list of memory ranges.
-    \item \textbf{UEFI:} Requires calling specific boot services (\texttt{GetMemoryMap}) to retrieve descriptors of physical pages and their attributes.
+    \item \textbf{Legacy BIOS:} Requires invoking interrupt vectors (e.g., \texttt{INT 0x15, EAX=0xE820}) to retrieve a list of memory ranges \cite{osdev-int15}.
+    \item \textbf{UEFI:} Requires calling specific boot services (\texttt{GetMemoryMap}) to retrieve descriptors of physical pages and their attributes \cite{UEFI-Base-Spec}.
 \end{itemize}
-
-\cite{UEFI-Base-Spec}
 
 \subsection{Hardware Abstraction}
 How does the kernel handle such diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and wil be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
@@ -1159,7 +1155,7 @@ How does the kernel handle such diverse set of methods of querying the memory? T
 \subsection{Discovering and Enabling CPU Features}
 \label{subsec:cpu_discovery}
 
-Modern Central Processing Units (CPUs) are not monolithic entities with a fixed feature set. Instead, they represent an accumulation of decades of architectural extensions. A generic x86-64 processor guarantees a baseline instruction set (User-level ISA), but specific capabilities regarding vectorization (AVX, AVX-512), cryptography (AES-NI), security (SMEP, SMAP), and performance (PCID, TSC-Deadline) vary significantly between processor generations and manufacturers.
+Modern CPUs are not monolithic entities with a fixed feature set. Instead, they represent an accumulation of decades of architectural extensions. A generic x86-64 processor guarantees a baseline instruction set (User-level ISA), but specific capabilities regarding vectorization (AVX, AVX-512), cryptography (AES-NI), security (SMEP, SMAP), and performance (PCID, TSC-Deadline) vary significantly between processor generations and manufacturers.
 \cite{Intel-AVX}
 
 An operating system kernel cannot blindly execute advanced instructions. Doing so on hardware that lacks support results in an \textit{Invalid Opcode} exception, causing a kernel panic. Therefore, a robust kernel must perform a feature discovery handshake during the early initialization phase.
@@ -1170,10 +1166,9 @@ On the x86 architecture, this discovery is performed via the \texttt{CPUID} inst
 
 While x86 relies on this dynamic instruction-based discovery, other architectures employ different strategies:
 \begin{itemize}
-    \item \textbf{ARM64 (AArch64)} utilizes special system registers (e.g., \texttt{ID\_AA64PFR0\_EL1}) that the kernel reads to determine support for floating-point units or cryptographic extensions.
-    \item \textbf{RISC-V} typically employs the Device Tree Blob (DTB) or the \texttt{misa} (Machine ISA) Control and Status Register to inform the kernel about supported standard extensions (e.g., Atomics, Floats).
+    \item \textbf{ARM64 (AArch64)} utilizes special system registers (e.g., \texttt{ID\_AA64PFR0\_EL1}) that the kernel reads to determine support for floating-point units or cryptographic extensions \cite{ARM-Arch-Ref,}.
+    \item \textbf{RISC-V} typically employs the Device Tree Blob (DTB) or the \texttt{misa} (Machine ISA) Control and Status Register to inform the kernel about supported standard extensions (e.g., Atomics, Floats) \cite{RISCV-Priv-Spec}.
 \end{itemize}
-\cite{ARM-Arch-Ref, RISCV-Priv-Spec}
 
 \subsubsection{Feature Enablement}
 Identifying that a feature exists is often insufficient. The kernel must explicitly enable it. To maintain backward compatibility and minimize power consumption, processors often boot with advanced features disabled.
@@ -1185,15 +1180,13 @@ A prime example is the Floating Point Unit (FPU) and Vector Extensions (SSE/AVX)
     \item Enabled XSAVE/XRSTOR support by setting the \texttt{OSXSAVE} bit in \texttt{CR4}.
     \item Explicitly enabled AVX state saving in the Extended Control Register (\texttt{XCR0}).
 \end{enumerate}
-\cite{Intel-ControlRegisters}
+\cite{Intel-ControlRegisters, Intel-XSAVE}
 
 This enabling phase is critical not only for allowing instruction execution but also for the scheduler. The operating system must know the size of the processor's register state (Context) to correctly save and restore threads during context switches. If AVX-512 is enabled, the context size increases significantly compared to standard SSE, impacting memory usage and context switch latency.
 
-\cite{Intel-XSAVE}
+\section{Establishment of Basic Communication}
 
-\subsection{Establishment of Basic Communication}
-
-One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on x86-64 desktop platforms) or implement a basic network stack. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing and as development progresses, it is advisable to abandon this communication or disable them via compilation flags. 
+One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port \cite{wikibooks-serial} that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on x86-64 desktop platforms \cite{osdev-barebones, osdev-vga}) or implement a basic network stack. It should be noted that at this stage, a rudimentary implementation is often sufficient. However, this serves as a provisional solution, to ensure correct handling in the future, a fully-fledged infrastructure and a proper hardware abstraction layer must be established. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing, and as development progresses, it is advisable to abandon this simple communication or disable it via compilation flags.
 
 % \begin{figure}[h]
 %     \centering
@@ -1204,10 +1197,10 @@ One of the primary objectives when initializing code on a target architecture is
 
 % As shown in Figure \ref{fig:qemu_comms}, alongside typical output to the screen and keyboard input, the kernel transmits text to the QEMU serial port, which is then streamed to the host shell. This approach enables host-side scripts to parse logs, detect bugs or failures, and allow manual inspection of the system state immediately preceding a crash.
 
-\subsection{Enabling Interrupts and Exceptions}
+\section{Enabling Interrupts and Exceptions}
 \label{subsec:os-tutorial-interrupts}
 
-Prior to the implementation of memory management (Section \ref{subsec:os_tutorial_mem}), it is essential to establish a basic interrupt handling mechanism. On most platforms, the exception system relies entirely on interrupt mappings. Consequently, without a functional interrupts, the kernel is unable to display debug information on the designated communication device when an error occurs.
+Prior to the implementation of memory management (Section \ref{subsubsec:physical_memory_management}), it is essential to establish a basic interrupt handling mechanism. On most platforms, the exception system relies entirely on interrupt mappings. Consequently, without a functional interrupts, the kernel is unable to display debug information on the designated communication device when an error occurs.
 
 Exception handlers should output a descriptive message detailing the failure. This message must include the CPU state, the source of the exception, the instruction pointer where the error occurred, and, if applicable, an error code explaining the cause. An example of a x86-64 kernel dump following an exception is presented below:
 
@@ -1239,13 +1232,13 @@ Exception handlers should output a descriptive message detailing the failure. Th
 
 Before initializing Memory Management, exception handling is the primary function required from the interrupt system. At this stage, there is typically no use case for interrupt-driven devices, as the consumers (processes) have not yet been booted, and multicore operations (which require memory for bookkeeping structures) are not active. However, the design of the interrupt subsystem must account for future extensibility and requirements.
 
-\subsubsection{Design Considerations}
+\subsection{Design Considerations}
 
 It is important to note that, hardware-compliant interrupt handlers differ significantly from standard compiled functions. They often require specific entry and exit instructions, making the runtime swapping of these functions difficult. A robust solution is to create a low-level assembly wrapper that efficiently performs all architecture-dependent operations before invoking a high-level function responsible for the kernel's logic. However, this approach has limitations. The high-level function is typically hardcoded into the low-level handler, preventing runtime reconfiguration.
 
 To address this, a hardware abstraction layer is required to serve as an intermediary between the architecture-specific wrapper and the high-level kernel logic. This abstraction should manage the low-level tables and facilitate the swapping of handlers at runtime. This can be implemented using an array of abstract handlers mapped to hardware interrupts. Furthermore, devices are mapped to hardware interrupts dynamically during runtime based on user configuration and hardware discovery, necessitating the ability to swap drivers and logic dynamically. Without this modularity, the system would require multiple stages of interrupt initialization, multiple architecture-specific handlers, or complex handlers that query the kernel state to determine valid operations (e.g., a page fault handler checking for virtualization support each time is invoked).
 
-It is also critical to design handlers to perform minimal work. This precludes operations such as waiting, sleeping, or extensive tracing. If device handling requires complex logic or a state change, the handler should invoke the scheduler to perform a context switch upon exiting the interrupt. Executing complex logic within the interrupt context blocks other interrupts and may lead to data loss. Consequently, the interrupt abstraction layer must also support task switching.
+It is also critical to design handlers to perform minimal work. This precludes operations such as waiting, sleeping, or extensive tracing. If device handling requires complex logic or a state change, the handler should create a separate task and invoke the scheduler to decide if we need a context switch upon exiting the interrupt. Executing complex logic within the interrupt context blocks other interrupts and may lead to data loss. Consequently, the interrupt abstraction layer must also support task switching.
 
 When implementing this abstraction, three distinct classes of interrupts can be identified:
 
@@ -1255,24 +1248,24 @@ When implementing this abstraction, three distinct classes of interrupts can be 
     \item \textbf{Software Interrupts} --- Initiated by software instructions. For example, on the x86-64 architecture, the instruction \texttt{INT 0x80} triggers an interrupt with the vector number \texttt{0x80}.
 \end{itemize}
 
-Architecture-specific details must also be considered. for example, the x86-64 architecture utilizes the legacy PIC \cite{osdev-pic} and the improved, SMP-supporting APIC \cite{osdev-apic}. Finally, to enable Symmetric Multiprocessing (SMP) and utilize multiple cores, the interrupt mechanism serves as the primary method of inter-core communication.
+Architecture-specific details must also be considered. for example, the x86-64 architecture utilizes the legacy PIC \cite{osdev-pic} and the improved, SMP-supporting APIC \cite{osdev-apic} and it would be wise to support both somehow. 
+Finally, to enable Symmetric Multiprocessing (SMP) and utilize multiple cores, the interrupt mechanism serves as the primary method of inter-core communication.
 
-\subsection{Tracing System}
+\section{Tracing System}
 
-As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. This can be achieved by allocating a large circular buffer for messages, which is then asynchronously flushed to the output device by a dedicated, low-priority task. Furthermore, to facilitate effective debugging in a multi-threaded and multi-core environment, each log entry may automatically capture essential context metadata, specifically the high-precision timestamp, the current Core ID, or the Process ID.
+As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. 
+
+This can be achieved by allocating a large circular buffer for messages, which is then asynchronously flushed to the output device by a dedicated, low-priority task. Furthermore, to facilitate effective debugging in a multi-threaded and multi-core environment, each log entry may automatically capture essential context metadata, specifically the high-precision timestamp, the current Core ID, or the Process ID.
 
 This goes about the general design, but during initial development system there is no need to have full tracing system, simple print with formatting is enough to proceed.
 
-\subsection{Testing framework}
+\section{Testing framework}
 
 The reliability of an operating system kernel cannot be guaranteed solely through compilation checks or host-based logic verification. While some algorithmic components can be tested in a hosted environment (e.g., on a Linux host), the core kernel functionalities depend heavily on the specific hardware architecture, physical memory layout, and privileged CPU instructions. Consequently, a robust testing framework must be implemented to execute directly within the kernel on the target hardware or emulator.
 
-This in-kernel framework should function similarly to user-space unit testing libraries but operates without the support of an underlying operating system. It allows developers to define test cases for critical subsystems, such as memory allocators, intrusive data structures, and scheduling algorithms and execute them in the actual runtime environment. This approach is the only way to detect architecture-specific issues, such as unaligned memory accesses, incorrect register usage during context switches, or paging faults caused by invalid table entries, which would remain undetected in a hosted simulation.
+This in-kernel framework should function similarly to user-space unit testing libraries but operates within the kernel. It allows developers to define test cases for critical subsystems, such as memory allocators, intrusive data structures, and scheduling algorithms and execute them in the actual runtime environment. This approach is the only way to detect architecture-specific issues, such as unaligned memory accesses, incorrect register usage during context switches, or paging faults caused by invalid table entries, which would remain undetected in a hosted simulation or simply impossible to test.
 
-A critical design requirement for such a framework is test isolation. In a kernel environment, a failure often results in a system panic, infinite loop, or silent memory corruption that compromises the global state. To prevent side effects from a failed test influencing subsequent assertions (creating false positives or negatives), the framework should ideally ensure a clean state for each test suite. In early development stages, this often necessitates designing tests to be self-contained or implementing mechanisms to reset subsystems between test executions, ensuring that results are deterministic and reproducible.
-
-\section{Memory Management}
-\label{subsec:os_tutorial_mem}
+A critical design requirement for such a framework is test isolation. In a kernel environment, a failure often results in a system panic, infinite loop, or silent memory corruption that compromises the global state. To prevent side effects from a failed test influencing subsequent assertions (creating false positives or negatives), the framework should ideally ensure a clean state for each test suite. In early development stages, this often necessitates implementing mechanisms to reset subsystems between test executions, ensuring that results are deterministic and reproducible.
 
 \section{Physical Memory Management}
 \label{subsubsec:physical_memory_management}
@@ -3492,6 +3485,7 @@ void ArchInit(const RawBootArguments &) {
 \end{lstlisting}
 
 % ==================================================================
+
 \section{Physical Memory Management}
 \label{sec:impl_pmm}
 
@@ -5800,25 +5794,45 @@ Regarding the division of labor, we believe the workload was distributed effecti
 \begin{supertabular}{cl}
 ABI & Application Binary Interface \\
 ACPI & Advanced Configuration and Power Interface \\
+AES-NI & Advanced Encryption Standard New Instructions \\
 AHCI & Advanced Host Controller Interface \\
 API & Application Programming Interface \\
 APIC & Advanced Programmable Interrupt Controller \\
 ASLR & Address Space Layout Randomization \\
+AVX & Advanced Vector Extensions \\
+BIOS & Basic Input/Output System \\
+BSD & Berkeley Software Distribution \\
 BSS & Block Starting Symbol \\
-CFS & Completly Fair Scheduler \\
+BST & Binary Search Tree \\
+CFS & Completely Fair Scheduler \\
+CI & Continuous Integration \\
 CLS & Core Local Storage \\
 COW & Copy On Write \\
+CPU & Central Processing Unit \\
 CRTP & Curiously Recurring Template Pattern \\
+DDR5 & Double Data Rate 5 \\
 DMA & Direct Memory Access \\
+DRAM & Dynamic Random Access Memory \\
+DTB & Device Tree Blob \\
 EEVDF & Earliest Eligible Virtual Deadline First \\
 ELF & Executable and Linkable Format \\
+eMMC & Embedded MultiMediaCard \\
 FAT & File Allocation Table \\
 FHS & Filesystem Hierarchy Standard \\
+FLI & First-Level Index \\
+FPU & Floating Point Unit \\
 GCC & GNU Compiler Collection \\
 GDB & GNU Debugger \\
 GDT & Global Descriptor Table \\
+GPU & Graphics Processing Unit \\
+GRUB & GRand Unified Bootloader \\
+HAL & Hardware Abstraction Layer \\
+HPET & High Precision Event Timer \\
 IDT & Interrupt Descriptor Table \\
+IOAPIC & I/O Advanced Programmable Interrupt Controller \\
 IPC & Inter-Process Communication \\
+ISA & Instruction Set Architecture \\
+ISO & International Organization for Standardization \\
 ISR & Interrupt Service Routine \\
 JSON & JavaScript Object Notation \\
 LAPIC & Local Advanced Programmable Interrupt Controller \\
@@ -5826,34 +5840,71 @@ LBA & Linear Block Addressing \\
 LFN & Long File Name \\
 LIT & Logical Interrupt Table \\
 LKM & Loadable Kernel Module \\
+MD & Machine Dependent \\
+MI & Machine Independent \\
 MLFQ & Multi-Level Feedback Queue \\
+MMC & MultiMediaCard \\
 MMIO & Memory-Mapped I/O \\
 MMU & Memory Management Unit \\
+NIC & Network Interface Controller \\
+NUMA & Non-Uniform Memory Access \\
 NVMe & Non-Volatile Memory Express \\
 OS & Operating System \\
+PA & Physical Address \\
+PC & Personal Computer \\
 PCI & Peripheral Component Interconnect \\
+PCID & Process-Context Identifier \\
 PCIe & Peripheral Component Interconnect Express \\
-PCP & Per-CPU Pagessets \\
+PCP & Per-CPU Pagesets \\
+PD & Page Directory \\
+PDP & Page Directory Pointer \\
+PFN & Physical Frame Number \\
 PIC & Programmable Interrupt Controller \\
 PID & Process IDentifier \\
+PIE & Position Independent Executable \\
 PIT & Programmable Interval Timer \\
+PLL & Phase-Locked Loop \\
+PML4 & Page Map Level 4 \\
 PMM & Physical Memory Manager \\
 POSIX & Portable Operating System Interface \\
+PS/2 & Personal System/2 \\
+PT & Page Table \\
+RAM & Random Access Memory \\
 RAII & Resource Acquisition Is Initialization \\
 REPL & Read-Eval-Print Loop \\
+ROM & Read-Only Memory \\
+RR & Round Robin \\
 RTC & Real-Time Clock \\
+RTOS & Real-Time Operating System \\
 SATA & Serial Advanced Technology Attachment \\
+SD & Secure Digital \\
 SIMD & Single Instruction, Multiple Data \\
+SLI & Second-Level Index \\
+SMAP & Supervisor Mode Access Prevention \\
+SMEP & Supervisor Mode Execution Prevention \\
 SMP & Symmetric MultiProcessing \\
+SoC & System on Chip \\
+SRAM & Static Random Access Memory \\
+SSD & Solid State Drive \\
+SSE & Streaming SIMD Extensions \\
 SSOT & Single Source Of Truth \\
 TID & Thread IDentifier \\
+TLB & Translation Lookaside Buffer \\
+TLSF & Two-Level Segregated Fit \\
+TPU & Tensor Processing Unit \\
 TOML & Tom's Obvious, Minimal Language \\
 TSC & TimeStamp Counter \\
 TSS & Task State Segment \\
+UEFI & Unified Extensible Firmware Interface \\
 USB & Universal Serial Bus \\
+VA & Virtual Address \\
+vDSO & Virtual Dynamic Shared Object \\
 VFS & Virtual File System \\
+VGA & Video Graphics Array \\
 VMM & Virtual Memory Manager \\
+VPN & Virtual Page Number \\
 WAD & Where's All the Data \\
+XIP & eXecute In Place \\
 YAML & YAML Ain't Markup Language \\
 \end{supertabular}
 \\
