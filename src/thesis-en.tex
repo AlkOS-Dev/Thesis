@@ -2006,7 +2006,7 @@ When the CPU attempts to access such an address, the MMU raises a Page Fault. Th
     \item \textbf{Validation:} The kernel checks if the faulting address lies within a valid Region. If not, the process is terminated (e.g., Segmentation Fault).
     \item \textbf{Allocation:} If the access is valid, the PMM allocates a physical frame.
     \item \textbf{Mapping:} The kernel updates the page tables to map the new frame to the faulting virtual address.
-    \item \textbf{Resume:} The kernel executes the \texttt{IRET} instruction. The CPU retries the memory access, which now succeeds transparently. (Figure~\ref{fig:demand_paging_flow})
+    \item \textbf{Resume:} The kernel executes the \texttt{return from interrupt} instruction. The CPU retries the memory access, which now succeeds transparently. (Figure~\ref{fig:demand_paging_flow})
 \end{enumerate}
 
 \begin{figure}[htbp]
@@ -2056,7 +2056,7 @@ If a process reads the memory, it sees zeros. If a process attempts to write, th
 
 \subsubsection{Copy-on-Write (CoW)}
 
-Perhaps the most powerful application of virtual memory is Copy-on-Write, which is essential for the efficient implementation of process creation (e.g., the POSIX \texttt{fork()} primitive).
+Perhaps the most powerful application of virtual memory is Copy-on-Write, which is essential for the efficient implementation of some operations (e.g., the POSIX \texttt{fork()} primitive in Linux kernel).
 
 When a process is duplicated, copying its entire physical memory to the child process would be slow and memory-intensive. Instead, the VMM performs a "virtual copy":
 \begin{enumerate}
@@ -2139,17 +2139,18 @@ Implementing an SMP kernel necessitates an infrastructure for accessing core-loc
 
 Fundamentally, Core Local Storage (CLS) enables the kernel to maintain state unique to each processing unit, such as the currently executing thread, scheduler queues, and performance counters, without the contention and latency costs associated with global synchronization primitives. To achieve this efficiently, the hardware architecture must provide a low-latency mechanism to retrieve the address of these structures. While implementation details vary, most modern architectures dedicate a specific register for this purpose. For instance, ARM64 utilizes the specialized \texttt{TPIDR\_EL1}\cite{AArch64-cls} system register, whereas RISC-V reserves the \texttt{tp}\cite{RISCV-registers} (Thread Pointer) general-purpose register by convention.
 
-On the x86-64 architecture, this is typically implemented using the \texttt{GS} or \texttt{FS} segment registers. Since the full 64-bit base address cannot be loaded into these segment selectors directly, the kernel must utilize Model Specific Registers (specifically \texttt{IA32\_GS\_BASE} or \texttt{IA32\_KERNEL\_GS\_BASE}) to map the per-core structure to the logical address space. The \texttt{SWAPGS}\cite{osdev-gs} instruction is then employed during interrupt entry and exit to switch between user-space and kernel-space thread-local storage transparently.
+On the x86-64 architecture, this is typically implemented using the \texttt{GS} or \texttt{FS} segment registers. Since the full 64-bit base address cannot be loaded into these segment selectors directly, the kernel must utilize Model Specific Registers (specifically \texttt{IA32\_GS\_BASE} or \texttt{IA32\_KERNEL\_GS\_BASE} \cite{Intel-segment-loading}) to map the per-core structure to the logical address space. The \texttt{SWAPGS}\cite{osdev-gs} instruction is then employed during interrupt entry and exit to switch between user-space and kernel-space thread-local storage transparently.
 
 \subsection{Core Identification}
 
-A critical design challenge in this domain is the identification of the executing core. While mostly all processors provide unique hardware identifiers (e.g., APIC ID on x86, MPIDR on ARM, or Hart ID on RISC-V), these values are intrinsically tied to the physical topology of the silicon. Consequently, they are often non-contiguous, sparse, or hierarchical, rendering them unsuitable for directly indexing internal kernel arrays. To address this, an operating system typically implements a mapping layer during hardware discovery, assigning a dense, sequential \textbf{Logical ID} (ranging from 0 to $N-1$) to each active core. Generally speaking another abstraction is handy here.
+A critical design challenge in this domain is the identification of the executing core. While mostly all processors provide unique hardware identifiers (e.g., APIC ID on x86 \cite{Intel-proc-ids} or MPIDR on ARM \cite{ARM-MPIDR-EL1}), these values are intrinsically tied to the physical topology of the silicon. Consequently, they are often non-contiguous, sparse, or hierarchical, rendering them unsuitable for directly indexing internal kernel arrays. To address this, an operating system typically implements a mapping layer during hardware discovery, assigning a dense, sequential \textbf{Logical ID} (ranging from 0 to $N-1$) to each active core. Generally speaking another abstraction is handy here.
 
 \subsection{Timing Design}
 
-To support the preemptive scheduling model, the kernel requires a robust timing infrastructure to track execution time. Before discussing timing devices, a fundamental design decision must be made regarding the kernel type: \texttt{tickless} or \texttt{ticking}. Ticking kernels rely on a global constant defining the frequency of periodic timing interrupts. These values typically operate with millisecond granularity, as higher frequencies would degrade system performance. In contrast, tickless kernels do not define periodic interrupts. Instead, they schedule the next timing event based on immediate requirements, such as the sleep schedule or the time slice of the currently running process. It is important to note that ticking kernels also require higher granularity interrupts if support for \texttt{nanosleep} is needed \ref{subsec:linux-timing}.
+To support the preemptive scheduling model, the kernel requires a robust timing infrastructure to track execution time. Before discussing timing devices, a fundamental design decision must be made regarding the kernel type: \texttt{tickless} or \texttt{ticking}. Ticking kernels rely on a global constant defining the frequency of periodic timing interrupts. These values typically operate with millisecond granularity, as higher frequencies would degrade system performance. In contrast, tickless kernels do not define periodic interrupts. Instead, they schedule the next timing event based on immediate requirements, such as the sleep schedule or the time slice of the currently running process. It is important to note that ticking kernels also require higher granularity interrupts if support for \texttt{nanosleep} is needed (e.g. Linux implementation: \ref{subsec:linux-timing}).
 
 \subsection{Clocks}
+\label{subsec:clocks-tutorial}
 
 The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue. On x86-64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio, obviously from the set of supported ones.
 
@@ -2158,7 +2159,7 @@ The first category of devices required is a simple clock capable of tracking the
 
 At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. Crucially, to implement preemption as discussed in Section \ref{sec:scheduling_approaches}, these devices are required to forcibly interrupt the currently running task when its time slice expires.
 
-The first consideration is sleep granularity. A standard precision of approximately one millisecond is achievable on nearly every architecture using simple periodic interrupts. However, implementing high-precision nanosecond or microsecond sleep requires timer devices capable of extremely rapid reconfiguration. The minimum time interval between consecutive events is strictly limited by the hardware configuration latency. The kernel cannot schedule an interrupt to occur sooner than the time required to program the device. Older timing hardware often requires slow I/O port interactions, rendering them unsuitable for high-precision scheduling, whereas modern devices utilize faster interfaces. Additionally, it is common for a single hardware component to serve a dual purpose, acting as both a timekeeping source (Clock) and an interrupt generator (Event Clock).
+The first consideration is sleep granularity. A standard precision of approximately one millisecond is achievable on nearly every architecture using simple periodic interrupts. However, implementing high-precision nanosecond or microsecond sleep requires timer devices capable of extremely rapid reconfiguration. The minimum time interval between consecutive events is strictly limited by the hardware configuration latency. The kernel cannot schedule an interrupt to occur sooner than the time required to program the device. Older timing hardware often requires slow I/O port interactions, rendering them unsuitable for high-precision scheduling, whereas modern devices utilize faster interfaces. Additionally, it is common for a single hardware component to serve a dual purpose, acting as both a timekeeping source (Clock \ref{subsec:clocks-tutorial}) and an interrupt generator (Event Clock).
 
 Another critical factor is the support for multiple cores. In an SMP environment, it is preferable to utilize timing devices that reside locally on the cores and operate independently, thereby maximizing performance. While most modern architectures provide such devices (e.g., LAPIC Timer on x86-64), some older or embedded SMP platforms may lack them. In such cases, the kernel must utilize a global timer and employ interrupt-driven inter-core communication to simulate local interrupts.
 
@@ -2166,9 +2167,9 @@ Consequently, a suitable timing device must be selected. When supporting multipl
 
 An example of device availability schemes by architecture is as follows:
 \begin{itemize}
-\item SMP fast local one-shot timer $\rightarrow$ core local interrupt system + nanosleep mechanism available.
+\item SMP fast local timer $\rightarrow$ core local interrupt system + nanosleep mechanism available.
 \item SMP local periodic-only timer $\rightarrow$ core local interrupt system + low precision msleep only available.
-\item SMP non-local one-shot timer $\rightarrow$ owner core of timer interrupts propagates the interrupt to target cores + nanosleep.
+\item SMP fast non-local timer $\rightarrow$ owner core of timer interrupts propagates the interrupt to target cores + nanosleep.
 \item SMP non-local periodic-only timer $\rightarrow$ owner core of timer interrupts propagates the interrupt to target cores + low precision msleep only available.
 \end{itemize}
 
@@ -2176,7 +2177,7 @@ Most modern architectures support both local and high-precision timers. For exam
 
 \subsection{Keyboard}
 
-Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21}\cite{osdev-ps22} if are available on our device (is quite popular on embedded systems). Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec}\cite{osdev-usb}.
+Lastly we need some way to provide input to the kernel on the real machine not only emulated environment. For that we will need some keyboard handling. First easier way is to utilize some simple ports like PS-2 \cite{osdev-ps21, osdev-ps22} if are available on our device (is quite popular on embedded systems). Otherwise we will probably have to implement some usb drivers what will be much more difficult \cite{usb20-spec, osdev-usb}.
 
 \section{File Systems}
 
@@ -2274,11 +2275,15 @@ The fundamental unit for resource management is the process. This object represe
 \begin{itemize}
     \item \textbf{Page Tables} --- Architecture-specific structures describing the mapping between virtual and physical addresses.
     \item \textbf{Mapping Metadata} --- Structures enabling the tracking and allocation of virtual address ranges.
-    \item \textbf{File Descriptor Table} --- Descriptors facilitating access to files and I/O streams.
 \end{itemize}
 
-While additional resources may be required to implement features such as Inter-Process Communication (IPC), pipes, or synchronization primitives, the three elements listed above constitute the bare minimum for the process concept. A straightforward implementation involves defining separate structures for \texttt{Thread} and \texttt{Process} objects, although some designs merge these into a single task structure (as discussed in Section \ref{subsec:linux-task}).
-At this stage, it is prudent to prepare data structures that allow for efficient querying of processes, facilitating operations such as termination, joining, or IPC. It is important to note that the creation and destruction of processes are computationally expensive operations. They require building page tables, mapping the kernel address space, and allocating memory for bookkeeping structures. To mitigate latency, some of this workload, particularly during destruction, can be deferred to dedicated kernel worker threads, allowing the system to return control to the caller more rapidly.
+While additional resources may be required to implement features such as Inter-Process Communication (IPC), pipes, file operations or synchronization primitives, the two elements listed above constitute the bare minimum for the process concept. 
+
+A straightforward implementation involves defining separate structures for \texttt{Thread} and \texttt{Process} objects, although some designs merge these into a single task structure (as discussed in Section \ref{subsec:linux-task}).
+
+At this stage, it is prudent to prepare data structures that allow for efficient querying of processes, facilitating operations such as termination, joining, or IPC. 
+
+It is important to note that the creation and destruction of processes are computationally expensive operations. They require building page tables, mapping the kernel address space, and allocating memory for bookkeeping structures. To mitigate latency, some of this workload, particularly during destruction, can be deferred to dedicated kernel worker threads, allowing the system to return control to the caller more rapidly.
 
 \noindent The minimal stuct may look like this:
 \begin{lstlisting}[caption={Process Structure}, label={lst:exampleProcessStruct}]
@@ -2286,7 +2291,6 @@ At this stage, it is prudent to prepare data structures that allow for efficient
         /* Process resources */
         data_structures::DoubleLinkedList<VMemArea *> area_list;
         PPtr<void> page_table_root;
-        Mem::VPtr<Fs::FdTable> fd_table;
     };
 \end{lstlisting}
 
@@ -2363,7 +2367,7 @@ Before a context switch can occur, an initial context must exist. This implies t
 
 \subsubsection{Context Switch}
 
-Once multiple tasks are established, the system can perform context switching. Assuming the entire execution state resides on the stack, the context switch operation is relatively straightforward. The sequence of operations is as follows:
+Once multiple tasks exists, the system can perform context switching. Assuming the entire execution state resides on the stack, the context switch operation is relatively straightforward. The sequence of operations is as follows:
 
 \begin{itemize}
     \item Push the current thread's context (registers and flags) onto its stack.
