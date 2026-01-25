@@ -3851,6 +3851,221 @@ The complete flow of a physical memory request in AlkOS can be summarized as fol
 
 This hierarchical structure ensures that AlkOS balances the fast, low-fragmentation needs of small objects with the efficient, contiguous page management required for virtual memory mappings.
 
+\section{Virtual Memory Management}
+\label{sec:impl_vmm}
+
+While the Physical Memory Manager accounts for raw RAM usage, the Virtual Memory Manager (VMM) allows the kernel to shape the execution environment. Our implementation aims to provide a robust, architecture-agnostic interface that supports advanced features like lazy allocation and efficient kernel-space management, while abstracting away the specifics of the x86-64 paging hardware.
+
+\subsection{Design Overview and Architecture}
+
+The cornerstone of the AlkOS memory layout is the \textbf{Higher-Half Kernel} architecture combined with a \textbf{Direct Physical Mapping}. 
+
+Upon initialization, the bootloader (Loader64) ensures that the kernel executable is linked and loaded at the top of the virtual address space, specifically starting at \texttt{0xFFFFFFFE00000000}. This design choice keeps the lower half of the address space (canonical addresses starting with \texttt{0x0000...}) strictly reserved for user-space applications, enforcing a clean separation between kernel and user contexts.
+
+\subsubsection{The Direct Physical Map (HHDM)}
+
+A specific challenge in OS development is accessing arbitrary physical memory (e.g., modifying page tables or reading ACPI tables) when paging is enabled. Without a specific strategy, the kernel would need to temporarily map individual physical pages into a reserved virtual window every time it needed to read or write to them.
+
+To solve this, we implemented a Direct Physical Mapping strategy. A massive region of the kernel virtual address space (512 GB, starting at \texttt{0xFFFF800000000000}) acts as a linear window into physical RAM. Within this window, virtual address $V$ corresponds to physical address $P$ via a simple linear transformation:
+\[ V = P + \texttt{kDirectMapAddrStart} \]
+
+This allows the kernel to access any physical object instantly, without modifying page tables. This logic is encapsulated in the helper templates found in \texttt{mem/types.hpp}:
+
+\begin{lstlisting}[caption={Physical to Virtual Address Translation helpers}, label={lst:phys_to_virt}]
+template <typename T>
+FORCE_INLINE_F VPtr<T> PhysToVirt(PPtr<T> physAddr)
+{
+    return reinterpret_cast<VPtr<T>>(
+        reinterpret_cast<uintptr_t>(physAddr) + hal::kDirectMapAddrStart
+    );
+}
+
+template <typename T>
+FORCE_INLINE_F PPtr<T> VirtToPhys(VPtr<T> virtAddr)
+{
+    uintptr_t vaddr = reinterpret_cast<uintptr_t>(virtAddr);
+    
+    // Handle Direct Map range
+    if (vaddr >= hal::kDirectMapAddrStart) {
+        return reinterpret_cast<PPtr<T>>(vaddr - hal::kDirectMapAddrStart);
+    }
+
+    // Handle Kernel Linkage range
+    return reinterpret_cast<PPtr<T>>(vaddr - kKernelSpaceStart);
+}
+\end{lstlisting}
+
+\subsubsection{Hardware Abstraction Layer}
+
+To decouple the core VMM logic from the x86-64 specific paging structures (PML4, PDPT, etc.), we utilize the Hardware Abstraction Layer (HAL). The \texttt{hal::Mmu} class exposes high-level operations such as \texttt{Map}, \texttt{Unmap}, and \texttt{SwitchRoot}. 
+
+Crucially, the interface abstracts architecture-specific protection bits into a generic \texttt{PageFlags} structure. The HAL implementation translates these generic flags into the specific bitmask required by the hardware (e.g., the NX bit or the User/Supervisor bit on x86-64).
+
+\begin{lstlisting}[caption={Generic Page Flags Abstraction}, label={lst:page_flags}]
+struct PageFlags {
+    bool Present : 1;
+    bool Writable : 1;
+    bool UserAccessible : 1;
+    bool WriteThrough : 1;
+    bool CacheDisable : 1;
+    bool Global : 1;
+    bool NoExecute : 1;
+};
+\end{lstlisting}
+
+\subsection{The Address Space Abstraction}
+
+In AlkOS, the concept of a virtual memory context is encapsulated by the \texttt{AddressSpace} class. This class serves as the container for all memory mappings associated with a specific process (or the kernel itself). It maintains two parallel representations of the memory state:
+
+\begin{enumerate}
+    \item \textbf{Hardware Representation:} A physical pointer to the root of the page table hierarchy (e.g., the PML4 address). This is the value loaded into the CR3 register during a context switch.
+    \item \textbf{Logical Representation:} A sorted, doubly-linked list of \texttt{VMemArea} objects. This list defines the high-level semantics of memory regions, which are invisible to the hardware MMU.
+\end{enumerate}
+
+To ensure data consistency in a potentially multi-threaded environment (or during interrupt handling), operations on the logical list are protected by a \texttt{Spinlock}.
+
+\subsubsection{User Space Initialization}
+
+When creating a new user address space, the system must ensure that the process can still access essential kernel services (such as interrupt handlers and syscall entry points). The \texttt{AddressSpace::InitUser} method allocates a new, empty PML4 table and immediately copies the kernel-space mappings from the global kernel address space. This creates a "split" view where the lower half is empty (ready for user program code), and the upper half mirrors the kernel.
+
+\subsection{Virtual Memory Areas (VMAs)}
+
+The \texttt{VMemArea} class is the fundamental unit of logical memory management. It is an abstract base class that defines a range of virtual addresses \texttt{[start, start + size)} and a set of permission flags. Crucially, it exposes a virtual method \texttt{HandleFault}, which implements the polymorphic behavior required for demand paging.
+
+When a Page Fault occurs, the VMM locates the VMA corresponding to the faulting address and delegates the resolution logic to that specific object. AlkOS implements three distinct types of VMAs:
+
+\subsubsection{Anonymous Memory}
+
+The \texttt{AnonymousVMemArea} represents standard, volatile RAM used for stacks, heaps, and BSS sections. It does not map to any specific physical address at creation time. Its \texttt{HandleFault} implementation interacts with the Physical Memory Manager (PMM) to allocate a fresh physical frame, zeroes it for security, and maps it into the page table.
+
+\subsubsection{Direct Mapping}
+
+The \texttt{DirectMappingVMemArea} is used when a specific range of physical memory must be exposed to virtual memory. This is essential for:
+\begin{itemize}
+    \item \textbf{Memory Mapped I/O (MMIO):} Mapping hardware device registers.
+    \item \textbf{Framebuffers:} Exposing the video memory to user-space applications (as seen in the Window Manager implementation).
+\end{itemize}
+
+Unlike anonymous memory, this area ignores the "Not Present" fault mechanic for allocation; it simply maps the pre-existing physical range.
+
+\subsubsection{Kernel Synchronization Area}
+
+A unique feature of the AlkOS VMM is the \texttt{KernelSyncVMemArea}. This area covers the entire kernel address range in every user process. 
+
+In a standard x86-64 higher-half kernel, kernel page tables are shared across all processes. However, if the kernel allocates dynamic memory (e.g., via \texttt{vmalloc}) that requires a new entry in the top-level PML4 table, that change is not automatically propagated to existing user processes.
+
+Instead of iterating through every active process to update their page tables whenever the kernel heap grows, we utilize a lazy synchronization approach. If a process accesses a valid kernel address that is missing from its specific PML4, a page fault is triggered. The \texttt{KernelSyncVMemArea::HandleFault} method intercepts this, copies the missing entry from the master kernel page table to the process's page table, and resumes execution.
+
+\begin{lstlisting}[caption={Lazy Kernel Synchronization Logic}, label={lst:kernel_sync}]
+bool KernelSyncVMemArea::HandleFault(
+    VPtr<void> fault_addr, const PageFaultData::ErrorCode &, AddressSpace &as)
+{
+    auto &vmm = MemoryModule::Get().GetVmm();
+    
+    // Master kernel tables
+    auto kernel_root  = vmm.GetKernelAddressSpace().PageTableRoot();
+    auto current_root = as.PageTableRoot();
+
+    // Check if the mapping exists in the master kernel table
+    auto &mmu = MemoryModule::Get().GetMmu();
+    if (mmu.SyncMapping(current_root, kernel_root, fault_addr)) {
+        // Entry copied successfully, invalidate TLB and retry
+        MemoryModule::Get().GetTlb().InvalidatePage(AlignDown(fault_addr));
+        return true;
+    }
+
+    return false; // Genuine crash
+}
+\end{lstlisting}
+
+\subsection{Initialization and Handover}
+
+The transition from the bootloader to the kernel's internal memory management is a critical phase. When the kernel main function receives control, the system is running on page tables created by \texttt{Loader64}. These tables contain a temporary identity mapping (0-10 GB) that is necessary for the loader but undesirable for the kernel, as it exposes physical memory to user-space (NULL pointer dereferences would be valid accesses to physical address 0).
+
+To sanitize this state, we implemented the \texttt{Mem::Boot::BootMmuCleaner}. Its responsibilities are twofold:
+
+\begin{enumerate}
+    \item \textbf{Cleaning Identity Mappings:} It iterates through the lower half of the PML4 table and unmaps all entries. This ensures that the user-space range is completely empty before the first process is spawned.
+    \item \textbf{Metadata Reconstruction:} The physical frames used by the bootloader to store the page tables themselves must be accounted for. The \texttt{BootMmuCleaner} walks the existing page table hierarchy. For every table frame encountered, it updates the global \texttt{PageMetaTable} to mark that frame's type as \texttt{PageTable} and initializes its reference count. This prevents the Physical Memory Manager from accidentally treating these critical frames as free memory.
+\end{enumerate}
+
+\subsection{The Virtual Memory Manager}
+
+The \texttt{VirtualMemoryManager} (VMM) serves as the central orchestrator for all virtual memory operations. Exposed as a singleton via the \texttt{MemoryModule}, it provides the high-level API required by the kernel to create address spaces, allocate stack and heap regions, and switch contexts.
+
+\subsubsection{Allocation Strategy}
+
+Unlike physical memory, virtual memory is abundant (48-bit address space on x86-64). The primary challenge is not finding space, but finding a \textit{contiguous} gap of free addresses that satisfies alignment requirements.
+
+The VMM delegates this geometric search to the \texttt{AddressSpace::FindGap} method. This method iterates through the sorted list of existing VMAs. For every pair of adjacent VMAs, it calculates the free space between the end of the first and the start of the second. If the gap is sufficient, it returns the start address aligned to the page size.
+
+\begin{lstlisting}[caption={Gap Search Logic}, label={lst:find_gap}]
+expected<GapInfo, MemError> AS::FindGap(size_t size, VPtr<void> range_start, VPtr<void> range_end)
+{
+    // ... setup search bounds ...
+    
+    for (auto *vma : area_list_) {
+        uptr curr_start = PtrToUptr(vma->GetStart());
+        
+        // Calculate gap between previous end and current start
+        uptr gap_start = AlignUp(prev_end, hal::kPageSizeBytes);
+        uptr gap_end   = AlignDown(curr_start, hal::kPageSizeBytes);
+
+        if (gap_end > gap_start && (gap_end - gap_start) >= size) {
+            return GapInfo{UptrToPtr<void>(gap_start), size};
+        }
+
+        prev_end = curr_start + vma->GetSize();
+    }
+    // ... check tail gap ...
+}
+\end{lstlisting}
+
+\subsubsection{Specialized Allocators}
+
+To structure the user address space efficiently, the VMM provides specialized allocation helpers that enforce the standard memory layout:
+
+\begin{itemize}
+    \item \textbf{User Stack:} The \texttt{AllocUserStack} method searches for free space starting from the top of the user address space (\texttt{kUserSpaceEndExclusive}) downwards. This ensures that the stack is placed as high as possible, allowing it to grow downwards without colliding with the heap.
+    \item \textbf{User Heap:} The \texttt{AllocUserHeap} method searches from the bottom of the user address space upwards (typically starting after the ELF binary segments).
+\end{itemize}
+
+\subsubsection{Context Switching}
+
+The VMM is also responsible for the low-level mechanics of address space switching. The \texttt{SwitchAddrSpace} method interacts with the HAL to load the new physical root (CR3) into the CPU. Critically, this operation implicitly flushes the Translation Lookaside Buffer (TLB), ensuring that the CPU does not retain stale translations from the previous process.
+
+\subsection{Page Fault Handling Workflow}
+
+The heart of the virtual memory subsystem is the page fault handler. It transforms hardware exceptions into legitimate resource allocation events. The handling flow in AlkOS proceeds as follows:
+
+\begin{enumerate}
+    \item \textbf{Exception Entry:} The CPU triggers interrupt vector 14. The assembly wrapper saves the execution context and calls the C++ dispatcher.
+    \item \textbf{Data Parsing:} The generic interrupt dispatcher invokes \texttt{Mem::PageFaultHandler}. The first step is to convert architecture-specific registers (CR2 for the address, and the error code from the stack) into a platform-agnostic \texttt{PageFaultData} structure using the HAL.
+    
+    \item \textbf{VMA Lookup:} The handler acquires the lock for the current \texttt{AddressSpace} and attempts to find a \texttt{VMemArea} that covers the faulting address.
+    \begin{itemize}
+        \item If no VMA is found, the access is invalid. If the fault originated from user space, the process is terminated (Segmentation Fault). If from kernel space, the kernel panics.
+    \end{itemize}
+
+    \item \textbf{Permission Check:} If a VMA is found, the handler verifies the access type against the VMA flags. For example, attempting to write to a Read-Only area triggers a protection fault, which is treated as a fatal error (unless Copy-on-Write logic intervenes).
+    
+    \item \textbf{Resolution:} If the access is valid but the page is missing (Demand Paging), the VMA's \texttt{HandleFault} method is invoked to allocate and map the required memory.
+\end{enumerate}
+
+\subsection{Address Space Layout}
+
+The Virtual Memory Manager enforces a strict layout for user processes to ensure security and stability. The resulting virtual address space is organized as follows:
+
+\begin{itemize}
+    \item \textbf{\texttt{0x0000000000000000}} --- \textbf{Null Guard}: The first page is strictly unmapped to catch null pointer dereferences immediately.
+    \item \textbf{User Code and Data}: Loaded from the ELF executable, typically starting at a dynamic base address.
+    \item \textbf{User Heap}: Located after the BSS section, growing upwards towards higher addresses.
+    \item \textbf{User Stack}: Located at the very top of the user half of the address space (\texttt{0x00007FFFFFFFFFFF}), growing downwards.
+    \item \textbf{\texttt{0xFFFF800000000000}} --- \textbf{Direct Physical Map}: Kernel-only access window to all physical RAM.
+    \item \textbf{\texttt{0xFFFFFFFE00000000}} --- \textbf{Kernel Image}: The code and static data of the kernel itself.
+\end{itemize}
+
+This layout, combined with the separation of Machine Independent logic and the Hardware Abstraction Layer, provides a flexible foundation for the higher-level operating system services described in subsequent sections.
 
 \section{Interrupts}
 \label{sec:interrupts}
