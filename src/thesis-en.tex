@@ -87,8 +87,6 @@
     language=C++,
     morekeywords={constexpr, nullptr, size_t, uint64_t}
 }
-\lstset{style=cppstyle}
-\renewcommand{\lstlistingname}{C++ Code Snippet}
 
 \lstdefinestyle{nasmstyle}{
     backgroundcolor=\color{backcolour},   
@@ -142,6 +140,18 @@
                   cmake_minimum_required, file, macro, endmacro, foreach, endforeach, if, endif, else,
                   find_package, add_custom_command, add_custom_target, install, alkos_find_sources, alkos_register_userspace_app}
 }
+
+\lstnewenvironment{cppcode}[1][]
+  {\renewcommand{\lstlistingname}{C++ Code Snippet}\lstset{style=cppstyle, #1}}
+  {}
+
+\lstnewenvironment{nasmcode}[1][]
+  {\renewcommand{\lstlistingname}{Assembly Code Snippet}\lstset{style=nasmstyle, #1}}
+  {}
+
+\lstnewenvironment{cmakecode}[1][]
+  {\renewcommand{\lstlistingname}{CMake Code Snippet}\lstset{style=cmakestyle, #1}}
+  {}
 
 % --------- DRAWING -------
 
@@ -502,7 +512,7 @@ Kernel development frequently involves managing collections of objects, such as 
 A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
 
 By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is shown in Listing \ref{lst:intrusiveNodesExample}.
-\begin{lstlisting}[caption={Intrusive Data Structures Example}, label={lst:intrusiveNodesExample}]
+\begin{cppcode}[caption={Intrusive Data Structures Example}, label={lst:intrusiveNodesExample}]
 template<class T>
 struct ListNode {
     T* next;
@@ -548,7 +558,7 @@ void RemoveFromLinkedList(T* item) {
     item->prev = item->next = nullptr;
 }
 
-\end{lstlisting}
+\end{cppcode}
 
 The usage of intrusive data structures offers multiple benefits critical for systems programming:
 \begin{itemize}
@@ -1204,7 +1214,7 @@ Prior to the implementation of memory management (Section \ref{subsubsec:physica
 
 Exception handlers should output a descriptive message detailing the failure. This message must include the CPU state, the source of the exception, the instruction pointer where the error occurred, and, if applicable, an error code explaining the cause. An example of a x86-64 kernel dump following an exception is presented below:
 
-\begin{lstlisting}[caption={Example Kernel Panic on Exception}, label={lst:kernel_panic}]
+\begin{cppcode}[caption={Example Kernel Panic on Exception}, label={lst:kernel_panic}]
     [ KERNEL PANIC ] Received exception: 0 (Divide Error (#DE))
     And error: 0
     At instruction address: 0xffffffff8021b856
@@ -1228,7 +1238,7 @@ Exception handlers should output a descriptive message detailing the failure. Th
     r15:                    0x0000000000000800
     
     RFLAGS:                 0x0000000000010246
-\end{lstlisting}
+\end{cppcode}
 
 Before initializing Memory Management, exception handling is the primary function required from the interrupt system. At this stage, there is typically no use case for interrupt-driven devices, as the consumers (processes) have not yet been booted, and multicore operations (which require memory for bookkeeping structures) are not active. However, the design of the interrupt subsystem must account for future extensibility and requirements.
 
@@ -2111,7 +2121,7 @@ To address this, these architectures utilize the \textbf{Device Tree} (DTB) mech
 
 Regardless of whether a device is found via PCI enumeration, ACPI tables, or Device Tree parsing, the architecture-independent kernel must provide a unified interface for device registration. This ensures that the upper layers of the operating system remain agnostic to how the hardware was detected. An example driver interface, designed to abstract these differences, is presented below:
 
-\begin{lstlisting}[caption={Example Driver Abstraction}, label={lst:drive_abstract}]
+\begin{cppcode}[caption={Example Driver Abstraction}, label={lst:drive_abstract}]
     struct ExampleDriver {
         /* Device description */
         char* name;
@@ -2129,7 +2139,7 @@ Regardless of whether a device is found via PCI enumeration, ACPI tables, or Dev
             u32 (*close)(void* device);
         } cbs;
     };
-\end{lstlisting}
+\end{cppcode}
 
 This structure must define crucial operations for the specific device type alongside data describing its functionality, allowing the kernel to select the most appropriate driver either through user configuration or automatic selection algorithms.
 
@@ -2286,13 +2296,13 @@ At this stage, it is prudent to prepare data structures that allow for efficient
 It is important to note that the creation and destruction of processes are computationally expensive operations. They require building page tables, mapping the kernel address space, and allocating memory for bookkeeping structures. To mitigate latency, some of this workload, particularly during destruction, can be deferred to dedicated kernel worker threads, allowing the system to return control to the caller more rapidly.
 
 \noindent The minimal stuct may look like this:
-\begin{lstlisting}[caption={Process Structure}, label={lst:exampleProcessStruct}]
+\begin{cppcode}[caption={Process Structure}, label={lst:exampleProcessStruct}]
     struct Process {
         /* Process resources */
         data_structures::DoubleLinkedList<VMemArea *> area_list;
         PPtr<void> page_table_root;
     };
-\end{lstlisting}
+\end{cppcode}
 
 In a production environment, this structure would naturally include additional fields for management purposes, such as synchronization primitives, statistics, configuration flags, and a state enumeration for lifecycle management.
 
@@ -2303,19 +2313,19 @@ The second primary component of the scheduling subsystem is the thread. The thre
 This approach simplifies the architecture significantly and enhances performance. It is worth noting that while certain architectures provide hardware-assisted context switching mechanisms (such as the legacy Hardware Task Switching on x86), these are rarely utilized in modern general-purpose kernels due to performance overhead and portability concerns. Instead, the standard approach is to unify context storage using the stack. Since the stack is heavily utilized, it is typically cached, eliminating the need to allocate separate memory regions for saving context. When saving context, registers are pushed onto the stack. When initializing a thread, the stack is artificially populated with boot-up values.
 
 \noindent A concise initial structure can be defined as follows:
-\begin{lstlisting}[caption={Thread Structure First Iteration}, label={lst:os-tutorial-thread-v0}]
+\begin{cppcode}[caption={Thread Structure First Iteration}, label={lst:os-tutorial-thread-v0}]
 struct Thread {
     Process* owner;
 
     void *user_stack;
     void *user_stack_bottom;
 };
-\end{lstlisting}
+\end{cppcode}
 
 To manage the thread lifecycle, it is necessary to introduce a state enumeration. This field allows the scheduler to determine the appropriate action for a given thread. For instance, a waiting thread must be removed from the run queue, while a blocked thread must be removed from the specific wait queue it is blocked on.
 
 \noindent The structure is updated to reflect these requirements:
-\begin{lstlisting}[caption={Thread Structure Second Iteration}, label={lst:os-tutorial-thread-v1}]
+\begin{cppcode}[caption={Thread Structure Second Iteration}, label={lst:os-tutorial-thread-v1}]
 enum class ThreadState : u64 {
     kReady = 0,
     kRunning,
@@ -2330,12 +2340,12 @@ struct Thread {
     void *user_stack;
     void *user_stack_bottom;
 };
-\end{lstlisting}
+\end{cppcode}
 
 A critical design consideration regarding context switching is the location where the state is saved. Saving the execution state directly onto the user stack is inherently insecure. A malicious program could manipulate the stack pointer to overwrite critical kernel structures, or the kernel could unintentionally leak sensitive data (such as cryptographic keys) onto the user stack during a switch. Furthermore, to allow kernel code to be preempted or to block (i.e., perform a context switch while inside the kernel), the kernel state must be preserved. This necessitates a separate, protected kernel stack for each thread. Relying on a single kernel stack per core is insufficient for a preemptible kernel.
 
 \noindent The final minimal structure is presented below:
-\begin{lstlisting}[caption={Thread Structure Third Iteration}, label={lst:os-tutorial-thread-v2}]
+\begin{cppcode}[caption={Thread Structure Third Iteration}, label={lst:os-tutorial-thread-v2}]
 enum class ThreadState : u64 {
     kReady = 0,
     kRunning,
@@ -2352,7 +2362,7 @@ struct Thread {
     void *user_stack;
     void *user_stack_bottom;
 };
-\end{lstlisting}
+\end{cppcode}
 
 \subsection{Context}
 
@@ -2377,7 +2387,7 @@ Once multiple tasks exists, the system can perform context switching. Assuming t
 \end{itemize}
 
 \noindent Based on x86-64 assembly, the implementation resembles the following:
-\begin{lstlisting}[style=nasmstyle, caption={Context Switch Pseudocode}, label={lst:context_switch_example}]
+\begin{nasmcode}[caption={Context Switch Pseudocode}, label={lst:context_switch_example}]
 ; RDI must store a pointer to next thread structure
 ContextSwitch:
     sub rsp, _context_switch_stack_space_ext     ; Allocate space for saving registers.
@@ -2390,7 +2400,7 @@ ContextSwitch:
     pop_all_regs            ; Restore registers of NEW thread's stack
     add rsp, _all_reg_size  ; Deallocate register save space.
     iretq                   ; Restore state using interrupts mechanism
-\end{lstlisting}
+\end{nasmcode}
 
 \subsection{Scheduler Internal Synchronization}
 
@@ -2427,7 +2437,7 @@ Furthermore, task prioritization is essential. For instance, audio or block devi
 
 To illustrate these concepts, we present the simplest form of a preemptive scheduler: a periodic, single-core Round Robin scheduler. This algorithm maintains a single queue of executable tasks. New tasks are appended to the tail of the queue, while the scheduler selects the task at the head for execution. At fixed intervals (e.g., every 10ms), the running task is interrupted, placed back at the tail of the queue, and the next task is dequeued. The following pseudo-code demonstrates this logic:
 
-\begin{lstlisting}[caption={Round Robin Pseudo Code}, label={lst:rr_pseudo_code}]
+\begin{cppcode}[caption={Round Robin Pseudo Code}, label={lst:rr_pseudo_code}]
 
 #define SCHED_PERIOD_TICK 10
 
@@ -2459,7 +2469,7 @@ void Yield() {
 void TimerHandler() {
     InitializeTimingModule(TimerHandler, SCHED_PERIOD_TICK);
 }
-\end{lstlisting}
+\end{cppcode}
 
 This simple model may suffice for an SMP system if implemented as a core-local scheduler, provided a load-balancing mechanism is available to redistribute tasks between cores.
 
@@ -3055,7 +3065,7 @@ Loader32 is the true entry point of AlkOS, receiving control directly from GRUB.
 
 The Multiboot2 specification defines the machine state upon entry: \texttt{EAX} contains the magic number \texttt{0x36d76289}, and \texttt{EBX} points to the Multiboot information structure. The entry point establishes a stack and delegates to C++ code:
 
-\begin{lstlisting}[style=nasmstyle, caption={Loader32 Entry Point (entry.nasm)}, label={lst:loader32_entry}]
+\begin{nasmcode}[caption={Loader32 Entry Point (entry.nasm)}, label={lst:loader32_entry}]
 bits 32
 ; GRUB leaves us in 32-bit Protected Mode
 ; EAX = Magic number, EBX = Multiboot info pointer
@@ -3070,13 +3080,13 @@ Entry:
     push ebx                ; Arg2: Multiboot info pointer
     push eax                ; Arg1: Magic number
     call MainLoader32       ; Delegate to C++ code
-\end{lstlisting}
+\end{nasmcode}
 
 \subsubsection{CPU Feature Detection}
 
 Before attempting the Long Mode transition, Loader32 verifies that the CPU supports the required features. This is accomplished through the CPUID instruction \cite{Intel-CPUID}, as shown in Listing~\ref{lst:check_longmode}:
 
-\begin{lstlisting}[style=nasmstyle, caption={Long Mode Detection (checks.nasm)}, label={lst:check_longmode}]
+\begin{nasmcode}[caption={Long Mode Detection (checks.nasm)}, label={lst:check_longmode}]
 EXTENDED_FUNCTIONS_THRESHOLD equ 0x80000000
 LONG_MODE_BIT equ 1 << 29
 
@@ -3098,13 +3108,13 @@ CheckLongMode:
 .no_long_mode:
     mov eax, 1                ; Failure
     ret
-\end{lstlisting}
+\end{nasmcode}
 
 \subsubsection{Memory Management Initialization}
 
 Before enabling paging, Loader32 initializes a temporary bootstrap Physical Memory Manager (PMM) and Virtual Memory Manager (VMM). The memory map obtained from the Multiboot2 information structure is parsed to identify available physical memory regions. Loader32 then creates an \textbf{identity mapping} of the first 10 gigabytes of physical memory using 1GB pages, as demonstrated in Listing~\ref{lst:loader32_mmap}:
 
-\begin{lstlisting}[caption={Identity Mapping Setup (main.cpp)}, label={lst:loader32_mmap}]
+\begin{cppcode}[caption={Identity Mapping Setup (main.cpp)}, label={lst:loader32_mmap}]
 MemoryManagers SetupMemoryManagement(MultibootInfo &multiboot_info) {
     auto mmap_tag = multiboot_info.FindTag<TagMmap>();
     const MemoryMap mmap(*mmap_tag);
@@ -3123,7 +3133,7 @@ MemoryManagers SetupMemoryManagement(MultibootInfo &multiboot_info) {
     
     return {*pmm, *vmm};
 }
-\end{lstlisting}
+\end{cppcode}
 
 The identity mapping ensures that code continues to execute correctly after paging is enabled, the instruction pointer remains valid because virtual addresses 0--10GB map directly to the same physical addresses.
 
@@ -3131,7 +3141,7 @@ The identity mapping ensures that code continues to execute correctly after pagi
 
 The transition to Long Mode follows the sequence defined in the Intel Software Developer's Manual \cite{Intel-ControlRegisters}, as shown in Listing~\ref{lst:enable_longmode}:
 
-\begin{lstlisting}[style=nasmstyle, caption={Enabling Long Mode and Paging (enables.nasm)}, label={lst:enable_longmode}]
+\begin{nasmcode}[caption={Enabling Long Mode and Paging (enables.nasm)}, label={lst:enable_longmode}]
 LONG_MODE_BIT equ 1 << 8
 EFER_MSR      equ 0xC0000080
 PAGING_BIT    equ 1 << 31
@@ -3160,13 +3170,13 @@ EnablePaging:
     or eax, PAGING_BIT
     mov cr0, eax
     ret
-\end{lstlisting}
+\end{nasmcode}
 
 \subsubsection{Loading Loader64 as an ELF Module}
 
 A critical responsibility of Loader32 is loading the next stage. Loader64 is provided to GRUB as a separate Multiboot2 module. Loader32 locates this module, parses it as an ELF64 executable, allocates memory for its segments, and performs dynamic relocation (Listing~\ref{lst:load_loader64}):
 
-\begin{lstlisting}[caption={Loading Loader64 Module (main.cpp)}, label={lst:load_loader64}]
+\begin{cppcode}[caption={Loading Loader64 Module (main.cpp)}, label={lst:load_loader64}]
 static u64 LoadNextStageModule(MultibootInfo &multiboot_info, 
                                MemoryManagers mem_managers) {
     auto &pmm = mem_managers.pmm;
@@ -3191,13 +3201,13 @@ static u64 LoadNextStageModule(MultibootInfo &multiboot_info,
     
     return entry_point;
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{64-bit GDT and Mode Transition}
 
 Before jumping to 64-bit code, a 64-bit Global Descriptor Table must be loaded. The GDT defines the code and data segments for Long Mode (Listing~\ref{lst:gdt64}):
 
-\begin{lstlisting}[style=nasmstyle, caption={64-bit GDT Definition (gdt.nasm)}, label={lst:gdt64}]
+\begin{nasmcode}[caption={64-bit GDT Definition (gdt.nasm)}, label={lst:gdt64}]
 section .data
 align 16
 GDT64:
@@ -3220,11 +3230,11 @@ GDT64:
     .Pointer:
         dw .End - GDT64 - 1
         dq GDT64
-\end{lstlisting}
+\end{nasmcode}
 
 The final transition performs a far jump to flush the CPU pipeline and begin executing 64-bit code (Listing~\ref{lst:transition64}):
 
-\begin{lstlisting}[style=nasmstyle, caption={Transition to 64-bit Mode (transition\_64.nasm)}, label={lst:transition64}]
+\begin{nasmcode}[caption={Transition to 64-bit Mode (transition\_64.nasm)}, label={lst:transition64}]
     ; Save kernel entry address and loader data pointer
     mov eax, [ebp+8]            ; entry_high
     mov [k_ptr+4], eax
@@ -3251,7 +3261,7 @@ jmp_elf:
     mov rdi, [loader_data_ptr]  ; Pass transition data
     mov rax, [k_ptr]
     jmp rax                     ; Jump to Loader64
-\end{lstlisting}
+\end{nasmcode}
 
 \subsection{Loader64: Position-Independent Higher-Half Setup}
 
@@ -3261,7 +3271,7 @@ Loader64 executes in 64-bit Long Mode but faces a unique challenge: it is loaded
 
 Loader64 is compiled as a Position-Independent Executable (PIE). The CMake configuration is shown in Listing~\ref{lst:loader64_cmake}:
 
-\begin{lstlisting}[language=cmake, caption={Loader64 CMake Configuration}, label={lst:loader64_cmake}]
+\begin{cmakecode}[caption={Loader64 CMake Configuration}, label={lst:loader64_cmake}]
 set_target_properties(alkos.boot.loader.64 PROPERTIES 
     POSITION_INDEPENDENT_CODE ON
 )
@@ -3269,11 +3279,11 @@ target_link_options(alkos.boot.loader.64 PRIVATE
     -fPIE -pie
     "LINKER:-z,norelro"
 )
-\end{lstlisting}
+\end{cmakecode}
 
 This ensures all code uses RIP-relative addressing. The entry point demonstrates this (Listing~\ref{lst:loader64_entry}):
 
-\begin{lstlisting}[style=nasmstyle, caption={Loader64 Entry Point with RIP-Relative Addressing (entry.nasm)}, label={lst:loader64_entry}]
+\begin{nasmcode}[caption={Loader64 Entry Point with RIP-Relative Addressing (entry.nasm)}, label={lst:loader64_entry}]
 section .text
 bits 64
 Entry:
@@ -3295,13 +3305,13 @@ Entry:
     
     mov edi, r10d
     call MainLoader64
-\end{lstlisting}
+\end{nasmcode}
 
 \subsubsection{State Restoration from Loader32}
 
 Loader32 passes its PMM and VMM state to Loader64 via a \texttt{TransitionData} structure. Loader64 deserializes this state to continue memory management, as shown in Listing~\ref{lst:transition_data}:
 
-\begin{lstlisting}[caption={TransitionData Deserialization (main.cpp)}, label={lst:transition_data}]
+\begin{cppcode}[caption={TransitionData Deserialization (main.cpp)}, label={lst:transition_data}]
 static auto InitializeLoaderEnvironment(const TransitionData *transition_data) {
     // Reconstruct PMM from serialized state
     PhysicalMemoryManager *pmm = 
@@ -3316,13 +3326,13 @@ static auto InitializeLoaderEnvironment(const TransitionData *transition_data) {
     
     return {MemoryManagers{*pmm, *vmm}, mb_info};
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Kernel Loading at Higher-Half Address}
 
 The kernel ELF is linked to execute at virtual address \texttt{0xFFFFFFFE00000000}. Loader64 allocates virtual memory at this address and loads the kernel segments (Listing~\ref{lst:kernel_load}):
 
-\begin{lstlisting}[caption={Higher-Half Kernel Loading (main.cpp)}, label={lst:kernel_load}]
+\begin{cppcode}[caption={Higher-Half Kernel Loading (main.cpp)}, label={lst:kernel_load}]
 // Kernel virtual address (upper 33 bits set)
 static constexpr u64 kKernelVirtualAddressStart = 0xFFFFFFFE00000000ULL;
 
@@ -3342,13 +3352,13 @@ static u64 LoadKernelIntoMemory(MultibootInfo &multiboot_info,
     
     return entry_point;
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Direct Memory Mapping}
 
 To allow the kernel to access physical memory directly, Loader64 creates a \textbf{direct memory mapping}, a large region of virtual address space that maps linearly to physical memory (Listing~\ref{lst:direct_map}):
 
-\begin{lstlisting}[caption={Direct Memory Mapping Setup (main.cpp)}, label={lst:direct_map}]
+\begin{cppcode}[caption={Direct Memory Mapping Setup (main.cpp)}, label={lst:direct_map}]
 static constexpr u64 kDirectMemMapAddrStart = 0xFFFF800000000000ULL;
 static constexpr u64 kDirectMemMapSizeGb = 512;
 
@@ -3363,7 +3373,7 @@ static void EstablishDirectMemMapping(MemoryManagers &mms) {
         kPresentBit | kWriteBit | kGlobalBit
     );
 }
-\end{lstlisting}
+\end{cppcode}
 
 This mapping allows the kernel to convert any physical address \texttt{P} to the virtual address \texttt{0xFFFF800000000000 + P}.
 
@@ -3371,7 +3381,7 @@ This mapping allows the kernel to convert any physical address \texttt{P} to the
 
 Before transferring control to the kernel, Loader64 collects essential system information into a \texttt{KernelArguments} structure (Listing~\ref{lst:kernel_args}):
 
-\begin{lstlisting}[caption={Kernel Arguments Preparation (main.cpp)}, label={lst:kernel_args}]
+\begin{cppcode}[caption={Kernel Arguments Preparation (main.cpp)}, label={lst:kernel_args}]
 struct PACK alignas(64) KernelArguments {
     /// Kernel Mem Layout
     u64 kernel_start_addr;
@@ -3412,17 +3422,17 @@ struct PACK alignas(64) KernelArguments {
     u64 multiboot_header_end_addr;
 };
 }
-\end{lstlisting}
+\end{cppcode}
 
 The final transition to the kernel is a simple jump (Listing~\ref{lst:enter_kernel}):
 
-\begin{lstlisting}[style=nasmstyle, caption={Kernel Entry (transition.nasm)}, label={lst:enter_kernel}]
+\begin{nasmcode}[caption={Kernel Entry (transition.nasm)}, label={lst:enter_kernel}]
 ; void EnterKernel(u64 kernel_entry, KernelArguments *args)
 ;                  [rdi]            [rsi]
 EnterKernel:
     xchg rdi, rsi       ; Swap: RDI = args, RSI = entry
     jmp rsi             ; Jump to kernel entry point
-\end{lstlisting}
+\end{nasmcode}
 
 \subsection{Memory Layout}
 
@@ -3470,7 +3480,7 @@ Figure \ref{fig:memory_layout} illustrates the virtual memory layout established
 
 After the kernel receives control, the first architecture-specific function executed is \texttt{arch::ArchInit}. This function enables additional CPU features that were not safe to enable during the bootloader phase, as shown in Listing~\ref{lst:arch_init}:
 
-\begin{lstlisting}[caption={Architecture Initialization (init.cpp)}, label={lst:arch_init}]
+\begin{cppcode}[caption={Architecture Initialization (init.cpp)}, label={lst:arch_init}]
 namespace arch {
 void ArchInit(const RawBootArguments &) {
     BlockHardwareInterrupts();
@@ -3486,7 +3496,7 @@ void ArchInit(const RawBootArguments &) {
     ...
 }
 }
-\end{lstlisting}
+\end{cppcode}
 
 % ==================================================================
 
@@ -3562,7 +3572,7 @@ To minimize memory overhead, the \texttt{PageMeta} structure utilizes a C++ \tex
 
 As shown in Listing \ref{lst:page_meta}, the structure contains a fixed header (type and order) and a polymorphic data section.
 
-\begin{lstlisting}[caption={Polymorphic Page Metadata Structure}, label={lst:page_meta}]
+\begin{cppcode}[caption={Polymorphic Page Metadata Structure}, label={lst:page_meta}]
 struct PageMeta {
     union {
         // State: Page is free and resides in Buddy Allocator
@@ -3594,7 +3604,7 @@ struct PageMeta {
     // Padding ensures alignment and consistent size (40 bytes)
     u8 _padding[4]; 
 };
-\end{lstlisting}
+\end{cppcode}
 
 This design results in a structure size of exactly 40 bytes. Given a standard page size of 4096 bytes, the metadata overhead is approximately $0.97\%$, representing a highly efficient usage of physical memory for bookkeeping.
 
@@ -3620,7 +3630,7 @@ The \texttt{BitmapPmm} operates on the raw memory map provided by the Multiboot2
 
 The allocation algorithm implemented in \texttt{BitmapPmm::Alloc} is a primitive linear search. To satisfy a request for $N$ pages, it scans the bitmap from the last known allocation index until it finds a run of $N$ contiguous zero bits.
 
-\begin{lstlisting}[caption={Bootstrap Linear Allocation Logic}, label={lst:bitmap_alloc}]
+\begin{cppcode}[caption={Bootstrap Linear Allocation Logic}, label={lst:bitmap_alloc}]
 expected<FindBlockResult, MemError> BitmapPmm::FindContiguousBlock(
     size_t start_pfn, size_t end_pfn, u64 num_pages)
 {
@@ -3642,7 +3652,7 @@ expected<FindBlockResult, MemError> BitmapPmm::FindContiguousBlock(
 
     return unexpected(MemError::OutOfMemory);
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Transition to Buddy System}
 While the bitmap allocator is robust, its performance characteristics are poor ($O(N)$ allocation time), and it lacks support for sub-page allocations or efficient fragmentation management. Therefore, its lifespan is strictly limited to the kernel boot sequence.
@@ -3657,7 +3667,7 @@ Upon system initialization, the \texttt{BuddyPmm} takes over as the authoritativ
 
 To achieve high performance and zero memory overhead during runtime, the allocator utilizes an array of intrusive doubly-linked lists, one for each order. It leverages the \texttt{PageMeta} structure described previously. When a block is free, its metadata entry functions as a node in the corresponding free list.
 
-\begin{lstlisting}[caption={Buddy System State Management}, label={lst:buddy_lists}]
+\begin{cppcode}[caption={Buddy System State Management}, label={lst:buddy_lists}]
 class BuddyPmm {
 public:
     static constexpr u8 kMaxOrder = 10;
@@ -3667,7 +3677,7 @@ private:
     
     // ...
 };
-\end{lstlisting}
+\end{cppcode}
 
 This design ensures that pushing or popping a block from the free list involves only pointer manipulation within the pre-allocated metadata table, requiring no auxiliary dynamic allocation.
 
@@ -3681,18 +3691,18 @@ The strength of the Buddy System lies in its ability to rapidly defragment memor
 
 Because block sizes are powers of two, the physical frame number (PFN) of a block's buddy can be calculated instantly using bitwise operations, without traversing any lists.
 
-\begin{lstlisting}[caption={Calculating Buddy PFN}, label={lst:buddy_xor}]
+\begin{cppcode}[caption={Calculating Buddy PFN}, label={lst:buddy_xor}]
 static size_t GetBuddyPfn(size_t pfn, u8 order)
 {
     // The buddy's PFN is found by XORing the current PFN 
     // with the block size (1 << order).
     return pfn ^ (1 << order);
 }
-\end{lstlisting}
+\end{cppcode}
 
 The \texttt{Free} operation performs a loop: it calculates the buddy's address and checks the metadata table. If the buddy is currently free and belongs to the same order, it is removed from the free list, combined with the current block, and the order is incremented. This process repeats until a buddy is found to be occupied or the maximum order is reached.
 
-\begin{lstlisting}[caption={Coalescing Logic}, label={lst:buddy_merge}]
+\begin{cppcode}[caption={Coalescing Logic}, label={lst:buddy_merge}]
 VPtr<PageMeta> BuddyPmm::MergeBlock(VPtr<PageMeta> block)
 {
     u8 order = block->order;
@@ -3716,7 +3726,7 @@ VPtr<PageMeta> BuddyPmm::MergeBlock(VPtr<PageMeta> block)
     
     // ... update metadata for new larger block
 }
-\end{lstlisting}
+\end{cppcode}
 
 
 \subsection{Object Allocator (Slab Allocation)}
@@ -3748,7 +3758,7 @@ AlkOS employs advanced C++ Template Metaprogramming techniques to solve this opt
 
 The system automatically selects the block order that yields the highest efficiency for a given object size.
 
-\begin{lstlisting}[caption={Compile-Time Slab Efficiency Calculation}, label={lst:slab_efficiency}]
+\begin{cppcode}[caption={Compile-Time Slab Efficiency Calculation}, label={lst:slab_efficiency}]
 template <size_t ObjectSize, u8 BlockOrder>
 struct SlabEfficiencyInfo {
     static constexpr size_t kBlockSize = BuddyPmm::BuddyAreaSize(BlockOrder);
@@ -3766,7 +3776,7 @@ struct SlabEfficiencyInfo {
     static constexpr f64 kSpaceEfficiency =
         (static_cast<f64>(kCapacity * ObjectSize) / kBlockSize);
 };
-\end{lstlisting}
+\end{cppcode}
 
 This ensures that the allocator statically guarantees the most memory-efficient layout for every cache without runtime overhead.
 
@@ -3800,7 +3810,7 @@ Standard allocations guarantee natural alignment suitable for the object size (e
 
 To support this, AlkOS implements \texttt{KMallocAligned}. Since the underlying allocators cannot arbitrarily shift the start address of a block, this is achieved through over-allocation and pointer adjustment.
 
-\begin{lstlisting}[caption={Aligned Allocation Strategy}, label={lst:aligned_alloc}]
+\begin{cppcode}[caption={Aligned Allocation Strategy}, label={lst:aligned_alloc}]
 struct AllocationHeader {
     VPtr<void> original_ptr;
 };
@@ -3823,7 +3833,7 @@ expected<VPtr<void>, MemError> Heap::MallocAligned(KMallocRequest r) {
 
     return reinterpret_cast<VPtr<void>>(aligned_addr);
 }
-\end{lstlisting}
+\end{cppcode}
 
 When \texttt{KFreeAligned} is called, the system simply steps back \texttt{sizeof(AllocationHeader)} bytes from the provided pointer to retrieve the \texttt{original\_ptr}, which is then passed to the standard \texttt{Free} routine.
 
@@ -3865,7 +3875,7 @@ To solve this, we implemented a Direct Physical Mapping strategy. A massive regi
 
 This allows the kernel to access any physical object instantly, without modifying page tables. This logic is encapsulated in the helper templates found in \texttt{mem/types.hpp}:
 
-\begin{lstlisting}[caption={Physical to Virtual Address Translation helpers}, label={lst:phys_to_virt}]
+\begin{cppcode}[caption={Physical to Virtual Address Translation helpers}, label={lst:phys_to_virt}]
 template <typename T>
 FORCE_INLINE_F VPtr<T> PhysToVirt(PPtr<T> physAddr)
 {
@@ -3887,7 +3897,7 @@ FORCE_INLINE_F PPtr<T> VirtToPhys(VPtr<T> virtAddr)
     // Handle Kernel Linkage range
     return reinterpret_cast<PPtr<T>>(vaddr - kKernelSpaceStart);
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Hardware Abstraction Layer}
 
@@ -3895,7 +3905,7 @@ To decouple the core VMM logic from the x86-64 specific paging structures (PML4,
 
 Crucially, the interface abstracts architecture-specific protection bits into a generic \texttt{PageFlags} structure. The HAL implementation translates these generic flags into the specific bitmask required by the hardware (e.g., the NX bit or the User/Supervisor bit on x86-64).
 
-\begin{lstlisting}[caption={Generic Page Flags Abstraction}, label={lst:page_flags}]
+\begin{cppcode}[caption={Generic Page Flags Abstraction}, label={lst:page_flags}]
 struct PageFlags {
     bool Present : 1;
     bool Writable : 1;
@@ -3905,7 +3915,7 @@ struct PageFlags {
     bool Global : 1;
     bool NoExecute : 1;
 };
-\end{lstlisting}
+\end{cppcode}
 
 \subsection{The Address Space Abstraction}
 
@@ -3950,7 +3960,7 @@ In a standard x86-64 higher-half kernel, kernel page tables are shared across al
 
 Instead of iterating through every active process to update their page tables whenever the kernel heap grows, we utilize a lazy synchronization approach. If a process accesses a valid kernel address that is missing from its specific PML4, a page fault is triggered. The \texttt{KernelSyncVMemArea::HandleFault} method intercepts this, copies the missing entry from the master kernel page table to the process's page table, and resumes execution.
 
-\begin{lstlisting}[caption={Lazy Kernel Synchronization Logic}, label={lst:kernel_sync}]
+\begin{cppcode}[caption={Lazy Kernel Synchronization Logic}, label={lst:kernel_sync}]
 bool KernelSyncVMemArea::HandleFault(
     VPtr<void> fault_addr, const PageFaultData::ErrorCode &, AddressSpace &as)
 {
@@ -3970,7 +3980,7 @@ bool KernelSyncVMemArea::HandleFault(
 
     return false; // Genuine crash
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsection{Initialization and Handover}
 
@@ -3993,7 +4003,7 @@ Unlike physical memory, virtual memory is abundant (48-bit address space on x86-
 
 The VMM delegates this geometric search to the \texttt{AddressSpace::FindGap} method. This method iterates through the sorted list of existing VMAs. For every pair of adjacent VMAs, it calculates the free space between the end of the first and the start of the second. If the gap is sufficient, it returns the start address aligned to the page size.
 
-\begin{lstlisting}[caption={Gap Search Logic}, label={lst:find_gap}]
+\begin{cppcode}[caption={Gap Search Logic}, label={lst:find_gap}]
 expected<GapInfo, MemError> AS::FindGap(size_t size, VPtr<void> range_start, VPtr<void> range_end)
 {
     // ... setup search bounds ...
@@ -4013,7 +4023,7 @@ expected<GapInfo, MemError> AS::FindGap(size_t size, VPtr<void> range_start, VPt
     }
     // ... check tail gap ...
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Specialized Allocators}
 
@@ -4071,7 +4081,7 @@ Interrupt handling is a critical component of any operating system. Without inte
 \subsubsection{Interrupt Handling}
 On the x86-64 architecture, every interrupt is assigned a unique number (vector) which maps directly to an entry in the \textbf{Interrupt Descriptor Table} (IDT) \cite{IntelManual-Interrupts}. This table contains instructions for the CPU on how to react to specific interrupts. The entry layout is as follows:
 
-\begin{lstlisting}[caption={IDT Entry Layout}, label={lst:idtEntry}]
+\begin{cppcode}[caption={IDT Entry Layout}, label={lst:idtEntry}]
   enum class IdtPrivilegeLevel : u8 { kRing0 = 0, kRing1 = 1, kRing2 = 2, kRing3 = 3 };
 
   struct PACK IdtEntryFlags {
@@ -4090,7 +4100,7 @@ On the x86-64 architecture, every interrupt is assigned a unique number (vector)
       u32 isr_high; // The higher 32 bits of the ISR's address
       u32 reserved; // Set to zero
   };
-\end{lstlisting}
+\end{cppcode}
 
 The most critical component of the IDT entry is the address of the function to be invoked (split into \texttt{isr\_low}, \texttt{isr\_mid}, and \texttt{isr\_high}). Another important field is \texttt{kernel\_cs}, which specifies the code segment \cite{IntelManual-Segments} loaded before executing the handler. In x86-64, there are four privilege levels (Rings). We assume the kernel always operates in Ring 0 (the most privileged level). Therefore, the Ring 0 kernel code segment is always written to this field. Conversely, the \texttt{IdtPrivilegeLevel dpl} field specifies the minimal privilege level required to trigger the interrupt via software, which is essential for implementing system calls (syscalls) invoked from userspace.
 
@@ -4140,7 +4150,7 @@ The layout illustrated in Figure \ref{fig:stackframe} is known as the \textbf{In
 
 A significant challenge with standard compiler-generated functions is that they may modify the stack frame (prologue/epilogue) in ways that interfere with the hardware-defined layout. To maintain full control and prevent stack corruption, we implement assembly wrappers. These wrappers perform the necessary architecture-specific actions before invoking the architecture-agnostic interrupt handling code defined in C++.
 
-\begin{lstlisting}[style=nasmstyle, caption={Assembly ISR wrapper}, label={lst:isr_asm}]
+\begin{nasmcode}[caption={Assembly ISR wrapper}, label={lst:isr_asm}]
 %macro context_switch_if_needed 0
   cmp rax, 0
   je .done                         ; Omit context switch if there is no need
@@ -4179,7 +4189,7 @@ isr_wrapper_%+%2:
 
     context_switch_if_needed
 %endmacro
-\end{lstlisting}
+\end{nasmcode}
 
 \subsubsection{Synchronization}
 
@@ -4247,7 +4257,7 @@ To switch contexts, we must ensure the current thread's state is preserved in a 
 
 We assume that all threads begin execution in kernel space before eventually jumping to user space. Since all interrupt handling occurs within the kernel, the interrupt frame always resides on the kernel stack. Therefore, we can initialize the kernel stack of the new thread with a fabricated frame before the context switch. The initialization procedure is shown in Listing~\ref{lst:threadStack}:
 
-\begin{lstlisting}[caption={Thread stack initialization}, label={lst:threadStack}]
+\begin{cppcode}[caption={Thread stack initialization}, label={lst:threadStack}]
 void InitializeThreadStack(void **stack, const Sched::Task &task)
 {
     /* NOTE: Thread entry always starts in Kernel Code */
@@ -4278,7 +4288,7 @@ void InitializeThreadStack(void **stack, const Sched::Task &task)
     /* Save adjusted stack address */
     *stack = reinterpret_cast<void *>(stack_top);
 }
-\end{lstlisting}
+\end{cppcode}
 
 With both stack frames prepared, the context switch logic is straightforward: swap the \textbf{RSP} (current stack pointer) to the kernel stack of the target thread and execute the \textbf{IRETQ} instruction. This instruction restores the state and resumes execution, as demonstrated in the \textbf{context\_switch\_if\_needed} macro (Listing \ref{lst:isr_asm}).
 
@@ -4286,7 +4296,7 @@ With both stack frames prepared, the context switch logic is straightforward: sw
 
 Transitioning to userspace is performed similarly to a thread context switch. We construct an artificial interrupt frame, but in this case, the code segment and stack segment within the frame are set to the user space selectors, and the stack pointer is set to the user space stack. The C++ implementation is shown in Listing~\ref{lst:userSpaceJump}, and the corresponding NASM code is shown in Listing~\ref{lst:userSpaceJumpNasm}:
 
-\begin{lstlisting}[caption={Userspace Jump C++ code}, label={lst:userSpaceJump}]
+\begin{cppcode}[caption={Userspace Jump C++ code}, label={lst:userSpaceJump}]
 extern "C" void cdecl_JumpToUserSpaceEntry(void *addr, IsrStackFrame *frame)
 {
     ASSERT_NOT_NULL(addr);
@@ -4309,9 +4319,9 @@ extern "C" void cdecl_JumpToUserSpaceEntry(void *addr, IsrStackFrame *frame)
     SetThreadGs(thread);
     __asm__ volatile("swapgs" ::: "memory");
 }
-\end{lstlisting}
+\end{cppcode}
 
-\begin{lstlisting}[style=nasmstyle, caption={Userspace Jump NASM code}, label={lst:userSpaceJumpNasm}]
+\begin{nasmcode}[caption={Userspace Jump NASM code}, label={lst:userSpaceJumpNasm}]
 ; c_decl
 ; void JumpToUserSpace(void (*func)(), void* arg)
 ;   RDI = func
@@ -4336,7 +4346,7 @@ JumpToUserSpace:
     pop rsi
     mov rdi, rsi ; prepare void* arg for func if needed
     iretq
-\end{lstlisting}
+\end{nasmcode}
 
 \subsection{Interrupts Hardware Abstraction}
 
@@ -4365,7 +4375,7 @@ The architecture-specific code is responsible for detecting available hardware a
 
 Clock Drivers are defined by the structure shown in Listing~\ref{lst:clockDriver}:
 
-\begin{lstlisting}[caption={Clock Driver Structure}, label={lst:clockDriver}]
+\begin{cppcode}[caption={Clock Driver Structure}, label={lst:clockDriver}]
 struct alignas(arch::kCacheLineSizeBytes) ClockRegistryEntry : data_structures::RegistryEntry {
   /* Clock numbers */
   u64 frequency_kHz; // Frequency in kHz
@@ -4384,7 +4394,7 @@ struct alignas(arch::kCacheLineSizeBytes) ClockRegistryEntry : data_structures::
   /* Own data */
   void *own_data;
 };
-\end{lstlisting}
+\end{cppcode}
 
 For the x86-64 architecture, clock selection is prioritized based on availability and precision in the following order: TSC > HPET > RTC > PIT. Currently, support is implemented only for the TSC and HPET drivers.
 
@@ -4398,7 +4408,7 @@ The High Precision Event Timer (HPET) also offers high precision and is generall
 
 Event Clock Drivers are defined by the structure shown in Listing~\ref{lst:eventClockDriver}:
 
-\begin{lstlisting}[caption={Event Clock Driver Structure}, label={lst:eventClockDriver}]
+\begin{cppcode}[caption={Event Clock Driver Structure}, label={lst:eventClockDriver}]
 struct PACK EventClockFlags {
     bool IsCoreLocal : 1;
     u32 padding : 31;
@@ -4440,7 +4450,7 @@ struct alignas(arch::kCacheLineSizeBytes) EventClockRegistryEntry : data_structu
         void (*on_exit)(EventClockRegistryEntry *);         // optional
     } cbs;
 };
-\end{lstlisting}
+\end{cppcode}
 
 For x86-64, the selection of event clocks is based on the following priority order: LAPIC Timer > HPET > PIT. Currently, only the LAPIC Timer is supported as it provides the core-local interrupt capabilities required for efficient scheduling.
 
@@ -4528,7 +4538,7 @@ When a VFS operation (e.g., \texttt{CreateFile}) is invoked, the module executes
 \end{enumerate}
 An example implementation is shown in Listing~\ref{lst:vfsModuleCreateFile}.
 
-\begin{lstlisting}[caption={VfsModule CreateFile Implementation}, label={lst:vfsModuleCreateFile}]
+\begin{cppcode}[caption={VfsModule CreateFile Implementation}, label={lst:vfsModuleCreateFile}]
 Result<> internal::VfsModule::CreateFile(const Path &path)
 {
     auto mount_result = FindMountPoint(path);
@@ -4541,13 +4551,13 @@ Result<> internal::VfsModule::CreateFile(const Path &path)
     Path relative_path = GetRelativePath_(path, mount->path);
     return mount->fs.CreateFile(relative_path);
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Filesystem Interface}
 
 The \texttt{vfs::Filesystem} struct acts as a uniform interface that all concrete filesystem drivers must expose (Listing~\ref{lst:vfsFilesystem}). It contains function pointers for various file and directory manipulations, alongside metadata about the filesystem. Each function pointer accepts a \texttt{void* ctx} argument, allowing the generic VFS layer to pass the concrete driver instance.
 
-\begin{lstlisting}[caption={vfs::Filesystem Structure}, label={lst:vfsFilesystem}]
+\begin{cppcode}[caption={vfs::Filesystem Structure}, label={lst:vfsFilesystem}]
 struct Filesystem {
     struct Operations {
         // File operations
@@ -4576,7 +4586,7 @@ private:
     Operations ops_;
     Info info_;
 };
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Filesystem Driver}
 
@@ -4584,7 +4594,7 @@ Each filesystem driver implements the logic required for a specific filesystem t
 
 To implement these drivers efficiently, we employ the Curiously Recurring Template Pattern (CRTP) \cite{crtp}. Each driver class inherits from a templated base class that provides common functionality, while the derived class implements format-specific details (Listing~\ref{lst:fatCrtp}). This approach enables static polymorphism, reducing the runtime overhead typically associated with virtual function calls.
 
-\begin{lstlisting}[caption={FAT Driver CRTP Base Class}, label={lst:fatCrtp}]
+\begin{cppcode}[caption={FAT Driver CRTP Base Class}, label={lst:fatCrtp}]
 template <template <typename> typename T, typename IO>
 class Fat
 {
@@ -4617,11 +4627,11 @@ private:
     }
     // ...
 };
-\end{lstlisting}
+\end{cppcode}
 
 Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT entries differs between FAT12 and FAT32/16, as shown in Listing~\ref{lst:fat12GetFatEntry}) and provides a static \texttt{IsValid(IO \&io)} method to probe whether a given I/O device contains a valid instance of that filesystem.
 
-\begin{lstlisting}[caption={Fat12 GetFATEntry Implementation}, label={lst:fat12GetFatEntry}]
+\begin{cppcode}[caption={Fat12 GetFATEntry Implementation}, label={lst:fat12GetFatEntry}]
     NODISCARD FORCE_INLINE_F ClusterNumT GetFATEntry_(ClusterNumT cluster) const
     {
         ASSERT_LT(
@@ -4643,7 +4653,7 @@ Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT en
             return internal::get<ClusterNumT>(range, sector_offset) >> 4;
         }
     }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{VFS Interfaces and Concepts}
 
@@ -4651,18 +4661,18 @@ To enforce architectural compliance at compile time, we utilize C++20 Concepts t
 
 The \texttt{VFSInterface} concept (Listing \ref{lst:vfsInterfaceConcept}) mandates that any compliant driver class must provide a constructor accepting an I/O backend, a static method to validate the filesystem signature on the storage medium, and a method to retrieve the runtime function table.
 
-\begin{lstlisting}[caption={VFSInterface Concept Definition}, label={lst:vfsInterfaceConcept}]
+\begin{cppcode}[caption={VFSInterface Concept Definition}, label={lst:vfsInterfaceConcept}]
 template <template <typename> typename T, typename IO>
 concept VFSInterface = VFSIO<IO> and requires(T<IO> fs, IO io) {
     T<IO>(io);
     { T<IO>::IsValid(io) } -> std::same_as<bool>;
     { fs.GetFilesystem() } -> std::same_as<Filesystem>;
 };
-\end{lstlisting}
+\end{cppcode}
 
 The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, filesystem drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends --- such as RAM disks, physical partitions, or network storage --- without requiring implementation changes.
 
-\begin{lstlisting}[caption={VFSIO Concept Definition}, label={lst:vfsioConcept}]
+\begin{cppcode}[caption={VFSIO Concept Definition}, label={lst:vfsioConcept}]
 template <typename IO>
 concept VFSIO =
     requires(IO io, size_t offset, io::SectorRange range, std::span<const byte> data, size_t size) {
@@ -4672,7 +4682,7 @@ concept VFSIO =
         { io.WriteSector(offset, data) } -> std::same_as<void>;
         { io.GetSectorSize() } -> std::same_as<size_t>;
     };
-\end{lstlisting}
+\end{cppcode}
 
 \subsection{File Descriptors}
 
@@ -4690,7 +4700,7 @@ As depicted in Figure \ref{fig:fd_architecture}, the system comprises three main
 \subsubsection{FdTable (Per-Process)}
 Each process maintains its own \texttt{FdTable}, which is an array mapping integer file descriptors to \texttt{RefPtr<OpenFileEntry>} objects (Listing~\ref{lst:fdTableAllocate}).
 
-\begin{lstlisting}[caption={FdTable Allocation}, label={lst:fdTableAllocate}]
+\begin{cppcode}[caption={FdTable Allocation}, label={lst:fdTableAllocate}]
 FdResult<fd_t> FdTable::Allocate(data_structures::RefPtr<OpenFileEntry> global_entry)
 {
     std::lock_guard lock(lock_);
@@ -4703,13 +4713,13 @@ FdResult<fd_t> FdTable::Allocate(data_structures::RefPtr<OpenFileEntry> global_e
     }
     return std::unexpected(FdError::kFdTableFull);
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{OpenFileTable (Global)}
 
 The \texttt{OpenFileTable} is a system-wide pool of \texttt{OpenFileEntry} objects. Each entry represents a unique "open" instance of a resource (file or pipe), maintaining dynamic state such as the current read/write offset, access flags (e.g., Read/Write), and a handle to the underlying resource. Multiple file descriptors from different processes can point to the same \texttt{OpenFileEntry}, allowing them to share the cursor position (Listing~\ref{lst:openFileTableOpenFile}).
 
-\begin{lstlisting}[caption={OpenFileTable Creation}, label={lst:openFileTableOpenFile}]
+\begin{cppcode}[caption={OpenFileTable Creation}, label={lst:openFileTableOpenFile}]
 FdResult<data_structures::RefPtr<OpenFileEntry>> OpenFileTable::OpenFile(File *file, OpenMode flags)
 {
     RET_UNEXPECTED_IF(file == nullptr, FdError::kInvalidArgument);
@@ -4733,14 +4743,14 @@ FdResult<data_structures::RefPtr<OpenFileEntry>> OpenFileTable::OpenFile(File *f
 
     return data_structures::RefPtr(entry);
 }
-\end{lstlisting}
+\end{cppcode}
 
 The \texttt{FileHandle} utilizes a \texttt{NonOwningTaggedPtr} to hold either a pointer to a \texttt{File} object or a \texttt{Pipe} instance, enabling the \texttt{OpenFileEntry} to manage both cases seamlessly.
 
 \subsubsection{FileTable (Global)}
 The \texttt{FileTable} manages unique \texttt{File} objects system-wide (Listing~\ref{lst:fileTableGetOrCreate}). Each \texttt{File} object acts as the in-memory representation of a physical file on the filesystem, storing static attributes such as the path and file size. This ensures that a file on the VFS has a single representation in memory, regardless of how many times it has been opened.
 
-\begin{lstlisting}[caption={FileTable GetOrCreate}, label={lst:fileTableGetOrCreate}]
+\begin{cppcode}[caption={FileTable GetOrCreate}, label={lst:fileTableGetOrCreate}]
 FdResult<data_structures::RefPtr<File>> FileTable::GetOrCreate(const vfs::Path &path)
 {
     RET_UNEXPECTED_IF(path.IsEmpty(), FdError::kInvalidArgument);
@@ -4766,12 +4776,12 @@ FdResult<data_structures::RefPtr<File>> FileTable::GetOrCreate(const vfs::Path &
 
     return data_structures::RefPtr(file);
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{FdManager}
 The \texttt{FdManager} integrates these three tables and exposes file descriptor operations (e.g., \texttt{Open}, \texttt{Close}, \texttt{Read}). When a process requests to open a file, the \texttt{FdManager} coordinates the interaction: it validates existence via the VFS module, retrieves the \texttt{File} object, creates a new entry in the \texttt{OpenFileTable}, and finally assigns a file descriptor in the process's \texttt{FdTable} (Listing~\ref{lst:fdManagerOpen}).
 
-\begin{lstlisting}[caption={FdManager Open Implementation}, label={lst:fdManagerOpen}]
+\begin{cppcode}[caption={FdManager Open Implementation}, label={lst:fdManagerOpen}]
 FdResult<fd_t> FdManager::Open(const vfs::Path &path, OpenMode flags)
 {
     // Check if file exists in VFS
@@ -4793,7 +4803,7 @@ FdResult<fd_t> FdManager::Open(const vfs::Path &path, OpenMode flags)
 
     return *fd_result;
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Resource Lifecycle Management}
 
@@ -4811,7 +4821,7 @@ The scheduling module is the final core component of the operating system, relyi
 
 The process structure is defined in Listing~\ref{lst:processStruct}:
 
-\begin{lstlisting}[caption={Process Structure}, label={lst:processStruct}]
+\begin{cppcode}[caption={Process Structure}, label={lst:processStruct}]
 struct PACK Pid {
     u16 id;
     u64 count : 48;
@@ -4858,7 +4868,7 @@ struct Process : hal::Process {
     IO::Pipe<Fs::kStdioBufferSize> stdout_pipe;
     IO::Pipe<Fs::kStdioBufferSize> stderr_pipe;
 };
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{PID}
 \label{subsubsec:pid}
@@ -4915,7 +4925,7 @@ The entire operating system shares a single Kernel Address Space. Every kernel p
 
 The thread structure is defined as follows:
 
-\begin{lstlisting}[caption={Thread Structure}, label={lst:threadStruct}]
+\begin{cppcode}[caption={Thread Structure}, label={lst:threadStruct}]
 enum class UserPriority : u8 { kLow = 0, kMediumLow, kMedium, kMediumHigh, kHigh, kLast };
 
 struct PACK Tid {
@@ -4986,7 +4996,7 @@ struct Thread : data_structures::IntrusiveRbNode<Thread, u64, kSchedulingIntrusi
 
     NODISCARD u64 CalculateCpuTime();
 };
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{TID}
 
@@ -5052,7 +5062,7 @@ Before initializing the scheduling module, the operating system creates three es
 
 Since threads frequently migrate between different linked lists and data structures, allocating and freeing list nodes for every operation introduces significant overhead. To address this, the system employs intrusive data structures \ref{subsec:intrusive}. Instead of allocating a node that contains a pointer to the object, the node structure is embedded directly within the object itself. Operations on the lists are performed by simply modifying the fields of the object.
 
-\begin{lstlisting}[caption={Intrusive Nodes}, label={lst:intrusiveNodes}]
+\begin{cppcode}[caption={Intrusive Nodes}, label={lst:intrusiveNodes}]
 template <class T, int kIntrusiveLevel>
 struct IntrusiveListNode {
     T *next;
@@ -5083,7 +5093,7 @@ struct IntrusiveRbNode {
     Color color;
     KeyT key;
 };
-\end{lstlisting}
+\end{cppcode}
 
 \subsection{Meta-Scheduler}
 
@@ -5115,7 +5125,7 @@ The following scheduling policies have been implemented:
 
 \noindent These policies establish a hierarchy defined by the enumeration shown in Listing~\ref{lst:policyHierarchy}:
 
-\begin{lstlisting}[caption={Scheduling Policy Hierarchy}, label={lst:policyHierarchy}]
+\begin{cppcode}[caption={Scheduling Policy Hierarchy}, label={lst:policyHierarchy}]
 // PO > P1 > .. > P4
 enum SchedulingPolicy {
     kUberTask_PQ_P0 = 0,
@@ -5125,7 +5135,7 @@ enum SchedulingPolicy {
     kBackgroundTasks_RR_P4,
     kLast,
 };
-\end{lstlisting}
+\end{cppcode}
 
 Each policy is designated for a specific group of tasks:
 
@@ -5144,7 +5154,7 @@ Each policy is designated for a specific group of tasks:
 
 The policy abstraction is shown in Listing~\ref{lst:policyStruct}:
 
-\begin{lstlisting}[caption={Policy Abstraction}, label={lst:policyStruct}]
+\begin{cppcode}[caption={Policy Abstraction}, label={lst:policyStruct}]
 struct Policy {
     struct {
         Thread *(*pick_next_task)(void *);
@@ -5161,7 +5171,7 @@ struct Policy {
     } cbs;
     void *self;
 };
-\end{lstlisting}
+\end{cppcode}
 
 As shown, the primary operation is \textbf{pick\_next\_task}, alongside standard \textbf{add\_task} and \textbf{remove\_task} operations. Additionally, helper functions are provided for the scheduler and for statistics gathering.
 
@@ -5222,7 +5232,7 @@ AlkOS supports userspace applications written in C and C++. These applications a
 
 Userspace programs reside in the \texttt{userspace/programs/} directory. Each application is placed in its own subdirectory and must include all relevant source files along with a \texttt{CMakeLists.txt} configuration file. A minimal example of a user application is shown in Listing \ref{lst:minimalUserAppStructure}.
 
-\begin{lstlisting}[caption={Minimal User Application Structure}, label={lst:minimalUserAppStructure}]
+\begin{cppcode}[caption={Minimal User Application Structure}, label={lst:minimalUserAppStructure}]
 // userspace/programs/my_app/main.cpp
 #include <stdio.h>
 
@@ -5230,20 +5240,17 @@ extern "C" int main() {
     printf("Hello from AlkOS User Space!\n");
     return 0;
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Build System Integration}
 
 To include a userspace application in the build process, it must be registered with the CMake-based build system. AlkOS provides the helper macro \texttt{alkos\_register\_userspace\_app}, which automatically configures compiler flags and links the application against the custom C and C++ standard libraries (\texttt{libc} and \texttt{libc++}). An example registration is shown in Listing \ref{lst:userAppCMakeRegistration}.
 
-{
-    \renewcommand{\lstlistingname}{CMake Snippet}
-    \begin{lstlisting}[style=cmakestyle, caption={User Application Registration}, label={lst:userAppCMakeRegistration}]
-    # userspace/programs/my_app/CMakeLists.txt
-    alkos_find_sources(MY_APP_SOURCES)
-    alkos_register_userspace_app(my_app "${MY_APP_SOURCES}")
-    \end{lstlisting}
-}
+\begin{cmakecode}[caption={User Application Registration}, label={lst:userAppCMakeRegistration}]
+# userspace/programs/my_app/CMakeLists.txt
+alkos_find_sources(MY_APP_SOURCES)
+alkos_register_userspace_app(my_app "${MY_APP_SOURCES}")
+\end{cmakecode}
 
 After registration, the application is automatically compiled, linked, and placed in the \texttt{/bin} directory of the root filesystem during the next build.
 
@@ -5353,7 +5360,7 @@ The \texttt{hello\_world} program serves as the verification of the system call 
 
 The application calls \texttt{printf}, which internally buffers data and invokes the \texttt{write} system call. The successful appearance of text on the debug terminal confirms that we successfully transitioned from user space to kernel space and back, validating that the syscall dispatcher correctly routes requests to the appropriate kernel handlers (Listing~\ref{lst:hello_stdout}).
 
-\begin{lstlisting}[caption={Hello World Standard Output Test}, label={lst:hello_stdout}]
+\begin{cppcode}[caption={Hello World Standard Output Test}, label={lst:hello_stdout}]
 // userspace/programs/hello_world/main.cpp
 
 extern "C" int main()
@@ -5367,7 +5374,7 @@ extern "C" int main()
     // ... file operations
     return 0;
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{File I/O Verification}
 
@@ -5375,7 +5382,7 @@ Beyond standard output, the program performs a sequence of file manipulations to
 
 This sequence validates path resolution, file descriptor table management in the kernel, and the read/write logic of the filesystem driver (Listing~\ref{lst:hello_fileio}).
 
-\begin{lstlisting}[caption={File I/O Verification Logic}, label={lst:hello_fileio}]
+\begin{cppcode}[caption={File I/O Verification Logic}, label={lst:hello_fileio}]
     // Open an existing file with read/write permissions
     FILE *fp = fopen("/docs/greet.txt", "r+");
     if (!fp) {
@@ -5400,7 +5407,7 @@ This sequence validates path resolution, file descriptor table management in the
 
     printf("Read from file: '%s'\n", buffer);
     fclose(fp);
-\end{lstlisting}
+\end{cppcode}
 
 \subsection{Graphics Test}
 
@@ -5417,7 +5424,7 @@ The \texttt{gui\_test} application demonstrates the capability of the kernel to 
 
 The application begins by invoking the \texttt{create\_graphic\_session} system call (Listing~\ref{lst:gui_init}). This request instructs the kernel's window manager to allocate a physical memory buffer acting as a backbuffer for the process. The kernel then maps this physical memory into the virtual address space of the process and returns a \texttt{GuiBufferInfo} structure.
 
-\begin{lstlisting}[caption={Initializing Graphical Session}, label={lst:gui_init}]
+\begin{cppcode}[caption={Initializing Graphical Session}, label={lst:gui_init}]
 // userspace/programs/gui_test/main.cpp
 
 extern "C" int main()
@@ -5437,13 +5444,13 @@ extern "C" int main()
     
     // ... rendering loop
 }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Direct Framebuffer Manipulation}
 
 Once the session is established, the application treats the video buffer as a linear array of pixels. It implements a rendering loop that generates a moving pattern by calculating pixel colors based on coordinates and a time-variable offset (Listing~\ref{lst:gui_render}).
 
-\begin{lstlisting}[caption={Software Rendering Loop}, label={lst:gui_render}]
+\begin{cppcode}[caption={Software Rendering Loop}, label={lst:gui_render}]
     while (true) {
         for (size_t y = 0; y < info.height; ++y) {
             for (size_t x = 0; x < info.width; ++x) {
@@ -5464,13 +5471,13 @@ Once the session is established, the application treats the video buffer as a li
         }
         // ...
     }
-\end{lstlisting}
+\end{cppcode}
 
 \subsubsection{Double Buffering and Synchronization}
 
 To prevent screen tearing, AlkOS employs a double-buffering strategy. The user application writes to its private backbuffer. To display the frame, the application calls \texttt{blit()} (Listing~\ref{lst:gui_sync}). This system call triggers the kernel's window manager to copy the contents of the user's backbuffer to the physical video memory if its session is currently active.
 
-\begin{lstlisting}[caption={Frame Synchronization}, label={lst:gui_sync}]
+\begin{cppcode}[caption={Frame Synchronization}, label={lst:gui_sync}]
     // Blit to screen
     __platform_blit();
 
@@ -5478,7 +5485,7 @@ To prevent screen tearing, AlkOS employs a double-buffering strategy. The user a
 
     // Frame limiting
     NanoSleep(16'000'000); // ~60 FPS
-\end{lstlisting}
+\end{cppcode}
 
 \subsection{Shell}
 
@@ -5492,7 +5499,7 @@ The shell provides a text-based command-line interface. This is achieved through
 
 The shell implements a Read-Eval-Print Loop (REPL). It reads input from \texttt{stdin}, which is connected to a kernel pipe fed by the keyboard driver. The \texttt{ProcessCommand} method processes the input string and dispatches execution (Listing~\ref{lst:shell_process}).
 
-\begin{lstlisting}[caption={Shell Command Processing}, label={lst:shell_process}]
+\begin{cppcode}[caption={Shell Command Processing}, label={lst:shell_process}]
 // userspace/programs/shell/shell.cpp
 
 void Shell::ProcessCommand()
@@ -5517,7 +5524,7 @@ void Shell::ProcessCommand()
         console_.PutChar('\n');
     }
 }
-\end{lstlisting}
+\end{cppcode}
 
 \begin{figure}[htbp]
     \centering
