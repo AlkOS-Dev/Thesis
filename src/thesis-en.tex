@@ -2431,7 +2431,7 @@ A specific scheduling algorithm must be selected based on the optimization goals
     \item Prioritizing critical tasks
 \end{itemize}
 
-No single scheduler can be ideal in all metrics; therefore, a balanced solution suitable for the system's specific purpose is required. 
+No single scheduler can be ideal in all metrics. Therefore, a balanced solution suitable for the system's specific purpose is required. 
 
 Furthermore, task prioritization is essential. For instance, audio or block device drivers require immediate execution to ensure data consistency and user experience. To address this, hybrid policies (such as \texttt{SCHED\_FIFO} in Linux \ref{subsec:linux-scheduler}) allow critical tasks to operate in a cooperative manner, yielding only when necessary, while other tasks remain preemptible.
 
@@ -2486,7 +2486,7 @@ To implement sleeping functionality, two primary operations must be introduced: 
 
 In a cooperative scheduling model, the wake-up logic can simply be integrated into the function responsible for selecting the next task. However, in preemptive and high-precision scenarios, the system must actively manage the timing framework to wake threads without introducing unnecessary latency.
 
-For kernels utilizing a periodic tick, handling sleep operations with granularity aligned to the tick interval is straightforward. Waking tasks can be performed by iterating through sleeping threads upon every timer interrupt. Efficient algorithms, such as the timer wheel \cite{linux_timer_wheel}, exist to manage this type of coarse-grained sleeping.
+For kernels utilizing a periodic tick, handling sleep operations with granularity aligned to the tick interval is straightforward. Waking upt tasks can be performed on every timer interrupt. We just have to count how many times the interrupt fired (how many ticks have passed). Efficient algorithms, such as the timer wheel \cite{linux_timer_wheel}, exist to manage this type of coarse-grained sleeping.
 
 In contrast, for a tickless kernel where interrupts are scheduled dynamically, the implementation is more intricate. This approach requires maintaining an execution timeline, typically implemented using a priority queue to sort tasks by their wake-up timestamps. For high-precision sleep (e.g., \texttt{nanosleep}), hardware constraints become a critical factor. If the requested sleep duration is smaller than the overhead required to interact with the timing module or reconfigure the hardware timer, busy-waiting may be a more efficient alternative. Designing such a framework requires careful consideration of timing constraints, such as the time consumed by timer reconfiguration and ensuring that the calculated wake-up time has not already passed during the configuration process. Additionally, whenever the timer is reprogrammed, the system must ensure that any tasks scheduled to wake up before the new interrupt time are correctly handled.
 
@@ -2561,7 +2561,7 @@ The syscall interface is the primary attack surface of the kernel. The kernel mu
 
 \paragraph{Performance Optimization}
 
-For high-frequency operations where even the minimal syscall overhead is too high (e.g., querying the system time), Linux employs \textbf{vDSO} (virtual Dynamic Shared Object). This mechanism maps a read-only page of kernel memory containing specific data and code into the user process. The application can then execute a standard function call to read this data without ever triggering a context switch or entering kernel mode \cite{linux_vdso}.
+For high-frequency operations where even the minimal syscall overhead is too high (e.g., querying the system time), one may employ \textbf{vDSO} (virtual Dynamic Shared Object). This mechanism maps a read-only page of kernel memory containing specific data and code into the user process. The application can then execute a standard function call to read this data without ever triggering a context switch or entering kernel mode (e.g. linux \cite{linux_vdso}).
 
 \subsection{Libc System Headers}
 
@@ -2682,7 +2682,7 @@ Userspace programs require a well-defined runtime initialization sequence to pre
 \subsubsection{OS-Specific Toolchain Adaptation}
 \label{subsubsec:os-specific-toolchain}
 
-While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86-64-elf}) is sufficient for compiling the kernel itself, it presents limitations for userspace development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively  (e.g., via a target like \texttt{x86-64-alkos}) \cite{osdev-os-specific-toolchain}. This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts. From this point onward, one should provide its own toolchain source code (or patches), alongside the OS source code, instead of relying on an upstream one.
+While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86-64-elf}) is sufficient for compiling the kernel itself, it presents limitations for userspace development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively  (e.g., via a target like \texttt{x86-64-youros}) \cite{osdev-os-specific-toolchain}. This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts. From this point onward, one should provide its own toolchain source code (or patches), alongside the OS source code, instead of relying on an upstream one.
 
 \paragraph{System Root (Sysroot)}
 
