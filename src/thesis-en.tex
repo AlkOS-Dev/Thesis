@@ -409,7 +409,7 @@ Responsible for scheduling, process and thread lifecycle management, context swi
 
 Responsible for storage and filesystem management (including the abstraction layer and implementation of the FAT filesystem family), the standard C library (libc), the system interface (syscalls and libc extensions), and hardware interaction via ACPI and other drivers.
 
-\subsubsection{Łukasz Kryczka} TODO: KRYCZKA CHECK
+\subsubsection{Łukasz Kryczka}
 
 Responsible primarily for virtual memory, physical memory management, allocation strategies, bootloaders and graphics.
 
@@ -1273,7 +1273,6 @@ A critical design requirement for such a framework is test isolation. In a kerne
 
 \section{Memory Management}
 \label{subsec:os_tutorial_mem}
-TODO: KRYCZKA
 
 \section{Physical Memory Management}
 \label{subsubsec:physical_memory_management}
@@ -1589,9 +1588,6 @@ Finally, the PMM must respect the physical limitations of the hardware. Not all 
 \end{itemize}
 
 A common solution is to partition the physical address space into disjoint \textbf{regions} or \textbf{zones}, each managed by a separate allocator instance. Allocation requests carry metadata (flags or capabilities) indicating which regions are acceptable. The allocator attempts the preferred region first and falls back to others only if permitted. Critically, a request for DMA-capable memory \textit{cannot} fall back to high memory-the hardware simply cannot address those frames.
-
-\subsubsection{Kernel Space Allocation API}
-TODO: KRYCZKA
 
 \section{Virtual Memory Management}
 \label{sec:vmm}
