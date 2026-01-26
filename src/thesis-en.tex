@@ -402,10 +402,10 @@ The primary objective of this project, as initially defined, was to implement a 
     \item Preemptive scheduling --- the ability to interrupt a running task to switch context. 
     \item General-purpose scheduling --- designing a scheduler suitable for generic workloads. 
     \item Implementation of a scheduling algorithm --- at least something as simple as Round Robin. 
-    \item x86-64 Architecture --- targeting the x86-64 archietcture only. 
+    \item x86-64 Architecture --- targeting the x86-64 architecture only.
 \end{itemize}
 
-At the outset of the project, specific requirements were not rigidly defined due to the uncertainty regarding the complexity and effort required for the implementation. It was anticipated that the challenge would be significant, necessitating extensive research, quality assurance, and the development of components from scratch. Driven by a strong interest in the subject matter, development started over a year ago with the objective of implementing as comprehensive a system as time constraints would permit. Ultimately, the scope of the realized system significantly exceeds the initial assumptions. Subsequent chapters describe the complete thoery and implementation details, which extends beyond the original scope to include a complex scheduler, file systems, a robust userspace environment, and ported software, specifically the Doom game.
+At the outset of the project, specific requirements were not rigidly defined due to the uncertainty regarding the complexity and effort required for the implementation. It was anticipated that the challenge would be significant, necessitating extensive research, quality assurance, and the development of components from scratch. Driven by a strong interest in the subject matter, development started over a year ago with the objective of implementing as comprehensive a system as time constraints would permit. Ultimately, the scope of the realized system significantly exceeds the initial assumptions. Subsequent chapters describe the complete theory and implementation details, which extends beyond the original scope to include a complex scheduler, file systems, a robust userspace environment, and ported software, specifically the Doom game.
 
 \section{Work Division --- Code}
 
@@ -436,7 +436,7 @@ This chapter outlines the development sequence of the kernel's most critical com
 
 \section{Host Environment Preparation}
 
-Before proceeding to writing actual kernel code we must first do some preparation on our development tools and development environemnts. Below we can find brief description of needed things.
+Before proceeding to writing actual kernel code we must first do some preparation on our development tools and development environments. Below we can find brief description of needed things.
 
 \subsection{Cross-Compilation Toolchain}
 \label{subsec:theory_toolchain}
@@ -724,7 +724,7 @@ The usage of reference counting offers multiple benefits critical for systems pr
     \item \textbf{Compile-time safety} -- Encapsulation within RAII-compliant wrappers (e.g., smart pointers) allows the compiler to enforce ownership semantics, automating reference management and structurally preventing resource leaks.
 \end{itemize}
 
-\subsection{Archtiecture Abstraction}
+\subsection{Architecture Abstraction}
 TODO: KRYCZKA
 
 \section{Implementation of the Standard Library}
@@ -1160,7 +1160,7 @@ On general-purpose platforms (x86-64), the hardware is modular. The kernel canno
 \end{itemize}
 
 \subsection{Hardware Abstraction}
-How does the kernel handle such diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and wil be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
+How does the kernel handle such diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and will be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
 
 \subsection{Discovering and Enabling CPU Features}
 \label{subsec:cpu_discovery}
@@ -1549,7 +1549,7 @@ TLSF is the preferred allocator for real-time kernels because it guarantees wors
 
 \subsection{Advanced Layering: Object Caching (Slab)}
 
-The mechanisms described so far (Buddy, TLSF) manage raw blocks of memory. However, the operating system kernel rarely wants just "64 bytes". Tt usually wants a specific object, such as a process control block, a file descriptor, or a synchronization primitive.
+The mechanisms described so far (Buddy, TLSF) manage raw blocks of memory. However, the operating system kernel rarely wants just "64 bytes". It usually wants a specific object, such as a process control block, a file descriptor, or a synchronization primitive.
 
 Initializing these objects can be expensive. For example, initializing a kernel mutex involves setting internal flags, initializing wait queues, and perhaps interacting with hardware interrupt controllers. If an object is allocated, initialized, used, destroyed, and freed repeatedly, the CPU spends significant cycles just setting up and tearing down the same state.
 
@@ -2486,7 +2486,7 @@ To implement sleeping functionality, two primary operations must be introduced: 
 
 In a cooperative scheduling model, the wake-up logic can simply be integrated into the function responsible for selecting the next task. However, in preemptive and high-precision scenarios, the system must actively manage the timing framework to wake threads without introducing unnecessary latency.
 
-For kernels utilizing a periodic tick, handling sleep operations with granularity aligned to the tick interval is straightforward. Waking upt tasks can be performed on every timer interrupt. We just have to count how many times the interrupt fired (how many ticks have passed). Efficient algorithms, such as the timer wheel \cite{linux_timer_wheel}, exist to manage this type of coarse-grained sleeping.
+For kernels utilizing a periodic tick, handling sleep operations with granularity aligned to the tick interval is straightforward. Waking up tasks can be performed on every timer interrupt. We just have to count how many times the interrupt fired (how many ticks have passed). Efficient algorithms, such as the timer wheel \cite{linux_timer_wheel}, exist to manage this type of coarse-grained sleeping.
 
 In contrast, for a tickless kernel where interrupts are scheduled dynamically, the implementation is more intricate. This approach requires maintaining an execution timeline, typically implemented using a priority queue to sort tasks by their wake-up timestamps. For high-precision sleep (e.g., \texttt{nanosleep}), hardware constraints become a critical factor. If the requested sleep duration is smaller than the overhead required to interact with the timing module or reconfigure the hardware timer, busy-waiting may be a more efficient alternative. Designing such a framework requires careful consideration of timing constraints, such as the time consumed by timer reconfiguration and ensuring that the calculated wake-up time has not already passed during the configuration process. Additionally, whenever the timer is reprogrammed, the system must ensure that any tasks scheduled to wake up before the new interrupt time are correctly handled.
 
