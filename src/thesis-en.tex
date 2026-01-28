@@ -434,7 +434,7 @@ Responsible for scheduling, process and thread lifecycle management, context swi
 
 \paragraph{Adam Ogieniewski}
 
-Responsible for storage and filesystem management (including the abstraction layer and implementation of the FAT filesystem family), the standard C library (libc), the system interface (syscalls and libc extensions), and hardware interaction via ACPI and other drivers.
+Responsible for storage and file system management (including the abstraction layer and implementation of the FAT file system family), the standard C library (libc), the system interface (syscalls and libc extensions), and hardware interaction via ACPI and other drivers.
 
 \paragraph{Łukasz Kryczka}
 
@@ -2255,7 +2255,7 @@ This abstraction allows specific storage drivers to transparently fulfill reques
     arrow/.style={-Latex, thick}
 ]
 
-\node (fs) [block, fill=gray!10] {Filesystem Driver\\(e.g., FAT32)};
+\node (fs) [block, fill=gray!10] {File System Driver\\(e.g., FAT32)};
 
 \node (bdev) [block, below=0.8cm of fs, fill=gray!20, minimum width=8cm] {\textbf{Block Device Interface}\\ \texttt{read(LBA) / write(LBA)}};
 
@@ -2603,17 +2603,17 @@ It is considered best practice to place operating system-specific extensions wit
 
 \section{Host Environment --- Working OS}
 
-\subsection{Root Filesystem (Rootfs)}
+\subsection{Root File System (Rootfs)}
 \label{subsec:rootfs}
 
-The root filesystem constitutes the fundamental user space environment of an operating system. It provides the configuration files and user space programs (e.g., a shell) that render the system usable and interactive. In the context of operating system development, the construction of a rootfs is a structured process that transforms source code and static resources into a binary filesystem image that can be parsed and mounted by the kernel.
+The root file system constitutes the fundamental user space environment of an operating system. It provides the configuration files and user space programs (e.g., a shell) that render the system usable and interactive. In the context of operating system development, the construction of a rootfs is a structured process that transforms source code and static resources into a binary file system image that can be parsed and mounted by the kernel.
 
-Conceptually, the root filesystem construction process can be decomposed into four sequential phases, each responsible for a distinct transformation step within the build pipeline:
+Conceptually, the root file system construction process can be decomposed into four sequential phases, each responsible for a distinct transformation step within the build pipeline:
 \begin{itemize}
-    \item \textbf{Staging and Hierarchy Construction:} Creation of a temporary directory tree on the host system that reflects the intended structure of the target filesystem.
+    \item \textbf{Staging and Hierarchy Construction:} Creation of a temporary directory tree on the host system that reflects the intended structure of the target file system.
     \item \textbf{Artifact Compilation and Population:} Cross-compilation of user space programs followed by their installation into the corresponding locations within the staging directory.
     \item \textbf{Overlay:} Integration of static configuration files and resources into the staging area to complement the compiled executables.
-    \item \textbf{Filesystem Image Creation:} Conversion of the fully populated staging directory into a single binary image adhering to a chosen filesystem format.
+    \item \textbf{File System Image Creation:} Conversion of the fully populated staging directory into a single binary image adhering to a chosen file system format.
 \end{itemize}
 An overview of this pipeline is illustrated in Figure \ref{fig:rootfs_pipeline}.
 
@@ -2626,7 +2626,7 @@ An overview of this pipeline is illustrated in Figure \ref{fig:rootfs_pipeline}.
 
 \subsubsection{Staging and Hierarchy Construction}
 
-Rootfs creation begins with a staging phase, during which the build system generates a temporary directory tree on the host system. This tree mirrors the intended layout of the target operating system's filesystem and serves as an intermediate representation prior to image generation.
+Rootfs creation begins with a staging phase, during which the build system generates a temporary directory tree on the host system. This tree mirrors the intended layout of the target operating system's file system and serves as an intermediate representation prior to image generation.
 
 For early-stage operating systems, strict adherence to comprehensive standards such as the Linux Filesystem Hierarchy Standard (FHS), which mandates directories such as \texttt{/usr}, \texttt{/var}, and \texttt{/opt}, is often unnecessary. Consequently, a simplified directory structure is typically adopted, for example:
 \begin{itemize}
@@ -2649,19 +2649,19 @@ Executable binaries alone are insufficient for a functional operating system. Co
 
 A common approach to managing such data is the use of a configuration overlay. In this model, the source repository contains a predefined directory tree of static files. During the build process, this tree is recursively merged into the staging directory, augmenting the compiled binaries. This separation of code and configuration promotes flexibility, as system behavior can be modified (for example, by adjusting startup parameters) without recompilation of user space programs.
 
-\subsubsection{Filesystem Image Synthesis}
+\subsubsection{File System Image Synthesis}
 
-Once the staging directory has been fully populated, it must be transformed into a single binary image conforming to a specific filesystem format, such as FAT, EXT2, or an archive-based format.
+Once the staging directory has been fully populated, it must be transformed into a single binary image conforming to a specific file system format, such as FAT, EXT2, or an archive-based format.
 
 In academic and hobbyist operating system projects, simpler filesystems such as FAT are frequently preferred over more sophisticated journaling filesystems. FAT offers broad host-side tool support, simplifying inspection and debugging, and its relatively simple on-disk structures reduce driver implementation complexity.
 
-Image synthesis is typically performed using host-side utilities (e.g., \texttt{mtools} and \texttt{mkfs.fat}). These tools determine the required image size, format a blank image file, and populate it with the contents of the staging directory. The output is a filesystem image ready for deployment alongside the kernel.
+Image synthesis is typically performed using host-side utilities (e.g., \texttt{mtools} and \texttt{mkfs.fat}). These tools determine the required image size, format a blank image file, and populate it with the contents of the staging directory. The output is a file system image ready for deployment alongside the kernel.
 
 \subsubsection{The Initial Ramdisk and the Bootstrapping Problem}
 
-A fundamental challenge in early operating system development is the so-called “chicken-and-egg” problem associated with storage drivers. In order to mount a root filesystem from persistent storage devices such as NVMe or SATA, the kernel must already possess functioning disk drivers. However, these drivers are commonly stored within the root filesystem itself.
+A fundamental challenge in early operating system development is the so-called “chicken-and-egg” problem associated with storage drivers. In order to mount a root file system from persistent storage devices such as NVMe or SATA, the kernel must already possess functioning disk drivers. However, these drivers are commonly stored within the root file system itself.
 
-This problem is addressed through the use of an \textbf{Initial Ramdisk (initrd)}. The bootloader loads the entire image into main memory alongside the kernel and passes its memory location as a boot parameter. The kernel can then expose this memory region as a block device and mount it as the root filesystem (\texttt{/}) during early initialization. This approach allows the system to complete its initialization sequence before transitioning to a more permanent storage-backed root filesystem.
+This problem is addressed through the use of an \textbf{Initial Ramdisk (initrd)}. The bootloader loads the entire image into main memory alongside the kernel and passes its memory location as a boot parameter. The kernel can then expose this memory region as a block device and mount it as the root file system (\texttt{/}) during early initialization. This approach allows the system to complete its initialization sequence before transitioning to a more permanent storage-backed root file system.
 
 \subsection{Compiling User Space Programs}
 
@@ -2701,11 +2701,11 @@ User space programs require a well-defined runtime initialization sequence to pr
 \subsubsection{OS-Specific Toolchain Adaptation}
 \label{subsubsec:os-specific-toolchain}
 
-While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86-64-elf}) is sufficient for compiling the kernel itself, it presents limitations for user space development. Generic toolchains are agnostic to the operating system's filesystem layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively  (e.g., via a target like \texttt{x86-64-youros}) \cite{osdev-os-specific-toolchain}. This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts. From this point onward, one should provide its own toolchain source code (or patches), alongside the OS source code, instead of relying on an upstream one.
+While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86-64-elf}) is sufficient for compiling the kernel itself, it presents limitations for user space development. Generic toolchains are agnostic to the operating system's file system layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively  (e.g., via a target like \texttt{x86-64-youros}) \cite{osdev-os-specific-toolchain}. This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts. From this point onward, one should provide its own toolchain source code (or patches), alongside the OS source code, instead of relying on an upstream one.
 
 \paragraph{System Root (Sysroot)}
 
-The sysroot is a directory hierarchy on the host machine that mirrors the target operating system's root filesystem. It organizes system headers (e.g., \texttt{sysroot/usr/include}) and compiled libraries (e.g., \texttt{sysroot/usr/lib}) according to standard conventions.
+The sysroot is a directory hierarchy on the host machine that mirrors the target operating system's root file system. It organizes system headers (e.g., \texttt{sysroot/usr/include}) and compiled libraries (e.g., \texttt{sysroot/usr/lib}) according to standard conventions.
 
 By configuring the cross-compiler with the \texttt{\text{-}\text{-}with-sysroot} option, the toolchain anchors its search paths to this directory. This ensures that inclusion directives, such as \texttt{\#include <stdio.h>}, resolve exclusively to the headers of the custom operating system's standard library, thereby isolating the build process from the host environment.
 
@@ -3025,7 +3025,7 @@ This chapter presents the implementation details of the AlkOS operating system. 
 
 Before the architecture-agnostic kernel can commence execution, the underlying hardware must be brought to a known, deterministic state. As discussed in Section \ref{subsec:theory_bootloader}, the initialization protocols differ significantly depending on the specific hardware architecture and the firmware interface.
 
-For the AlkOS kernel on the x86-64 architecture, we rely on the \textbf{Multiboot2} specification \cite{Multiboot2-Spec}. This allows us to utilize a battle-tested external bootloader, such as GRUB, to handle the intricacies of storage drivers, filesystem parsing, and memory map retrieval. GRUB loads our kernel binary into memory and transfers control to our entry point.
+For the AlkOS kernel on the x86-64 architecture, we rely on the \textbf{Multiboot2} specification \cite{Multiboot2-Spec}. This allows us to utilize a battle-tested external bootloader, such as GRUB, to handle the intricacies of storage drivers, file system parsing, and memory map retrieval. GRUB loads our kernel binary into memory and transfers control to our entry point.
 
 However, the state provided by Multiboot2 is insufficient for the immediate execution of our C++ kernel. Upon entry, the system is in \textbf{32-bit Protected Mode}, paging is disabled, interrupts are disabled, and the stack pointer is undefined. Furthermore, the kernel is loaded at a low physical address, whereas AlkOS is designed as a \textbf{higher-half kernel}: its code and data are linked to virtual addresses in the upper portion of the 64-bit address space (\texttt{0xFFFFFFFE00000000}).
 
@@ -4516,7 +4516,7 @@ The VFS enables the operating system to interact with various file system types 
   \node (user_process) [block] {User Process};
   \node (fd_manager) [block, below=of user_process] {File Descriptor Manager};
   \node (vfs_module) [block, below=of fd_manager] {VFS Module};
-  \node (fs_interface) [interface, below=of vfs_module] {Filesystem Interface};
+  \node (fs_interface) [interface, below=of vfs_module] {File System Interface};
   \node (fs_driver) [component, below=of fs_interface] {File System Driver \\ (FAT12 / FAT16 / FAT32)};
   \node (vfs_io) [interface, below=of fs_driver] {VFS I/O Interface};
   \node (storage_device) [storage, below=of vfs_io] {Storage Device \\ (RAM, Disk, Network)};
@@ -4537,8 +4537,8 @@ As illustrated in Figure \ref{fig:vfs_architecture}, the VFS architecture is com
 
 \begin{itemize}
 \item \textbf{VFS Module}: The central orchestrator for path resolution and operation delegation.
-\item \textbf{Filesystem Interface}: A struct containing function pointers that abstract specific driver operations.
-\item \textbf{Filesystem Driver}: The concrete implementation of a specific file system format.
+\item \textbf{File System Interface}: A struct containing function pointers that abstract specific driver operations.
+\item \textbf{File System Driver}: The concrete implementation of a specific file system format.
 \item \textbf{VFS I/O Interface}: An abstraction for block-level data access.
 \end{itemize}
 
@@ -4546,14 +4546,14 @@ The following subsections describe each of these components in detail.
 
 \subsubsection{VFS Module}
 
-The VFS module serves as the entry point for all file operations and is responsible for managing file system mounts. It exposes the internal kernel API for operations such as opening, reading, and writing files. The module's primary responsibility is to translate these requests into calls to the appropriate filesystem instance based on the provided file path and the currently registered mount points.
+The VFS module serves as the entry point for all file operations and is responsible for managing file system mounts. It exposes the internal kernel API for operations such as opening, reading, and writing files. The module's primary responsibility is to translate these requests into calls to the appropriate file system instance based on the provided file path and the currently registered mount points.
 
 When a VFS operation (e.g., \texttt{CreateFile}) is invoked, the module executes the following sequence:
 \begin{enumerate}
-    \item \textbf{Find Mount Point}: The system utilizes a \textbf{crit-bit tree} \cite{critbit} to efficiently locate the longest prefix match for the given path among all registered mount points. This step identifies the specific filesystem driver responsible for handling the operation.
+    \item \textbf{Find Mount Point}: The system utilizes a \textbf{crit-bit tree} \cite{critbit} to efficiently locate the longest prefix match for the given path among all registered mount points. This step identifies the specific file system driver responsible for handling the operation.
     \item \textbf{Check Permissions}: The module validates the operation against the mount point options (e.g., ensuring write operations are not attempted on read-only mounts).
     \item \textbf{Path Translation}: The absolute system path is translated into a path relative to the mount point root.
-    \item \textbf{Delegation}: The operation is delegated to the corresponding method of the specific filesystem driver.
+    \item \textbf{Delegation}: The operation is delegated to the corresponding method of the specific file system driver.
 \end{enumerate}
 An example implementation is shown in Listing~\ref{lst:vfsModuleCreateFile}.
 
@@ -4572,9 +4572,9 @@ Result<> internal::VfsModule::CreateFile(const Path &path)
 }
 \end{cppcode}
 
-\subsubsection{Filesystem Interface}
+\subsubsection{File System Interface}
 
-The \texttt{vfs::Filesystem} struct acts as a uniform interface that all concrete filesystem drivers must expose (Listing~\ref{lst:vfsFilesystem}). It contains function pointers for various file and directory manipulations, alongside metadata about the filesystem. Each function pointer accepts a \texttt{void* ctx} argument, allowing the generic VFS layer to pass the concrete driver instance.
+The \texttt{vfs::Filesystem} struct acts as a uniform interface that all concrete file system drivers must expose (Listing~\ref{lst:vfsFilesystem}). It contains function pointers for various file and directory manipulations, alongside metadata about the file system. Each function pointer accepts a \texttt{void* ctx} argument, allowing the generic VFS layer to pass the concrete driver instance.
 
 \begin{cppcode}[caption={vfs::Filesystem Structure}, label={lst:vfsFilesystem}]
 struct Filesystem {
@@ -4607,9 +4607,9 @@ private:
 };
 \end{cppcode}
 
-\subsubsection{Filesystem Driver}
+\subsubsection{File System Driver}
 
-Each filesystem driver implements the logic required for a specific filesystem type (e.g., FAT12, FAT16, FAT32). The driver interprets the raw data structures on the storage device and performs the requested operations. For instance, the FAT32 driver handles the manipulation of the File Allocation Table, directory entries, and cluster chains according to the FAT32 specification (for details, see \cite{fat-spec}).
+Each file system driver implements the logic required for a specific file system type (e.g., FAT12, FAT16, FAT32). The driver interprets the raw data structures on the storage device and performs the requested operations. For instance, the FAT32 driver handles the manipulation of the File Allocation Table, directory entries, and cluster chains according to the FAT32 specification (for details, see \cite{fat-spec}).
 
 To implement these drivers efficiently, we employ the Curiously Recurring Template Pattern (CRTP) \cite{crtp}. Each driver class inherits from a templated base class that provides common functionality, while the derived class implements format-specific details (Listing~\ref{lst:fatCrtp}). This approach enables static polymorphism, reducing the runtime overhead typically associated with virtual function calls.
 
@@ -4648,7 +4648,7 @@ private:
 };
 \end{cppcode}
 
-Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT entries differs between FAT12 and FAT32/16, as shown in Listing~\ref{lst:fat12GetFatEntry}) and provides a static \texttt{IsValid(IO \&io)} method to probe whether a given I/O device contains a valid instance of that filesystem.
+Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT entries differs between FAT12 and FAT32/16, as shown in Listing~\ref{lst:fat12GetFatEntry}) and provides a static \texttt{IsValid(IO \&io)} method to probe whether a given I/O device contains a valid instance of that file system.
 
 \begin{cppcode}[caption={Fat12 GetFATEntry Implementation}, label={lst:fat12GetFatEntry}]
     NODISCARD FORCE_INLINE_F ClusterNumT GetFATEntry_(ClusterNumT cluster) const
@@ -4676,9 +4676,9 @@ Each \texttt{Fat} derivative implements its specific logic (e.g., Getting FAT en
 
 \subsubsection{VFS Interfaces and Concepts}
 
-To enforce architectural compliance at compile time, we utilize C++20 Concepts to define strict contracts for both filesystem drivers and low-level storage operations.
+To enforce architectural compliance at compile time, we utilize C++20 Concepts to define strict contracts for both file system drivers and low-level storage operations.
 
-The \texttt{VFSInterface} concept (Listing \ref{lst:vfsInterfaceConcept}) mandates that any compliant driver class must provide a constructor accepting an I/O backend, a static method to validate the filesystem signature on the storage medium, and a method to retrieve the runtime function table.
+The \texttt{VFSInterface} concept (Listing \ref{lst:vfsInterfaceConcept}) mandates that any compliant driver class must provide a constructor accepting an I/O backend, a static method to validate the file system signature on the storage medium, and a method to retrieve the runtime function table.
 
 \begin{cppcode}[caption={VFSInterface Concept Definition}, label={lst:vfsInterfaceConcept}]
 template <template <typename> typename T, typename IO>
@@ -4689,7 +4689,7 @@ concept VFSInterface = VFSIO<IO> and requires(T<IO> fs, IO io) {
 };
 \end{cppcode}
 
-The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, filesystem drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends --- such as RAM disks, physical partitions, or network storage --- without requiring implementation changes.
+The VFS I/O interface abstracts low-level data access. The \texttt{VFSIO} concept (Listing \ref{lst:vfsioConcept}) establishes a contract for block-based input and output. By adhering to this concept, file system drivers remain decoupled from the underlying hardware, enabling seamless interaction with diverse storage backends --- such as RAM disks, physical partitions, or network storage --- without requiring implementation changes.
 
 \begin{cppcode}[caption={VFSIO Concept Definition}, label={lst:vfsioConcept}]
 template <typename IO>
@@ -4767,7 +4767,7 @@ FdResult<data_structures::RefPtr<OpenFileEntry>> OpenFileTable::OpenFile(File *f
 The \texttt{FileHandle} utilizes a \texttt{NonOwningTaggedPtr} to hold either a pointer to a \texttt{File} object or a \texttt{Pipe} instance, enabling the \texttt{OpenFileEntry} to manage both cases seamlessly.
 
 \subsubsection{FileTable (Global)}
-The \texttt{FileTable} manages unique \texttt{File} objects system-wide (Listing~\ref{lst:fileTableGetOrCreate}). Each \texttt{File} object acts as the in-memory representation of a physical file on the filesystem, storing static attributes such as the path and file size. This ensures that a file on the VFS has a single representation in memory, regardless of how many times it has been opened.
+The \texttt{FileTable} manages unique \texttt{File} objects system-wide (Listing~\ref{lst:fileTableGetOrCreate}). Each \texttt{File} object acts as the in-memory representation of a physical file on the file system, storing static attributes such as the path and file size. This ensures that a file on the VFS has a single representation in memory, regardless of how many times it has been opened.
 
 \begin{cppcode}[caption={FileTable GetOrCreate}, label={lst:fileTableGetOrCreate}]
 FdResult<data_structures::RefPtr<File>> FileTable::GetOrCreate(const vfs::Path &path)
@@ -4910,7 +4910,7 @@ The address space is a fundamental component of the process structure. It define
 
 \subsubsection{File Descriptor Table}
 
-This table contains all file descriptors opened by threads executing within the process. Refer to the File System section \ref{section:fs} for more information.
+This table contains all file descriptors opened by threads executing within the process. Refer to the File system section \ref{section:fs} for more information.
 
 \subsubsection{Pipes}
 
@@ -5235,7 +5235,7 @@ The build and execution workflow consists of three sequential stages:
     Here, \texttt{<platform>} denotes the target architecture (e.g., \texttt{x86-64}), \texttt{<build\_type>} specifies either \texttt{Debug} or \texttt{Release}. A complete list of options can be obtained using the \texttt{\text{-}\text{-}help} flag.
 
     \item \textbf{Compilation and Execution:}
-    In the final stage, the kernel and all registered user space applications are compiled, the root filesystem image and bootable ISO are generated, and the operating system is launched using the QEMU emulator. This process can be initiated with the command:
+    In the final stage, the kernel and all registered user space applications are compiled, the root file system image and bootable ISO are generated, and the operating system is launched using the QEMU emulator. This process can be initiated with the command:
     \begin{verbatim}
     ./scripts/alkos_cli.bash --run
     \end{verbatim}
@@ -5245,7 +5245,7 @@ In the event of errors occurring at any stage of the process, the scripts may be
 
 \subsection{Developing User Space Applications}
 
-AlkOS supports user space applications written in C and C++. These applications are integrated into the operating system at build time and included directly in the generated root filesystem.
+AlkOS supports user space applications written in C and C++. These applications are integrated into the operating system at build time and included directly in the generated root file system.
 
 \subsubsection{Project Structure}
 
@@ -5271,7 +5271,7 @@ alkos_find_sources(MY_APP_SOURCES)
 alkos_register_userspace_app(my_app "${MY_APP_SOURCES}")
 \end{cmakecode}
 
-After registration, the application is automatically compiled, linked, and placed in the \texttt{/bin} directory of the root filesystem during the next build.
+After registration, the application is automatically compiled, linked, and placed in the \texttt{/bin} directory of the root file system during the next build.
 
 \subsection{C Standard Library}
 
@@ -5295,8 +5295,8 @@ Certain low-level system interactions are beyond the scope of the standard C lib
     \item \textbf{Power Management (\texttt{alkos/sys/power.h}, \texttt{alkos/sys/proc.h}):}
     System power states can be controlled using the \texttt{Shutdown} and \texttt{Reboot} interfaces, which invoke the underlying ACPI mechanisms.
 
-    \item \textbf{Extended Filesystem Operations (\texttt{alkos/sys/fs/fs.h}):}
-    While standard I/O functions support file access, directory enumeration and metadata queries require OS-specific calls. The \texttt{ReadDirectory} function enables directory traversal, and \texttt{FileInfo} provides information about filesystem objects.
+    \item \textbf{Extended File System Operations (\texttt{alkos/sys/fs/fs.h}):}
+    While standard I/O functions support file access, directory enumeration and metadata queries require OS-specific calls. The \texttt{ReadDirectory} function enables directory traversal, and \texttt{FileInfo} provides information about file system objects.
 \end{itemize}
 
 \subsection{Syscalls}
@@ -5337,12 +5337,12 @@ The available system calls are grouped into logical categories:
     \item \texttt{get\_heap\_start()}: Returns the base address of the process heap.
 \end{itemize}
 
-\paragraph{File I/O and Filesystem Management}
+\paragraph{File I/O and File System Management}
 \begin{itemize}
     \item \texttt{open}, \texttt{close}, \texttt{read}, \texttt{write}, \texttt{seek}: File descriptor operations.
     \item \texttt{dup(fd)} and \texttt{dup\_to(fd, newfd)}: File descriptor duplication.
-    \item \texttt{read\_directory} and \texttt{file\_info}: Filesystem inspection.
-    \item \texttt{create\_directory}, \texttt{delete\_file}, \texttt{move\_file}: Filesystem modification operations.
+    \item \texttt{read\_directory} and \texttt{file\_info}: File system inspection.
+    \item \texttt{create\_directory}, \texttt{delete\_file}, \texttt{move\_file}: File system modification operations.
 \end{itemize}
 
 \paragraph{Graphics and Input}
@@ -5373,7 +5373,7 @@ To validate the functionality of the kernel and its subsystems, a set of user sp
 
 \subsection{Hello World}
 
-The \texttt{hello\_world} program serves as the verification of the system call interface, standard I/O operations, and filesystem functionality.
+The \texttt{hello\_world} program serves as the verification of the system call interface, standard I/O operations, and file system functionality.
 
 \subsubsection{System Call Interface Verification}
 
@@ -5397,9 +5397,9 @@ extern "C" int main()
 
 \subsubsection{File I/O Verification}
 
-Beyond standard output, the program performs a sequence of file manipulations to test the underlying filesystem driver and the VFS layer. The application attempts to open, write to, seek within, and read from a filepath \texttt{/docs/greet.txt}.
+Beyond standard output, the program performs a sequence of file manipulations to test the underlying file system driver and the VFS layer. The application attempts to open, write to, seek within, and read from a file path \texttt{/docs/greet.txt}.
 
-This sequence validates path resolution, file descriptor table management in the kernel, and the read/write logic of the filesystem driver (Listing~\ref{lst:hello_fileio}).
+This sequence validates path resolution, file descriptor table management in the kernel, and the read/write logic of the file system driver (Listing~\ref{lst:hello_fileio}).
 
 \begin{cppcode}[caption={File I/O Verification Logic}, label={lst:hello_fileio}]
     // Open an existing file with read/write permissions
@@ -5409,7 +5409,7 @@ This sequence validates path resolution, file descriptor table management in the
         return 1;
     }
 
-    // Test writing to the filesystem
+    // Test writing to the file system
     int written = fprintf(fp, "Hello AlkOS from User Space!");
     
     // Test Seeking
@@ -5575,7 +5575,7 @@ The shell includes a suite of internal commands, which are handled directly with
 
 \subsubsection{File System Utilities}
 
-The shell maintains a current working directory state and provides utilities to navigate and inspect the filesystem.
+The shell maintains a current working directory state and provides utilities to navigate and inspect the file system.
 
 \begin{itemize}
     \item \textbf{pwd}: Prints the full absolute path of the current working directory.
@@ -5591,7 +5591,7 @@ The shell maintains a current working directory state and provides utilities to 
         \label{fig:shell_ls}
     \end{figure}
 
-    \item \textbf{cat <file>}: Displays the contents of a file. It uses standard C library functions (\texttt{fopen}, \texttt{fread}) to open the target file and print its content to the console. This command verifies the read functionality of the filesystem driver (Figure \ref{fig:shell_cat}).
+    \item \textbf{cat <file>}: Displays the contents of a file. It uses standard C library functions (\texttt{fopen}, \texttt{fread}) to open the target file and print its content to the console. This command verifies the read functionality of the file system driver (Figure \ref{fig:shell_cat}).
     
     \begin{figure}[htbp]
         \centering
@@ -5681,7 +5681,7 @@ Doom relies heavily on dynamic memory allocation for level geometry, textures, a
 The Doom engine, particularly the WAD management system, relies on case-insensitive string comparisons to locate resources (e.g., finding "doom.wad" when the file is named "DOOM.WAD"). We implemented POSIX-compliant \texttt{strcasecmp} and \texttt{strncasecmp} functions to support this behavior.
 
 \paragraph{Standard I/O}
-To support loading data from the file system, we expanded the \texttt{stdio} implementation to include \texttt{fopen}, \texttt{fread}, \texttt{fseek}, and \texttt{ftell}, backed by the underlying syscalls (\texttt{open}, \texttt{read}, \texttt{seek}). This allowed the Doom engine to seamlessly load WAD files from the root filesystem using standard I/O semantics. Also \texttt{create\_directory} needed to be implemented to create the \texttt{saves/} directory for saving game progress. \\
+To support loading data from the file system, we expanded the \texttt{stdio} implementation to include \texttt{fopen}, \texttt{fread}, \texttt{fseek}, and \texttt{ftell}, backed by the underlying syscalls (\texttt{open}, \texttt{read}, \texttt{seek}). This allowed the Doom engine to seamlessly load WAD files from the root file system using standard I/O semantics. Also \texttt{create\_directory} needed to be implemented to create the \texttt{saves/} directory for saving game progress. \\
 
 By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
@@ -5706,8 +5706,8 @@ We successfully fulfilled all functional requirements defined in Section \ref{su
     \item \textbf{System Call Interface} -- A dispatch mechanism utilizing \texttt{int 0x80} instruction with a wide array of implemented services.
     \item \textbf{Standard C Library (libc)} -- A custom implementation of the C standard library (stdio, stdlib, string, math) tailored for the kernel environment.
     \item \textbf{Virtual File System (VFS)} -- An abstraction layer supporting mount points, file descriptors, and generic I/O operations.
-    \item \textbf{FAT Filesystem Support} -- Full read/write drivers for FAT12, FAT16, and FAT32 file systems.
-    \item \textbf{Initial Ramdisk (Initrd)} -- Support for loading a temporary root filesystem from memory during the boot process.
+    \item \textbf{FAT File System Support} -- Full read/write drivers for FAT12, FAT16, and FAT32 file systems.
+    \item \textbf{Initial Ramdisk (Initrd)} -- Support for loading a temporary root file system from memory during the boot process.
     \item \textbf{ELF64 Loader} -- A static parser capable of validating, loading, and relocating standard 64-bit executables.
     \item \textbf{User Space Shell} -- An interactive command-line environment with built-in commands and process execution capabilities.
     \item \textbf{Graphical Output} -- A linear framebuffer driver supporting double-buffering and direct pixel manipulation.
@@ -5734,8 +5734,8 @@ Developing an operating system kernel is an inherently complex task, further com
     \item \textbf{APIC} -- Although SMP is not fully enabled, the system architecture was designed with SMP compatibility in mind, necessitating the presence of an Advanced Programmable Interrupt Controller (APIC). 
     \item \textbf{ACPI} -- It is assumed that device discovery is performed via the Advanced Configuration and Power Interface (ACPI), a standard supported by the majority of modern platforms. 
     \item \textbf{PS/2 Keyboard} -- Input is handled via a PS/2 keyboard controller. A USB stack was not implemented due to the significant development effort required. 
-    \item \textbf{FAT12/16/32 Support} -- The system supports the FAT12, FAT16, and FAT32 filesystem variants. Long file name (LFN) support is not implemented; filenames are therefore limited to the 8.3 format.
-    \item \textbf{Ramdisk} -- The system is bootstrapped using an in-memory filesystem mounted as the initial root filesystem. Loading a root filesystem from persistent storage is not supported, and thus no permanent modifications are possible. The expected filesystem is hardcoded to FAT16.
+    \item \textbf{FAT12/16/32 Support} -- The system supports the FAT12, FAT16, and FAT32 file system variants. Long file name (LFN) support is not implemented; filenames are therefore limited to the 8.3 format.
+    \item \textbf{Ramdisk} -- The system is bootstrapped using an in-memory file system mounted as the initial root file system. Loading a root file system from persistent storage is not supported, and thus no permanent modifications are possible. The expected file system is hardcoded to FAT16.
     \item \textbf{ELF64} -- User space applications must be compiled as ELF64 binaries. Dynamic linking is not supported. In particular, binaries containing a \texttt{PT\_INTERP} segment \cite{elf-spec-dynamic} or relying on shared libraries cannot be executed.
 \end{itemize}
 
@@ -5783,8 +5783,8 @@ The current solution can be extended and improved in several areas:
     \item \textbf{USB Controller Driver} -- Implementing a USB controller driver to support USB devices.
     \item \textbf{Physical Storage Drivers} -- Replacing the RAM disk with drivers for physical storage media (e.g., AHCI/NVMe). 
     \item \textbf{Abstract Filesystems} -- Add pseudo filesystems (e.g., \texttt{procfs}, \texttt{sysfs}) for extensible system interfaces.
-    \item \textbf{Filesystem Caching} -- Introduce caching to improve filesystem performance.
-    \item \textbf{Filesystem Permissions} -- Implement file and directory permissions for security and access control.
+    \item \textbf{File System Caching} -- Introduce caching to improve file system performance.
+    \item \textbf{File System Permissions} -- Implement file and directory permissions for security and access control.
     \item \textbf{Fast System Call} -- Replace the current interrupt-based syscall mechanism with the \texttt{syscall}/\texttt{sysret} instructions to reduce overhead and improve kernel entry performance.
     \item \textbf{Syscall Restriction} -- Implement a mechanism to restrict access to system calls based on process privileges or roles.
     \item \textbf{Compositing Window Manager} -- Implementing a compositing window manager to support a window-based graphical user interface.
