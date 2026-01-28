@@ -345,8 +345,8 @@ Technically, AlkOS features a custom two-stage bootloader that transitions the m
 \pagenumbering{arabic}
 \setcounter{page}{11}
 \chapter{Introduction}
-\markboth{}{Introduction}
-\addcontentsline{toc}{chapter}{Introduction}
+% \markboth{}{Introduction}
+% \addcontentsline{toc}{chapter}{Introduction}
 
 \section{Introduction}
 
@@ -405,25 +405,29 @@ The primary objective of this project, as initially defined, was to implement a 
     \item x86-64 Architecture --- targeting the x86-64 architecture only.
 \end{itemize}
 
-At the outset of the project, specific requirements were not rigidly defined due to the uncertainty regarding the complexity and effort required for the implementation. It was anticipated that the challenge would be significant, necessitating extensive research, quality assurance, and the development of components from scratch. Driven by a strong interest in the subject matter, development started over a year ago with the objective of implementing as comprehensive a system as time constraints would permit. Ultimately, the scope of the realized system significantly exceeds the initial assumptions. Subsequent chapters describe the complete theory and implementation details, which extends beyond the original scope to include a complex scheduler, file systems, a robust userspace environment, and ported software, specifically the Doom game.
+At the outset of the project, specific requirements were not rigidly defined due to the uncertainty regarding the complexity and effort required for the implementation. It was anticipated that the challenge would be significant, necessitating extensive research, quality assurance, and the development of components from scratch. Driven by a strong interest in the subject matter, development started over a year ago with the objective of implementing as comprehensive a system as time constraints would permit. Ultimately, the scope of the realized system significantly exceeds the initial assumptions. Subsequent chapters describe the complete theory and implementation details, which extends beyond the original scope to include a complex scheduler, file systems, a robust user space environment, and ported software, specifically the Doom game.
 
-\section{Work Division --- Code}
+\section{Work Division}
+
+\subsubsection{Code}
 
 The division of labor regarding the source code was determined by the distinct and complex subsystems inherent to operating system development. Responsibilities were allocated according to specific technical domains:
 
-\subsubsection{Jakub Lisowski}
+\paragraph{Jakub Lisowski}
 
 Responsible for scheduling, process and thread lifecycle management, context switching, scheduling algorithms, thread sleeping mechanisms, interrupts and timer devices.
 
-\subsubsection{Adam Ogieniewski}
+\paragraph{Adam Ogieniewski}
 
 Responsible for storage and filesystem management (including the abstraction layer and implementation of the FAT filesystem family), the standard C library (libc), the system interface (syscalls and libc extensions), and hardware interaction via ACPI and other drivers.
 
-\subsubsection{Łukasz Kryczka}
+\paragraph{Łukasz Kryczka}
 
 Responsible primarily for virtual memory, physical memory management, allocation strategies, bootloaders and graphics.
 
-\section{Work Division --- Thesis}
+\subsubsection{Thesis}
+
+TODO: PODPUNKTY
 
 The division of work regarding the written thesis mirrors the distribution of coding responsibilities. The content was authored based on each contributor's specific area of implementation, technical expertise, and role within the project. The overall contribution effort was distributed evenly among the authors.
 
