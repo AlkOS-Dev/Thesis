@@ -303,7 +303,7 @@
 
 Operating system development constitutes one of the most challenging disciplines in computer science, requiring deep knowledge of hardware architecture and systems programming. This thesis presents the design and implementation of AlkOS, a monolithic general-purpose operating system kernel for the x86-64 architecture (through a hardware abstraction layer), developed from scratch using C++. The project addresses the scarcity of structured educational resources by serving both as a functional kernel implementation and a comprehensive guide to independent OS development.
 
-Technically, AlkOS features a custom two-stage bootloader that transitions the CPU to Long Mode and establishes a higher-half kernel environment. The system implements advanced memory management with paging and a physical memory manager, alongside a Virtual File System (VFS) with FAT support. The process scheduler utilizes a tickless, meta-scheduler architecture supporting multiple policies, including Round-Robin, Priority Queues, and Multi-Level Feedback Queues (MLFQ), ensuring efficient task management. The validation of the system's capabilities culminated in the successful execution of the Doom engine within a custom graphical shell, a task necessitating the implementation of a C/C++ standard library and a comprehensive system call interface. \\
+Technically, AlkOS features a custom two-stage bootloader that transitions the CPU to 64-bit mode (Long Mode) and establishes a higher-half kernel environment. The system implements advanced memory management with paging and a physical memory manager, alongside a Virtual File System (VFS) with FAT support. The process scheduler utilizes a tickless, meta-scheduler architecture supporting multiple policies, including Round-Robin, Priority Queues, and Multi-Level Feedback Queues (MLFQ), ensuring efficient task management. The validation of the system's capabilities culminated in the successful execution of the Doom engine within a custom graphical shell, a task necessitating the implementation of a C/C++ standard library and a comprehensive system call interface. \\
 
 \noindent \textbf{Keywords:} Operating System Development, Systems Programming, x86-64 Architecture, Bare Metal, Monolithic Kernel, Virtual Memory Management, Tickless Kernel, Preemptive Scheduling, Virtual File System, Demand Paging, Meta-Scheduler, Higher-Half Kernel, User Space.
 \end{abstract}
@@ -320,9 +320,9 @@ Technically, AlkOS features a custom two-stage bootloader that transitions the C
 
 Tworzenie systemów operacyjnych stanowi jedną z najtrudniejszych dziedzin informatyki, wymagającą głębokiej wiedzy na temat architektur sprzętowych i programowania systemowego. Niniejsza praca przedstawia projekt i implementację AlkOS, monolitycznego jądra systemu operacyjnego ogólnego przeznaczenia dla architektury x86-64 (poprzez warstwę abstrakcji sprzętowej), stworzonego od podstaw przy użyciu języka C++. Projekt odpowiada na niedobór ustrukturyzowanych materiałów edukacyjnych, służąc zarówno jako funkcjonalna implementacja jądra, jak i kompleksowy przewodnik po niezależnym tworzeniu systemów operacyjnych.
 
-Od strony technicznej, AlkOS posiada własny dwuetapowy program rozruchowy (bootloader), który przełącza procesor w tryb 64-bitowy (Long Mode) i ustanawia środowisko jądra w wyższej połowie pamięci (higher-half kernel). System implementuje zaawansowane zarządzanie pamięcią ze stronicowaniem i menedżerem pamięci fizycznej, wraz z wirtualnym systemem plików (VFS) z obsługą FAT. Planista procesów wykorzystuje architekturę meta-dyspozytora bez cyklicznych przerwań (tickless), obsługującą wiele polityk, w tym algorytm karuzelowy (Round-Robin), kolejki priorytetowe i wielopoziomowe kolejki ze sprzężeniem zwrotnym (MLFQ), zapewniając efektywne zarządzanie zadaniami. Walidacja możliwości systemu zakończyła się pomyślnym uruchomieniem silnika gry Doom we własnej powłoce systemowej, co wymagało implementacji biblioteki standardowej C/C++ oraz obszernego interfejsu wywołań systemowych. \\
+Od strony technicznej, AlkOS posiada własny dwuetapowy program rozruchowy (bootloader), który przełącza procesor w tryb 64-bitowy (Long Mode) i ustanawia środowisko jądra w wyższej połowie pamięci (higher-half kernel). System implementuje zaawansowane zarządzanie pamięcią ze stronicowaniem i menedżerem pamięci fizycznej, wraz z wirtualnym systemem plików (VFS) z obsługą FAT. Planista procesów wykorzystuje architekturę meta-dyspozytora bez cyklicznych przerwań (tickless), obsługującą wiele polityk, w tym algorytm karuzelowy (Round-Robin), kolejki priorytetowe i wielopoziomowe kolejki ze sprzężeniem zwrotnym (MLFQ), zapewniając efektywne zarządzanie zadaniami. Walidacja możliwości systemu zakończyła się pomyślnym uruchomieniem silnika gry Doom z własnej powłoki systemowej, co wymagało implementacji biblioteki standardowej C/C++ oraz obszernego interfejsu wywołań systemowych. \\
 
-\noindent \textbf{Słowa kluczowe:} Tworzenie Systemów Operacyjnych, Programowanie Systemowe, Architektura x86-64, Środowisko bez systemu operacyjnego, Jądro Monolityczne, Zarządzanie Pamięcią Wirtualną, Jądro Bezzegarowe, Wywłaszczanie Procesów, Wirtualny System Plików, Stronicowanie na żądanie, Meta-Dyspozytor, Jądro w wyższej połowie pamięci, Przestrzeń Użytkownika.
+\noindent \textbf{Słowa kluczowe:} Tworzenie systemów operacyjnych, Programowanie systemowe, Architektura x86-64, Środowisko bez systemu operacyjnego, Jądro monolityczne, Zarządzanie pamięcią, Jądro niewymagające cyklicznych przerwań, Wywłaszczanie procesów, Wirtualny system plików, Stronicowanie na żądanie, Meta-dyspozytor, Jądro w wyższej połowie pamięci, Przestrzeń użytkownika.
 \end{abstract}
 }
 
@@ -363,17 +363,17 @@ Od strony technicznej, AlkOS posiada własny dwuetapowy program rozruchowy (boot
 % \markboth{}{Introduction}
 % \addcontentsline{toc}{chapter}{Introduction}
 
-\section{Introduction}
+\section{Background and Context}
 
 The creation of a functional operating system kernel stands as one of the most complex tasks in software engineering. It may implement all and more, a subset of, a combination, or the bare minimum of what will be discussed in this work in the following chapters, but the ultimate goal remains similar --- to make more of the machine than running a simple program.
 
-Perhaps it's to abstract away the underlying hardware and achieve portability of programs between different machines. Most likely it's the enablement of parallel execution of a different set of programs. Perhaps even the programs can't be trusted --- they must be run as if they existed in isolated environments, unaware of each other and incapable of interfering in each other's work. 
+Perhaps it's to abstract away the underlying hardware and achieve portability of programs between different machines. Most likely, it's the enablement of parallel execution of a different set of programs. Perhaps even the programs can't be trusted --- they must be run as if they existed in isolated environments, unaware of each other and incapable of interfering in each other's work. 
 
 If that were to be the case, certainly they'd require a method of receiving parts of memory to use, of compute time, of whatever resources the machine has at its disposal - cameras, microphones, TPU's, GPU's, NIC's or custom chipsets. If the programs had to access these resources, then the OS would need to provision them, to manage them, and, for that reason, bookkeep and gatekeep them. If a set of programs wanted to communicate with each other, it'd need to facilitate that communication. The OS that has to do it becomes, in consequence, the middleman and the orchestrator of the programs, as well as the master of the machine.
 
-One can imagine that errors in the master of the machine would be quite catastrophic for every operation running on the machine. The impact: evident in every single program. Mere slowness of execution is quite the favorable scenario here --- a total and utter corruption of the system's state and its following crash --- or in more extreme circumstances --- the damaging of the hardware itself --- are all possible cases. The most insidious being minor bugs that are subtle enough to remain untouched, yet severe enough to impact the outcome of the program, perhaps affecting someone's life in the process, if the system happened to be responsible for a matter of such importance. 
+One can imagine that errors in the master of the machine would be quite catastrophic for every operation running on the machine. The impact: evident in every single program. Mere slowness of execution is quite the favorable scenario here --- a total and utter corruption of the system's state and its following crash --- or, in more extreme circumstances --- the damaging of the hardware itself --- are all possible cases. The most insidious being minor bugs that are subtle enough to remain untouched, yet severe enough to impact the outcome of the program, perhaps affecting someone's life in the process, if the system happened to be responsible for a matter of such importance. 
 
-The creation of an OS is therefore not a trivial matter. It requires a precise understanding of the machine, its hardware, its resources, and a very meticulous approach to creating and testing it. It needs to be fast --- the less time it uses, the more time the other programs have to execute. At the same time it needs to be precise --- resources leaked and unrecovered accumulate over time --- creating a machine that's incapable of running for longer periods of time. 
+The creation of an OS is therefore not a trivial matter. It requires a precise understanding of the machine, its hardware, its resources, and a very meticulous approach to creating and testing it. It needs to be fast --- the less time it uses, the more time the other programs have to execute. At the same time, it needs to be precise --- resources leaked and unrecovered accumulate over time --- creating a machine that's incapable of running for longer periods of time. 
 
 \subsection{Motivation}
 
@@ -420,7 +420,7 @@ The primary objective of this project, as initially defined, was to implement a 
     \item x86-64 Architecture --- targeting the x86-64 architecture only.
 \end{itemize}
 
-At the outset of the project, specific requirements were not rigidly defined due to the uncertainty regarding the complexity and effort required for the implementation. It was anticipated that the challenge would be significant, necessitating extensive research, quality assurance, and the development of components from scratch. Driven by a strong interest in the subject matter, development started over a year ago with the objective of implementing as comprehensive a system as time constraints would permit. Ultimately, the scope of the realized system significantly exceeds the initial assumptions. Subsequent chapters describe the complete theory and implementation details, which extends beyond the original scope to include a complex scheduler, file systems, a robust user space environment, and ported software, specifically the Doom game.
+At the outset of the project, specific requirements were not rigidly defined due to the uncertainty regarding the complexity and effort required for the implementation. It was anticipated that the challenge would be significant, necessitating extensive research, quality assurance, and the development of components from scratch. Driven by a strong interest in the subject matter, development started over a year ago with the objective of implementing as comprehensive a system as time constraints would permit. Ultimately, the scope of the realized system significantly exceeds the initial assumptions. Subsequent chapters describe the complete theory and implementation details, which extend beyond the original scope to include a complex scheduler, file systems, a robust user space environment, and ported software, specifically the Doom game.
 
 \section{Work Division}
 
@@ -430,7 +430,7 @@ The division of labor regarding the source code was determined by the distinct a
 
 \paragraph{Jakub Lisowski}
 
-Responsible for scheduling, process and thread lifecycle management, context switching, scheduling algorithms, thread sleeping mechanisms, interrupts and timer devices.
+Responsible for scheduling, process and thread lifecycle management, context switching, scheduling algorithms, thread sleeping mechanisms, interrupts, and timer devices.
 
 \paragraph{Adam Ogieniewski}
 
@@ -438,7 +438,7 @@ Responsible for storage and file system management (including the abstraction la
 
 \paragraph{Łukasz Kryczka}
 
-Responsible primarily for virtual memory, physical memory management, allocation strategies, bootloaders and graphics.
+Responsible primarily for virtual memory, physical memory management, allocation strategies, bootloader, and graphics.
 
 \subsubsection{Thesis}
 
@@ -451,22 +451,22 @@ The division of work regarding the written thesis mirrors the distribution of co
 \chapter{Creating an Operating System from Scratch}
 \label{chap:os_from_scratch}
 
-This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the general purpose monolithic kernel design with memory virtualization, where every module resides within the same address space --- the kernel address space. Given that our work was primarily conducted on x86-64 machines, we will use this architecture as the basis for further discussion.
+This chapter outlines the development sequence of the kernel's most critical components, upon which the majority of the subsequent code depends. The proposed progression is derived from the experience gained and materials consulted during the development process. While this is not the only valid approach to system development, it represents a structured path designed to minimize redundant discovery and facilitate implementation. The discussion focuses exclusively on the general-purpose monolithic kernel design with memory virtualization, where every module resides within the same address space --- the kernel address space. Given that our work was primarily conducted on x86-64 machines, we will use this architecture as the basis for further discussion.
 
 \section{Host Environment Preparation}
 
-Before proceeding to writing actual kernel code we must first do some preparation on our development tools and development environments. Below we can find brief description of needed things.
+Before proceeding to write actual kernel code, we must first do some preparation on our development tools and development environments. Below we can find a brief description of the needed things.
 
 \subsection{Cross-Compilation Toolchain}
 \label{subsec:theory_toolchain}
 
-The development process begins with the establishment of a cross-compilation toolchain targeting a generic, os-independent architecture (e.g., \texttt{x86-64-elf}). Using a compiler provided by the host system may lead to issues, as such compilers typically assume that the generated code will execute within an operating system environment. These assumptions are invalid during development, where no such infrastructure exists initially.
+The development process begins with the establishment of a cross-compilation toolchain targeting a generic, OS-independent architecture (e.g., \texttt{x86-64-elf}). Using a compiler provided by the host system may lead to issues, as such compilers typically assume that the generated code will execute within an operating system environment. These assumptions are invalid during development, where no such infrastructure exists initially.
 
 For this reason, the cross-compiler is built from source, allowing it to be configured and, if necessary, patched to accommodate the specific requirements of kernel and user space development. A complete cross-compilation toolchain typically consists of a cross-compiler (e.g., GCC or Clang), a suite of binary utilities (including the assembler and linker), and optionally a cross-debugger such as GDB or LLDB. Although any suitable cross-compiler may be used to build an operating system, GCC is generally preferred due to extensive support within the operating systems development community. For a detailed guide to building a GCC-based cross-compilation toolchain, refer to \cite{osdev-gcc-cross-compiler}.
 
 At later stages of development, particularly when building user space applications, an extended version of the toolchain is required. This toolchain must be capable of automatically linking against our C standard library and including system headers. The process of adapting the toolchain to recognize the new operating system as a valid target is discussed in Subsection~\ref{subsubsec:os-specific-toolchain}.
 
-Two distinct build environments are used throughout the system's development. In a \textbf{hosted} environment, programs are compiled with the expectation that a mature operating system is present, providing runtime services such as program startup routine, system call interface, and system libraries. In contrast, a \textbf{freestanding} environment makes no assumptions about the existence of such, requiring all runtime support to be provided explicitly by the program or the operating system itself.
+Two distinct build environments are used throughout the system's development. In a \textbf{hosted} environment, programs are compiled with the expectation that a mature operating system is present, providing runtime services such as a program startup routine, system call interface, and system libraries. In contrast, a \textbf{freestanding} environment makes no assumptions about the existence of such, requiring all runtime support to be provided explicitly by the program or the operating system itself.
 
 Kernel components and early system initialization code are built in a freestanding environment, as they execute before any operating system services are available. User space programs, on the other hand, are compiled in a hosted environment once the operating system and its runtime infrastructure have been established. The required runtime libraries are provided by the operating system (see Subsection~\ref{subsec:theory_std}).
 
@@ -482,7 +482,7 @@ Meta-build systems, by contrast, operate at a higher level of abstraction. They 
 
 \subsubsection{Toolchain Integration}
 
-As required by the freestanding development model described in Section \ref{subsec:theory_toolchain}, the build system must be configured to use the previously established cross-compilation toolchain. This is typically achieved through the use of \textbf{toolchain configuration files} which act as an adapter layer. 
+As required by the freestanding development model described in Section \ref{subsec:theory_toolchain}, the build system must be configured to use the previously established cross-compilation toolchain. This is typically achieved through the use of \textbf{toolchain configuration files}, which act as an adapter layer. 
 
 A toolchain configuration file must fulfill two primary functions:
 \begin{enumerate}
@@ -494,9 +494,9 @@ This architectural decoupling ensures that the build logic remains agnostic of t
 
 \subsubsection{Configuration Management}
 
-Operating systems frequently require compile-time configuration to enable, disable or parametrize subsystems such as debugging facilities, or experimental scheduling policies. As the project evolves, configuration options may become duplicated across multiple layers of the system, leading to inconsistencies and maintenance challenges.
+Operating systems frequently require compile-time configuration to enable, disable, or parametrize subsystems such as debugging facilities or experimental scheduling policies. As the project evolves, configuration options may become duplicated across multiple layers of the system, leading to inconsistencies and maintenance challenges.
 
-To avoid this issue, the build system should enforce a \textbf{single source of truth} (SSOT) for configuration data. One effective strategy is to define the configuration schema using a structured data format such as YAML, JSON or TOML. A generation step then can derive three synchronized artifacts from this schema:
+To avoid this issue, the build system should enforce a \textbf{single source of truth} (SSOT) for configuration data. One effective strategy is to define the configuration schema using a structured data format such as YAML, JSON, or TOML. A generation step then can derive three synchronized artifacts from this schema:
 \begin{enumerate}
     \item \textbf{Source Header File:} Defines compile-time constants or definitions that allow the kernel source code to adapt its behavior based on the active configuration.
     \item \textbf{Build System Configuration:} Provides variables and conditions that control which source files, libraries, or features are included during compilation.
@@ -585,7 +585,7 @@ The usage of intrusive data structures offers multiple benefits critical for sys
     \item \textbf{Improved memory access} --- The object is accessed directly, avoiding the pointer indirection required by external node structures.
     \item \textbf{O(1) Verification} --- Determining whether an object belongs to a collection can be performed in constant time by inspecting the object's internal state.
     \item \textbf{O(1) Removal} --- An object can be removed from a doubly linked list in constant time, given only a pointer to the object itself.
-    \item \textbf{Independent Removal} --- Removal operations do not require access to the double linked list head or the container object.
+    \item \textbf{Independent Removal} --- Removal operations do not require access to the doubly linked list head or the container object.
 \end{itemize}
 
 \subsection{Reference Counting}
@@ -732,9 +732,9 @@ A central design decision in reference counting is the placement of the control 
 
 \subsubsection{Rationale for the Intrusive Model in Kernel Space}
 
-Most kernels employ the \textbf{intrusive reference counting model}. Although external models offer greater flexibility by avoiding modifications to object layouts, their associated costs are not justifiable within the kernel context. The intrusive model ensures that the reference counter is colocated with the object itself, which guarantees a single allocation per object. Furthermore, with an intrusive design, any subsystem holding a raw pointer can acquire ownership by incrementing the embedded counter, allowing objects to move freely between low-level components and higher-level abstractions without compromising correctness.
+Most kernels employ the \textbf{intrusive reference counting model}. Although external models offer greater flexibility by avoiding modifications to object layouts, their associated costs are not justifiable within the kernel context. With an intrusive design, any subsystem holding a raw pointer can acquire ownership by incrementing the embedded counter, allowing objects to move freely between low-level components and higher-level abstractions without compromising correctness.
 
-The usage of reference counting offers multiple benefits critical for systems programming:
+The usage of reference counting offers multiple benefits:
 \begin{itemize}
     \item \textbf{Deterministic deallocation} -- Resources are freed at the precise moment they become unused, without relying on garbage collection or deferred cleanup.
     \item \textbf{Shared ownership} -- Multiple subsystems can safely share references to the same object without explicit coordination.
@@ -857,7 +857,7 @@ The overall control flow of the C runtime initialization and termination process
     \label{fig:crt-init-flow}
 \end{figure}
 
-Failure to link these components in the correct order results in an incomplete runtime environment, in which global constructors are not executed and program behavior becomes undefined - particularly for C++ applications or code relying on constructor or destructor attributes.
+Failure to link these components in the correct order results in an incomplete runtime environment, in which global constructors are not executed, and program behavior becomes undefined - particularly for C++ applications or code relying on constructor or destructor attributes.
 
 \section{Bootloader}
 \label{subsec:theory_bootloader}
@@ -1022,7 +1022,7 @@ Therefore, a robust operating system must implement its own initialization stage
 
 \section{Memory Preloading and Discovery}
 \label{sec:mem_discovery}
-One of the first and most critical responsibilities of a kernel during the bootstrap phase is to establish an authoritative map of the system's physical memory. Unlike user-space applications, which simply request memory from the operating system via system calls (e.g., \texttt{malloc} or \texttt{mmap}), the kernel is the manager responsible for fulfilling those requests. Upon entry, the kernel does not know how much RAM is available, where it is located, or which memory ranges are reserved for hardware mapped I/O (MMIO).
+One of the first and most critical responsibilities of a kernel during the bootstrap phase is to establish an authoritative map of the system's physical memory. Unlike user-space applications, which simply request memory from the operating system via system calls (e.g., \texttt{malloc} or \texttt{mmap}), the kernel is the manager responsible for fulfilling those requests. Upon entry, the kernel does not know how much RAM is available, where it is located, or which memory ranges are reserved for hardware-mapped I/O (MMIO).
 
 This discovery process is not standardized. It is strictly coupled to the target architecture, the silicon vendor, and the residing firmware. Depending on the platform complexity, the kernel may acquire the memory map through one of three primary mechanisms: static definition, firmware interrogation, or hardware description structures.
 
@@ -1179,7 +1179,7 @@ On general-purpose platforms (x86-64), the hardware is modular. The kernel canno
 \end{itemize}
 
 \subsection{Hardware Abstraction}
-How does the kernel handle such diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and will be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
+How does the kernel handle such a diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and will be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
 
 \subsection{Discovering and Enabling CPU Features}
 \label{subsec:cpu_discovery}
@@ -1263,9 +1263,9 @@ Before initializing Memory Management, exception handling is the primary functio
 
 \subsection{Design Considerations}
 
-It is important to note that, hardware-compliant interrupt handlers differ significantly from standard compiled functions. They often require specific entry and exit instructions, making the runtime swapping of these functions difficult. A robust solution is to create a low-level assembly wrapper that efficiently performs all architecture-dependent operations before invoking a high-level function responsible for the kernel's logic. However, this approach has limitations. The high-level function is typically hardcoded into the low-level handler, preventing runtime reconfiguration.
+It is important to note that hardware-compliant interrupt handlers differ significantly from standard compiled functions. They often require specific entry and exit instructions, making the runtime swapping of these functions difficult. A robust solution is to create a low-level assembly wrapper that efficiently performs all architecture-dependent operations before invoking a high-level function responsible for the kernel's logic. However, this approach has limitations. The high-level function is typically hardcoded into the low-level handler, preventing runtime reconfiguration.
 
-To address this, a hardware abstraction layer is required to serve as an intermediary between the architecture-specific wrapper and the high-level kernel logic. This abstraction should manage the low-level tables and facilitate the swapping of handlers at runtime. This can be implemented using an array of abstract handlers mapped to hardware interrupts. Furthermore, devices are mapped to hardware interrupts dynamically during runtime based on user configuration and hardware discovery, necessitating the ability to swap drivers and logic dynamically. Without this modularity, the system would require multiple stages of interrupt initialization, multiple architecture-specific handlers, or complex handlers that query the kernel state to determine valid operations (e.g., a page fault handler checking for virtualization support each time is invoked).
+To address this, a hardware abstraction layer is required to serve as an intermediary between the architecture-specific wrapper and the high-level kernel logic. This abstraction should manage the low-level tables and facilitate the swapping of handlers at runtime. This can be implemented using an array of abstract handlers mapped to hardware interrupts. Furthermore, devices are mapped to hardware interrupts dynamically during runtime based on user configuration and hardware discovery, necessitating the ability to swap drivers and logic dynamically. Without this modularity, the system would require multiple stages of interrupt initialization, multiple architecture-specific handlers, or complex handlers that query the kernel state to determine valid operations (e.g., a page fault handler checking for virtualization support each time it is invoked).
 
 It is also critical to design handlers to perform minimal work. This precludes operations such as waiting, sleeping, or extensive tracing. If device handling requires complex logic or a state change, the handler should create a separate task and invoke the scheduler to decide if we need a context switch upon exiting the interrupt. Executing complex logic within the interrupt context blocks other interrupts and may lead to data loss. Consequently, the interrupt abstraction layer must also support task switching.
 
@@ -1286,13 +1286,13 @@ As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing insi
 
 This can be achieved by allocating a large circular buffer for messages, which is then asynchronously flushed to the output device by a dedicated, low-priority task. Furthermore, to facilitate effective debugging in a multi-threaded and multi-core environment, each log entry may automatically capture essential context metadata, specifically the high-precision timestamp, the current Core ID, or the Process ID.
 
-This goes about the general design, but during initial development system there is no need to have full tracing system, simple print with formatting is enough to proceed.
+This goes about the general design, but during initial development of the system, there is no need to have a full tracing system, simple print with formatting is enough to proceed.
 
 \section{Testing framework}
 
 The reliability of an operating system kernel cannot be guaranteed solely through compilation checks or host-based logic verification. While some algorithmic components can be tested in a hosted environment (e.g., on a Linux host), the core kernel functionalities depend heavily on the specific hardware architecture, physical memory layout, and privileged CPU instructions. Consequently, a robust testing framework must be implemented to execute directly within the kernel on the target hardware or emulator.
 
-This in-kernel framework should function similarly to user-space unit testing libraries but operates within the kernel. It allows developers to define test cases for critical subsystems, such as memory allocators, intrusive data structures, and scheduling algorithms and execute them in the actual runtime environment. This approach is the only way to detect architecture-specific issues, such as unaligned memory accesses, incorrect register usage during context switches, or paging faults caused by invalid table entries, which would remain undetected in a hosted simulation or simply impossible to test.
+This in-kernel framework should function similarly to user-space unit testing libraries but operates within the kernel. It allows developers to define test cases for critical subsystems, such as memory allocators, intrusive data structures, and scheduling algorithms, and execute them in the actual runtime environment. This approach is the only way to detect architecture-specific issues, such as unaligned memory accesses, incorrect register usage during context switches, or paging faults caused by invalid table entries, which would remain undetected in a hosted simulation or simply impossible to test.
 
 A critical design requirement for such a framework is test isolation. In a kernel environment, a failure often results in a system panic, infinite loop, or silent memory corruption that compromises the global state. To prevent side effects from a failed test influencing subsequent assertions (creating false positives or negatives), the framework should ideally ensure a clean state for each test suite. In early development stages, this often necessitates implementing mechanisms to reset subsystems between test executions, ensuring that results are deterministic and reproducible.
 
@@ -1436,7 +1436,7 @@ The stack acts as a cache of "hot" pages. When a page is freed, it is pushed ont
 To solve the contiguity problem while maintaining decent performance, general-purpose operating systems (like Linux) utilize the \textbf{Buddy System}. The Buddy System is a specific implementation of a broader class of allocators known as \textbf{Segregated Fits}, and its theoretical foundations are thoroughly described by Knuth \cite[Section 2.5]{knuth1973art}.
 
 \subsubsection{Concept: Segregated Fits}
-In a segregated fit architecture, memory is not viewed as one monolithic pool. Instead, the allocator maintains an array of free lists. Each list acts as a bin dedicated to blocks of a specific size class. For example, index 0 might hold 4KiB blocks, index 1 hold 8KiB blocks, and so on. This allows the allocator to quickly locate a block that fits a request without searching through blocks that are vastly too large or too small.
+In a segregated fit architecture, memory is not viewed as one monolithic pool. Instead, the allocator maintains an array of free lists. Each list acts as a bin dedicated to blocks of a specific size class. For example, index 0 might hold 4KiB blocks, index 1 might hold 8KiB blocks, and so on. This allows the allocator to quickly locate a block that fits a request without searching through blocks that are vastly too large or too small.
 
 \subsubsection{The Binary Buddy Algorithm}
 The Buddy System applies a strict discipline to segregated fits: all block sizes must be powers of two. The allocator maintains an array of lists for orders $0$ to $MAX\_ORDER$. Order $k$ typically represents a block size of $PAGE\_SIZE \times 2^k$.
@@ -1564,7 +1564,7 @@ Every block in memory (whether free or allocated) is prefixed with a header cont
 \end{itemize}
 
 \subsubsection{Summary of Trade-offs}
-TLSF is the preferred allocator for real-time kernels because it guarantees worst-case execution time ($O(1)$) and minimizes wasted memory (low fragmentation). However, it is slightly slower on average than the Buddy System due to the overhead of maintaining the doubly-linked lists for every size class and the boundary tag manipulation. For general-purpose operating systems where average throughput is more important than worst-case latency, the Buddy System is often retained.
+TLSF is the preferred allocator for real-time kernels because it guarantees worst-case execution time ($O(1)$) and minimizes wasted memory (low fragmentation). However, it is slightly slower on average than the Buddy System due to the overhead of maintaining the doubly linked lists for every size class and the boundary tag manipulation. For general-purpose operating systems where average throughput is more important than worst-case latency, the Buddy System is often retained.
 
 \subsection{Advanced Layering: Object Caching (Slab)}
 
@@ -1899,11 +1899,11 @@ The kernel must perform two frequent operations on this collection:
     \item \textbf{Insertion/Deletion:} When a process allocates memory (e.g., \texttt{mmap}) or frees it (e.g., \texttt{munmap}), the OS must find a free gap of sufficient size and insert or remove a region object.
 \end{enumerate}
 
-The choice of data structure for storing these regions has a direct impact on system responsiveness, particularly for large, complex applications like web browsers or database engines which may map thousands of distinct memory areas.
+The choice of data structure for storing these regions has a direct impact on system responsiveness, particularly for large, complex applications like web browsers or database engines, which may map thousands of distinct memory areas.
 
 \subsubsection{Linked Lists vs. Trees}
 
-The simplest implementation, found in many early-stage kernels, is a sorted singly or doubly linked list. This approach is memory efficient and simple to implement. However, it imposes an $O(N)$ time complexity on lookups. For a process with thousands of mappings, walking a linear list on every page fault introduces unacceptable latency. While linked lists remain useful for sequential iteration (such as printing a memory map to a debug console), they are insufficient for the hot path of memory management.
+The simplest implementation, found in many early-stage kernels, is a sorted singly or doubly linked list. This approach is memory-efficient and simple to implement. However, it imposes an $O(N)$ time complexity on lookups. For a process with thousands of mappings, walking a linear list on every page fault introduces unacceptable latency. While linked lists remain useful for sequential iteration (such as printing a memory map to a debug console), they are insufficient for the hot path of memory management.
 
 To achieve logarithmic time complexity ($O(\log N)$), modern operating systems utilize Balanced Binary Search Trees (BSTs). By indexing regions based on their start address, the kernel can quickly locate the containing region for any faulting address.
 
@@ -2172,16 +2172,16 @@ On the x86-64 architecture, this is typically implemented using the \texttt{GS} 
 
 \subsection{Core Identification}
 
-A critical design challenge in this domain is the identification of the executing core. While mostly all processors provide unique hardware identifiers (e.g., APIC ID on x86 \cite{Intel-proc-ids} or MPIDR on ARM \cite{ARM-MPIDR-EL1}), these values are intrinsically tied to the physical topology of the silicon. Consequently, they are often non-contiguous, sparse, or hierarchical, rendering them unsuitable for directly indexing internal kernel arrays. To address this, an operating system typically implements a mapping layer during hardware discovery, assigning a dense, sequential \textbf{Logical ID} (ranging from 0 to $N-1$) to each active core. Generally speaking another abstraction is handy here.
+A critical design challenge in this domain is the identification of the executing core. While mostly all processors provide unique hardware identifiers (e.g., APIC ID on x86 \cite{Intel-proc-ids} or MPIDR on ARM \cite{ARM-MPIDR-EL1}), these values are intrinsically tied to the physical topology of the silicon. Consequently, they are often non-contiguous, sparse, or hierarchical, rendering them unsuitable for directly indexing internal kernel arrays. To address this, an operating system typically implements a mapping layer during hardware discovery, assigning a dense, sequential \textbf{Logical ID} (ranging from 0 to $N-1$) to each active core. Generally speaking, another abstraction is handy here.
 
 \subsection{Timing Design}
 
-To support the preemptive scheduling model, the kernel requires a robust timing infrastructure to track execution time. Before discussing timing devices, a fundamental design decision must be made regarding the kernel type: \texttt{tickless} or \texttt{ticking}. Ticking kernels rely on a global constant defining the frequency of periodic timing interrupts. These values typically operate with millisecond granularity, as higher frequencies would degrade system performance. In contrast, tickless kernels do not define periodic interrupts. Instead, they schedule the next timing event based on immediate requirements, such as the sleep schedule or the time slice of the currently running process. It is important to note that ticking kernels also require higher granularity interrupts if support for \texttt{nanosleep} is needed (e.g. Linux implementation: \ref{subsec:linux-timing}).
+To support the preemptive scheduling model, the kernel requires a robust timing infrastructure to track execution time. Before discussing timing devices, a fundamental design decision must be made regarding the kernel type: \texttt{tickless} or \texttt{ticking}. Ticking kernels rely on a global constant defining the frequency of periodic timing interrupts. These values typically operate with millisecond granularity, as higher frequencies would degrade system performance. In contrast, tickless kernels do not define periodic interrupts. Instead, they schedule the next timing event based on immediate requirements, such as the sleep schedule or the time slice of the currently running process. It is important to note that ticking kernels also require higher granularity interrupts if support for \texttt{nanosleep} is needed (e.g., Linux implementation: \ref{subsec:linux-timing}).
 
 \subsection{Clocks}
 \label{subsec:clocks-tutorial}
 
-The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline based priority queue. On x86-64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio, obviously from the set of supported ones.
+The first category of devices required is a simple clock capable of tracking the time elapsed since system startup, primarily for gathering statistics and maintaining timekeeping. These are essential for placing tasks on a timeline and scheduling interrupts for high-precision sleep operations. Without such capabilities, waking tasks would require iterating over all sleeping entities to decrement remaining time, resulting in $O(n)$ complexity. Since interrupt handlers must execute rapidly, tasks should be managed in a high-performance timeline-based priority queue. On x86-64, the TSC clock \cite{IntelManual-TSC} is suitable for measuring system uptime (sufficient for the scheduler), while the RTC is used for wall-clock time displayed to the user. If multiple timers are available, the kernel should select the one offering the best performance-accuracy ratio, obviously from the set of supported ones.
 
 \subsection{Event Clocks}
 \label{subsec:event_clocks}
@@ -2216,13 +2216,13 @@ Operating directly on raw sectors is impractical for a general-purpose operating
 
 \subsection{Virtual File System (VFS)}
 
-A non-trivial kernel must support multiple file system formats (e.g., FAT32 \cite{fat-spec} for UEFI compatibility, Ext2 \cite{ext2-spec} for Linux compatibility, or ISO9660 \cite{iso9660-spec} for optical media). Implementing system calls like \texttt{open()} or \texttt{read()} separately for each format would lead to a combinatorial explosion of code paths and tight coupling between the kernel core and specific driver implementations.
+A non-trivial kernel must support multiple file system formats (e.g., FAT32 \cite{fat-spec} for UEFI compatibility, Ext2 \cite{ext2-spec} for Linux compatibility, or ISO9660 \cite{iso9660-spec} for optical media). Implementing system calls like \texttt{open()} or \texttt{read()} separately for each format would lead to a tight coupling between the kernel core and specific driver implementations.
 
-To resolve this, modern kernels implement a \textbf{Virtual File System} (VFS). The VFS is a kernel subsystem that provides a unified abstract interface for file operations. It defines generic structures --- such as file metadata, directory entries and mounted filesystems --- and a set of operations that concrete file system drivers must implement. By using function pointer table, the VFS decouples the high-level system calls from low-level storage details.
+To resolve this, modern kernels implement a \textbf{Virtual File System} (VFS). The VFS is a kernel subsystem that provides a unified abstract interface for file operations. It defines generic structures --- such as file metadata, directory entries, and mounted filesystems --- and a set of operations that concrete file system drivers must implement. By using a function pointer table, the VFS decouples the high-level system calls from low-level storage details.
 
 \subsection{Block Device Abstraction}
 
-While the VFS abstracts the logical format of data (files and directories), the kernel must also abstract the physical location of that data. A file system driver, such as FAT32, contains logic to manipulate File Allocation Tables and directory clusters, but it should not contain logic for communicating with a SATA controller, or managing TCP/IP packets.
+While the VFS abstracts the logical format of data (files and directories), the kernel must also abstract the physical location of that data. A file system driver, such as FAT32, contains logic to manipulate File Allocation Tables and directory clusters, but it should not contain logic for communicating with a SATA controller or managing TCP/IP packets.
 
 To achieve this separation of concerns, the kernel implements a \textbf{Block Device Interface}. This interface treats every storage medium as a generic array of fixed-size sectors, regardless of the underlying hardware implementation. The interface typically exposes a minimal contract:
 \begin{itemize}
@@ -2306,7 +2306,7 @@ The fundamental unit for resource management is the process. This object represe
     \item \textbf{Mapping Metadata} --- Structures enabling the tracking and allocation of virtual address ranges.
 \end{itemize}
 
-While additional resources may be required to implement features such as Inter-Process Communication (IPC), pipes, file operations or synchronization primitives, the two elements listed above constitute the bare minimum for the process concept. 
+While additional resources may be required to implement features such as Inter-Process Communication (IPC), pipes, file operations, or synchronization primitives, the two elements listed above constitute the bare minimum for the process concept. 
 
 A straightforward implementation involves defining separate structures for \texttt{Thread} and \texttt{Process} objects, although some designs merge these into a single task structure (as discussed in Section \ref{subsec:linux-task}).
 
@@ -2314,7 +2314,7 @@ At this stage, it is prudent to prepare data structures that allow for efficient
 
 It is important to note that the creation and destruction of processes are computationally expensive operations. They require building page tables, mapping the kernel address space, and allocating memory for bookkeeping structures. To mitigate latency, some of this workload, particularly during destruction, can be deferred to dedicated kernel worker threads, allowing the system to return control to the caller more rapidly.
 
-\noindent The minimal stuct may look like this:
+\noindent The minimal structure may look like this:
 \begin{cppcode}[caption={Process Structure}, label={lst:exampleProcessStruct}]
     struct Process {
         /* Process resources */
@@ -2327,7 +2327,7 @@ In a production environment, this structure would naturally include additional f
 
 \subsection{Thread}
 
-The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution --- the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer. Although same thing may be archieved with different solution
+The second primary component of the scheduling subsystem is the thread. The thread represents the fundamental unit of execution --- the actual code consuming CPU time and utilizing resources from its parent process. To effectively restore, start, and switch execution, the system must track the thread's state, which includes CPU registers, the instruction pointer, and architecture-specific flags. All of this state information can be compressed into a single field: the thread's stack pointer. Although the same thing may be achieved with a different solution.
 
 This approach simplifies the architecture significantly and enhances performance. It is worth noting that while certain architectures provide hardware-assisted context switching mechanisms (such as the legacy Hardware Task Switching on x86), these are rarely utilized in modern general-purpose kernels due to performance overhead and portability concerns. Instead, the standard approach is to unify context storage using the stack. Since the stack is heavily utilized, it is typically cached, eliminating the need to allocate separate memory regions for saving context. When saving context, registers are pushed onto the stack. When initializing a thread, the stack is artificially populated with boot-up values.
 
@@ -2501,7 +2501,7 @@ To distinguish between runnable and waiting threads, a specific \texttt{BLOCKED}
 
 \subsection{Sleep}
 
-To implement sleeping functionality, two primary operations must be introduced: transitioning a task into a sleeping state and waking it upon the expiration of the requested duration. The first operation is relatively straightforward, similar to blocking on a synchronization primitive, the thread is removed from the scheduler's run queues, inserted into a dedicated sleeping data structure, and its state is updated to reflect that it is sleeping. The second operation is significantly more complex, as it requires determining the appropriate mechanism and timing for waking tasks.
+To implement sleeping functionality, two primary operations must be introduced: transitioning a task into a sleeping state and waking it upon the expiration of the requested duration. The first operation is relatively straightforward, similar to blocking on a synchronization primitive. The thread is removed from the scheduler's run queues, inserted into a dedicated sleeping data structure, and its state is updated to reflect that it is sleeping. The second operation is significantly more complex, as it requires determining the appropriate mechanism and timing for waking tasks.
 
 In a cooperative scheduling model, the wake-up logic can simply be integrated into the function responsible for selecting the next task. However, in preemptive and high-precision scenarios, the system must actively manage the timing framework to wake threads without introducing unnecessary latency.
 
@@ -2580,7 +2580,7 @@ The syscall interface is the primary attack surface of the kernel. The kernel mu
 
 \paragraph{Performance Optimization}
 
-For high-frequency operations where even the minimal syscall overhead is too high (e.g., querying the system time), one may employ \textbf{vDSO} (virtual Dynamic Shared Object). This mechanism maps a read-only page of kernel memory containing specific data and code into the user process. The application can then execute a standard function call to read this data without ever triggering a context switch or entering kernel mode (e.g. linux \cite{linux_vdso}).
+For high-frequency operations where even the minimal syscall overhead is too high (e.g., querying the system time), one may employ \textbf{vDSO} (virtual Dynamic Shared Object). This mechanism maps a read-only page of kernel memory containing specific data and code into the user process. The application can then execute a standard function call to read this data without ever triggering a context switch or entering kernel mode (e.g., linux \cite{linux_vdso}).
 
 \subsection{Libc System Headers}
 
@@ -2599,7 +2599,7 @@ In addition to the ISO C standard, many operating systems implement parts of the
 \paragraph{OS-Specific Extensions}
 Custom operating systems frequently introduce features that fall outside the scope of ISO C or POSIX, such as direct frame buffer access, specialized inter-process communication mechanisms, or hardware-specific controls.
 
-It is considered best practice to place operating system-specific extensions within a clearly separated namespace, for example under a dedicated directory such as \texttt{<alkos/...>}. This approach enables applications developed specifically for the target operating system to access unique kernel features.
+It is considered best practice to place operating system-specific extensions within a clearly separated namespace, for example, under a dedicated directory such as \texttt{<alkos/...>}. This approach enables applications developed specifically for the target operating system to access unique kernel features.
 
 \section{Host Environment --- Working OS}
 
@@ -2701,7 +2701,7 @@ User space programs require a well-defined runtime initialization sequence to pr
 \subsubsection{OS-Specific Toolchain Adaptation}
 \label{subsubsec:os-specific-toolchain}
 
-While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86-64-elf}) is sufficient for compiling the kernel itself, it presents limitations for user space development. Generic toolchains are agnostic to the operating system's file system layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively  (e.g., via a target like \texttt{x86-64-youros}) \cite{osdev-os-specific-toolchain}. This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts. From this point onward, one should provide its own toolchain source code (or patches), alongside the OS source code, instead of relying on an upstream one.
+While a generic cross-compiler (e.g., targeting a bare-metal environment such as \texttt{x86-64-elf}) is sufficient for compiling the kernel itself, it presents limitations for user space development. Generic toolchains are agnostic to the operating system's file system layout and standard library locations, requiring the build system to manually manage header paths and library linkage for every compilation unit. To streamline this process, the toolchain can be patched to target the custom operating system natively  (e.g., via a target like \texttt{x86-64-youros}) \cite{osdev-os-specific-toolchain}. This automates environment detection and dependency resolution, significantly reducing reliance on complex build scripts. From this point onward, one should provide their own toolchain source code (or patches), alongside the OS source code, instead of relying on an upstream one.
 
 \paragraph{System Root (Sysroot)}
 
@@ -2780,7 +2780,7 @@ To enhance extensibility and avoid the need for recompilation when adding driver
 
 Historically, Linux utilized a strictly periodic tick (defined by hardware), configuring hardware timers to generate interrupts at a fixed frequency (e.g., 100 Hz or 1000 Hz). While this design was straightforward, it imposed limitations on sleep granularity and power efficiency. To address these issues, Linux introduced High Resolution Timers (\texttt{hrtimers}), which allow the kernel to schedule interrupts with nanosecond precision based on immediate needs rather than a fixed cadence. Despite the capabilities of high-resolution timers, the concept of a periodic tick is maintained within the kernel for performance reasons and architectural legacy, by simulating the tick with high precision framework.
 
-This hight precision framework has one major drawback - it can get slow for big number of events as it based on priority queue with $O(\log n)$complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers $O(1)$ complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
+This hight-precision framework has one major drawback - it can get slow for a large number of events, as it is based on a priority queue with $O(\log n)$complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers $O(1)$ complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
 
 \subsection{The Process and Thread Model}
 \label{subsec:linux-task}
@@ -2813,13 +2813,13 @@ The Linux documentation summarizes the design of the \textbf{CFS} as follows:
 \begin{quote}
 80\% of CFS's design can be summed up in a single sentence: CFS basically models an “ideal, precise multi-tasking CPU” on real hardware.
 
-“Ideal multi-tasking CPU” is a (non-existent :-)) CPU that has 100\% physical power and which can run each task at precise equal speed, in parallel, each at 1/nr\_running speed. For example: if there are 2 tasks running, then it runs each at 50\% physical power - i.e., actually in parallel.
+“Ideal multi-tasking CPU” is a (non-existent :-)) CPU that has 100\% physical power and which can run each task at precise equal speed, in parallel, each at 1/nr\_running speed. For example, if there are 2 tasks running, then it runs each at 50\% physical power - i.e., actually in parallel.
     
 On real hardware, we can run only a single task at once, so we have to introduce the concept of “virtual runtime.” The virtual runtime of a task specifies when its next timeslice would start execution on the ideal multi-tasking CPU described above. In practice, the virtual runtime of a task is its actual runtime normalized to the total number of running tasks.
 \cite{linux_cfs}
 \end{quote}
 
-The implementation uses a red-black tree sorted by virtual runtime, representing the execution timeline. The next task selected is the leftmost node in the tree (the task with the least spent execution time) and runs until next another taks becomes the leftmost + some granularity to prevent over-scheduling.
+The implementation uses a red-black tree sorted by virtual runtime, representing the execution timeline. The next task selected is the leftmost node in the tree (the task with the least spent execution time) and runs until another task becomes the leftmost + some granularity to prevent over-scheduling.
 
 \subsubsection{Earliest Eligible Virtual Deadline First Scheduler}
 
@@ -2841,7 +2841,7 @@ As an architecture-independent kernel, Linux abstracts hardware details. Physica
     \item \texttt{ZONE\_HIGHMEM} --- Memory not covered by permanent kernel mappings, used only by some 32-bit architectures.
 \end{itemize}
 
-To enhance multi-core performance, Linux employs a two-step strategy \cite{linux_mem_phys}. It utilizes a global buddy allocator \cite{buddy_allocator} alongside Per-CPU Pagesets (PCP). Allocations are first attempted from the local PCP and if that fails, the system falls back to the global allocator with full synchronization.
+To enhance multi-core performance, Linux employs a two-step strategy \cite{linux_mem_phys}. It utilizes a global buddy allocator \cite{buddy_allocator} alongside Per-CPU Pagesets (PCP). Allocations are first attempted from the local PCP, and if that fails, the system falls back to the global allocator with full synchronization.
 
 \subsubsection{Virtual Memory}
 
@@ -2862,7 +2862,7 @@ The \texttt{fork()} mechanism is rooted in historical design decisions. While co
 \noindent Advantages:
 \begin{itemize}
     \item Simplified implementation of pipes and pipelining.
-    \item Automatic state propagation, eliminating the need to manually specify files or streams in function call.
+    \item Automatic state propagation, eliminating the need to manually specify files or streams in a function call.
 \end{itemize}
 
 \noindent Disadvantages:
@@ -3154,7 +3154,7 @@ MemoryManagers SetupMemoryManagement(MultibootInfo &multiboot_info) {
 }
 \end{cppcode}
 
-The identity mapping ensures that code continues to execute correctly after paging is enabled, the instruction pointer remains valid because virtual addresses 0--10GB map directly to the same physical addresses.
+The identity mapping ensures that code continues to execute correctly after paging is enabled, and the instruction pointer remains valid because virtual addresses 0--10GB map directly to the same physical addresses.
 
 \subsubsection{Long Mode Enablement}
 
@@ -3684,7 +3684,7 @@ Upon system initialization, the \texttt{BuddyPmm} takes over as the authoritativ
 
 \subsubsection{Intrusive Free Lists}
 
-To achieve high performance and zero memory overhead during runtime, the allocator utilizes an array of intrusive doubly-linked lists, one for each order. It leverages the \texttt{PageMeta} structure described previously. When a block is free, its metadata entry functions as a node in the corresponding free list.
+To achieve high performance and zero memory overhead during runtime, the allocator utilizes an array of intrusive doubly linked lists, one for each order. It leverages the \texttt{PageMeta} structure described previously. When a block is free, its metadata entry functions as a node in the corresponding free list.
 
 \begin{cppcode}[caption={Buddy System State Management}, label={lst:buddy_lists}]
 class BuddyPmm {
@@ -3942,7 +3942,7 @@ In AlkOS, the concept of a virtual memory context is encapsulated by the \texttt
 
 \begin{enumerate}
     \item \textbf{Hardware Representation:} A physical pointer to the root of the page table hierarchy (e.g., the PML4 address). This is the value loaded into the CR3 register during a context switch.
-    \item \textbf{Logical Representation:} A sorted, doubly-linked list of \texttt{VMemArea} objects. This list defines the high-level semantics of memory regions, which are invisible to the hardware MMU.
+    \item \textbf{Logical Representation:} A sorted, doubly linked list of \texttt{VMemArea} objects. This list defines the high-level semantics of memory regions, which are invisible to the hardware MMU.
 \end{enumerate}
 
 To ensure data consistency in a potentially multi-threaded environment (or during interrupt handling), operations on the logical list are protected by a \texttt{Spinlock}.
@@ -3969,7 +3969,7 @@ The \texttt{DirectMappingVMemArea} is used when a specific range of physical mem
     \item \textbf{Framebuffers:} Exposing the video memory to user-space applications (as seen in the Window Manager implementation).
 \end{itemize}
 
-Unlike anonymous memory, this area ignores the "Not Present" fault mechanic for allocation; it simply maps the pre-existing physical range.
+Unlike anonymous memory, this area ignores the "Not Present" fault mechanism for allocation; it simply maps the pre-existing physical range.
 
 \subsubsection{Kernel Synchronization Area}
 
@@ -4003,7 +4003,7 @@ bool KernelSyncVMemArea::HandleFault(
 
 \subsection{Initialization and Handover}
 
-The transition from the bootloader to the kernel's internal memory management is a critical phase. When the kernel main function receives control, the system is running on page tables created by \texttt{Loader64}. These tables contain a temporary identity mapping (0-10 GB) that is necessary for the loader but undesirable for the kernel, as it exposes physical memory to user-space (NULL pointer dereferences would be valid accesses to physical address 0).
+The transition from the bootloader to the kernel's internal memory management is a critical phase. When the kernel's main function receives control, the system is running on page tables created by \texttt{Loader64}. These tables contain a temporary identity mapping (0-10 GB) that is necessary for the loader but undesirable for the kernel, as it exposes physical memory to user-space (NULL pointer dereferences would be valid accesses to physical address 0).
 
 To sanitize this state, we implemented the \texttt{Mem::Boot::BootMmuCleaner}. Its responsibilities are twofold:
 
@@ -5296,7 +5296,7 @@ Certain low-level system interactions are beyond the scope of the standard C lib
     System power states can be controlled using the \texttt{Shutdown} and \texttt{Reboot} interfaces, which invoke the underlying ACPI mechanisms.
 
     \item \textbf{Extended File System Operations (\texttt{alkos/sys/fs/fs.h}):}
-    While standard I/O functions support file access, directory enumeration and metadata queries require OS-specific calls. The \texttt{ReadDirectory} function enables directory traversal, and \texttt{FileInfo} provides information about file system objects.
+    While standard I/O functions support file access, directory enumeration, and metadata queries require OS-specific calls. The \texttt{ReadDirectory} function enables directory traversal, and \texttt{FileInfo} provides information about file system objects.
 \end{itemize}
 
 \subsection{Syscalls}
@@ -5494,7 +5494,7 @@ Once the session is established, the application treats the video buffer as a li
 
 \subsubsection{Double Buffering and Synchronization}
 
-To prevent screen tearing, AlkOS employs a double-buffering strategy. The user application writes to its private backbuffer. To display the frame, the application calls \texttt{blit()} (Listing~\ref{lst:gui_sync}). This system call triggers the kernel's window manager to copy the contents of the user's backbuffer to the physical video memory if its session is currently active.
+To prevent screen tearing, AlkOS employs a double-buffering strategy. The user application writes to its private backbuffer. To display the frame, the application calls \texttt{blit()} (Listing~\ref{lst:gui_sync}). This system call triggers the kernel's window manager to copy the contents of the user's backbuffer to the physical video memory if the user's session is currently active.
 
 \begin{cppcode}[caption={Frame Synchronization}, label={lst:gui_sync}]
     // Blit to screen
@@ -5619,7 +5619,7 @@ To demonstrate the capability of the AlkOS user space and its standard library c
 
 We utilized \textbf{Doomgeneric}~\cite{doomgeneric}, a source port specifically designed to be portable. It strips away the complex, operating-system-specific dependencies (such as sound drivers, networking, or windowing) and exposes a minimal interface that the target OS must implement.
 
-It is important to note that while the Doom engine is open source since 1997 \cite{idsoftware1997doomsource}, the game data (levels, graphics, sounds) is stored in \textbf{.WAD} files, which remain under copyright. To execute the game on AlkOS, a valid \texttt{.WAD} file must be placed in the \texttt{/doom} directory of the rootfs overlay. This can be the \texttt{DOOM1.WAD} from the shareware version or the full \texttt{DOOM.WAD} from a retail copy. The engine supports games based on the same technology, such as \textit{Doom II} or \textit{Heretic}.
+It is important to note that while the Doom engine has been open source since 1997 \cite{idsoftware1997doomsource}, the game data (levels, graphics, sounds) is stored in \textbf{.WAD} files, which remain under copyright. To execute the game on AlkOS, a valid \texttt{.WAD} file must be placed in the \texttt{/doom} directory of the rootfs overlay. This can be the \texttt{DOOM1.WAD} from the shareware version or the full \texttt{DOOM.WAD} from a retail copy. The engine supports games based on the same technology, such as \textit{Doom II} or \textit{Heretic}.
 
 \begin{figure}[htbp]
     \centering
@@ -5681,7 +5681,7 @@ Doom relies heavily on dynamic memory allocation for level geometry, textures, a
 The Doom engine, particularly the WAD management system, relies on case-insensitive string comparisons to locate resources (e.g., finding "doom.wad" when the file is named "DOOM.WAD"). We implemented POSIX-compliant \texttt{strcasecmp} and \texttt{strncasecmp} functions to support this behavior.
 
 \paragraph{Standard I/O}
-To support loading data from the file system, we expanded the \texttt{stdio} implementation to include \texttt{fopen}, \texttt{fread}, \texttt{fseek}, and \texttt{ftell}, backed by the underlying syscalls (\texttt{open}, \texttt{read}, \texttt{seek}). This allowed the Doom engine to seamlessly load WAD files from the root file system using standard I/O semantics. Also \texttt{create\_directory} needed to be implemented to create the \texttt{saves/} directory for saving game progress. \\
+To support loading data from the file system, we expanded the \texttt{stdio} implementation to include \texttt{fopen}, \texttt{fread}, \texttt{fseek}, and \texttt{ftell}, backed by the underlying syscalls (\texttt{open}, \texttt{read}, \texttt{seek}). This allowed the Doom engine to seamlessly load WAD files from the root file system using standard I/O semantics. Also, \texttt{create\_directory} needed to be implemented to create the \texttt{saves/} directory for saving game progress. \\
 
 By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
@@ -5700,7 +5700,7 @@ We successfully fulfilled all functional requirements defined in Section \ref{su
     \item \textbf{Virtual Memory Management} -- A comprehensive VMM supporting recursive page table mapping, higher-half mapping, and kernel space synchronization.
     \item \textbf{Lazy Allocation} -- A demand-paging mechanism that allocates physical memory only when accessed, utilizing page fault handling.
     \item \textbf{Tickless Kernel Architecture} -- A dynamic timing subsystem that schedules interrupts only when necessary, improving CPU efficiency.
-    \item \textbf{Advanced Scheduling Policies} -- Implementation of multiple algorithms including Round Robin, Priority Queue, and Multi-Level Feedback Queue (MLFQ).
+    \item \textbf{Advanced Scheduling Policies} -- Implementation of multiple algorithms, including Round Robin, Priority Queue, and Multi-Level Feedback Queue (MLFQ).
     \item \textbf{Process \& Thread Management} -- Full lifecycle management including creation, execution, detaching, joining, and termination of tasks.
     \item \textbf{Wait Queues} -- A synchronization primitive allowing threads to block efficiently until specific conditions or events occur.
     \item \textbf{System Call Interface} -- A dispatch mechanism utilizing \texttt{int 0x80} instruction with a wide array of implemented services.
@@ -5735,7 +5735,7 @@ Developing an operating system kernel is an inherently complex task, further com
     \item \textbf{ACPI} -- It is assumed that device discovery is performed via the Advanced Configuration and Power Interface (ACPI), a standard supported by the majority of modern platforms. 
     \item \textbf{PS/2 Keyboard} -- Input is handled via a PS/2 keyboard controller. A USB stack was not implemented due to the significant development effort required. 
     \item \textbf{FAT12/16/32 Support} -- The system supports the FAT12, FAT16, and FAT32 file system variants. Long file name (LFN) support is not implemented; filenames are therefore limited to the 8.3 format.
-    \item \textbf{Ramdisk} -- The system is bootstrapped using an in-memory file system mounted as the initial root file system. Loading a root file system from persistent storage is not supported, and thus no permanent modifications are possible. The expected file system is hardcoded to FAT16.
+    \item \textbf{Ramdisk} -- The system is bootstrapped using an in-memory file system mounted as the initial root file system. Loading a root file system from persistent storage is not supported, and thus, no permanent modifications are possible. The expected file system is hardcoded to FAT16.
     \item \textbf{ELF64} -- User space applications must be compiled as ELF64 binaries. Dynamic linking is not supported. In particular, binaries containing a \texttt{PT\_INTERP} segment \cite{elf-spec-dynamic} or relying on shared libraries cannot be executed.
 \end{itemize}
 
