@@ -303,13 +303,28 @@
 
 Operating system development constitutes one of the most challenging disciplines in computer science, requiring deep knowledge of hardware architecture and systems programming. This thesis presents the design and implementation of AlkOS, a monolithic general-purpose operating system kernel for the x86-64 architecture (through a hardware abstraction layer), developed from scratch using C++. The project addresses the scarcity of structured educational resources by serving both as a functional kernel implementation and a comprehensive guide to independent OS development.
 
-Technically, AlkOS features a custom two-stage bootloader that transitions the machine to Long Mode and establishes a higher-half kernel environment. The system implements advanced memory management with paging and a physical memory manager, alongside a Virtual File System (VFS) with FAT support. The process scheduler utilizes a tickless, meta-scheduler architecture supporting multiple policies, including Round-Robin, Priority Queues, and Multi-Level Feedback Queues (MLFQ), ensuring efficient task management. The validation of the system's capabilities culminated in the successful execution of the Doom engine within a custom graphical shell, a task necessitating the implementation of a C/C++ standard library and a comprehensive system call interface.
+Technically, AlkOS features a custom two-stage bootloader that transitions the CPU to Long Mode and establishes a higher-half kernel environment. The system implements advanced memory management with paging and a physical memory manager, alongside a Virtual File System (VFS) with FAT support. The process scheduler utilizes a tickless, meta-scheduler architecture supporting multiple policies, including Round-Robin, Priority Queues, and Multi-Level Feedback Queues (MLFQ), ensuring efficient task management. The validation of the system's capabilities culminated in the successful execution of the Doom engine within a custom graphical shell, a task necessitating the implementation of a C/C++ standard library and a comprehensive system call interface. \\
 
-
+\noindent \textbf{Keywords:} Operating System Development, Systems Programming, x86-64 Architecture, Bare Metal, Monolithic Kernel, Virtual Memory Management, Tickless Kernel, Preemptive Scheduling, Virtual File System, Demand Paging, Meta-Scheduler, Higher-Half Kernel, User Space.
 \end{abstract}
 }
 
 \null\thispagestyle{empty}\newpage
+
+{\selectlanguage{polish} \fontsize{12}{14}\selectfont
+\begin{abstract}
+
+\begin{center}
+\tytul
+\end{center}
+
+Tworzenie systemów operacyjnych stanowi jedną z najtrudniejszych dziedzin informatyki, wymagającą głębokiej wiedzy na temat architektur sprzętowych i programowania systemowego. Niniejsza praca przedstawia projekt i implementację AlkOS, monolitycznego jądra systemu operacyjnego ogólnego przeznaczenia dla architektury x86-64 (poprzez warstwę abstrakcji sprzętowej), stworzonego od podstaw przy użyciu języka C++. Projekt odpowiada na niedobór ustrukturyzowanych materiałów edukacyjnych, służąc zarówno jako funkcjonalna implementacja jądra, jak i kompleksowy przewodnik po niezależnym tworzeniu systemów operacyjnych.
+
+Od strony technicznej, AlkOS posiada własny dwuetapowy program rozruchowy (bootloader), który przełącza procesor w tryb 64-bitowy (Long Mode) i ustanawia środowisko jądra w wyższej połowie pamięci (higher-half kernel). System implementuje zaawansowane zarządzanie pamięcią ze stronicowaniem i menedżerem pamięci fizycznej, wraz z wirtualnym systemem plików (VFS) z obsługą FAT. Planista procesów wykorzystuje architekturę meta-dyspozytora bez cyklicznych przerwań (tickless), obsługującą wiele polityk, w tym algorytm karuzelowy (Round-Robin), kolejki priorytetowe i wielopoziomowe kolejki ze sprzężeniem zwrotnym (MLFQ), zapewniając efektywne zarządzanie zadaniami. Walidacja możliwości systemu zakończyła się pomyślnym uruchomieniem silnika gry Doom we własnej powłoce systemowej, co wymagało implementacji biblioteki standardowej C/C++ oraz obszernego interfejsu wywołań systemowych. \\
+
+\noindent \textbf{Słowa kluczowe:} Tworzenie Systemów Operacyjnych, Programowanie Systemowe, Architektura x86-64, Środowisko bez systemu operacyjnego, Jądro Monolityczne, Zarządzanie Pamięcią Wirtualną, Jądro Bezzegarowe, Wywłaszczanie Procesów, Wirtualny System Plików, Stronicowanie na żądanie, Meta-Dyspozytor, Jądro w wyższej połowie pamięci, Przestrzeń Użytkownika.
+\end{abstract}
+}
 
 %% --------- DECLARATIONS ------------
 %
