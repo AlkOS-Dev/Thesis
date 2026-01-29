@@ -1834,7 +1834,7 @@ By deferring allocation until the last possible moment --- specifically, the mom
 \subsection{Mechanisms: Overcommitment and Optimization}
 \label{subsec:vmm_mechanisms}
 
-The realization of the Theory of Locality in a modern kernel relies on three specific mechanisms: Demand Paging, Copy-on-Write, and the Zero Page. These features fundamentally change the role of the Page Fault Exception (\texttt{\#PF}) from an error condition to a core signaling mechanism of the memory subsystem.
+The realization of the Theory of Locality in a modern kernel relies on three specific mechanisms: Demand Paging, Copy-on-Write, and the Zero Page. These features allow the kernel to practice memory overcommitment —-- promising more virtual memory to processes than physically exists --— by deferring actual allocation until access occurs. They fundamentally change the role of the Page Fault Exception (\texttt{\#PF}) from an error condition to a core signaling mechanism of the memory subsystem.
 
 \subsubsection{Demand Paging}
 
@@ -1908,7 +1908,7 @@ This ensures that the expensive operation of memory copying occurs only when str
 
 \subsubsection{Swapping}
 
-It is worth noting that a complete virtual memory subsystem typically includes a swapping mechanism to support memory overcommitment. This allows inactive pages to be evicted to secondary storage, freeing physical RAM for active tasks. However, the theory presented in this section focuses on the fundamental aspects of memory virtualization: isolation, protection, and hardware abstraction. The implementation of swap and page replacement algorithms is considered a separate, advanced topic extending beyond these core principles.
+It is worth noting that a complete virtual memory subsystem typically includes a swapping mechanism to sustain high levels of memory overcommitment. While the mechanisms above allow virtual allocation to exceed physical capacity, swapping ensures stability when physical memory is finally exhausted. This allows inactive pages to be evicted to secondary storage, freeing physical RAM for active tasks. However, the theory presented in this section focuses on the fundamental aspects of memory virtualization: isolation, protection, and hardware abstraction. The implementation of swap and page replacement algorithms is considered a separate, advanced topic extending beyond these core principles.
 
 \section{Discovering External Devices and System Capabilities}
 \label{sec:discovery}
