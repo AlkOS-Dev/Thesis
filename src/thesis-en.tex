@@ -424,19 +424,41 @@ At the outset of the project, specific requirements were not rigidly defined due
 
 \section{Work Division}
 
-\paragraph{Jakub Lisowski}
+\subsection*{Jakub Lisowski}
 
 \begin{itemize} 
     \item opa
 \end{itemize}
 
-\paragraph{Adam Ogieniewski}
+\subsection*{Adam Ogieniewski}
+
+\subsubsection{Thesis Writing}
 
 \begin{itemize} 
-    \item opa
+    \item Chapter \ref{chap:os_from_scratch} --- Creating an Operating System from Scratch:
+    \begin{itemize}
+        \item Section \ref{subsec:theory_toolchain} --- Cross-Compilation Toolchain
+        \item Subsection \ref{subsec:building_machinery} --- Building Machinery
+        \item Section \ref{subsec:refcounting} --- Reference Counting
+        \item Section \ref{subsec:theory_std} --- Implementation of the Standard Library
+        \item Section \ref{sec:theory_fs} --- File Systems
+        \item Subsection \ref{subsubsec:syscalls} --- Syscalls
+        \item Subsection \ref{subsec:libc_headers} --- Libc System Headers
+        \item Section \ref{sec:host_env} --- Host Environment --- Working OS
+    \end{itemize}
+
+    \item Chapter \ref{chap:high_level_subsystems} --- High-Level Subsystems:
+    \begin{itemize}
+        \item Section \ref{section:fs} --- File System
+        \item Subsection \ref{subsec:policiesOverview} --- MLFQ Scheduling Policy
+    \end{itemize}
+
+    \item Chapter \ref{chap:users_manual} --- User's Manual
 \end{itemize}
 
-\paragraph{Łukasz Kryczka}
+\subsubsection*{Code Implementation}
+
+\subsection*{Łukasz Kryczka}
 
 \begin{itemize} 
     \item opa
@@ -468,6 +490,7 @@ Two distinct build environments are used throughout the system's development. In
 Kernel components and early system initialization code are built in a freestanding environment, as they execute before any operating system services are available. User space programs, on the other hand, are compiled in a hosted environment once the operating system and its runtime infrastructure have been established. The required runtime libraries are provided by the operating system (see Subsection~\ref{subsec:theory_std}).
 
 \subsection{Building Machinery}
+\label{subsec:building_machinery}
 
 The construction of an operating system kernel requires the coordinated build of components, including loaders, the kernel, third-party libraries, and user space applications. Managing this through manual compiler invocations or ad-hoc shell scripts does not scale and frequently results in maintenance issues. Consequently, the design of a robust build infrastructure is essential for efficient development. We outline several key considerations for establishing such a system.
 
@@ -2182,6 +2205,7 @@ Most modern architectures support both local and high-precision timers. For exam
 Lastly, we need some way to provide input to the kernel on the real machine, not only emulated environment. For that, we will need some keyboard handling. First easier way is to utilize some simple ports like PS/2 \cite{osdev-ps21, osdev-ps22} if they are available on our device (it is quite popular on embedded systems). Otherwise, we will probably have to implement some USB drivers, which will be much more difficult \cite{usb20-spec, osdev-usb}.
 
 \section{File Systems}
+\label{sec:theory_fs}
 
 Once the kernel has established memory management and basic device communication, the next major milestone is the management of persistent data. In a raw hardware context, storage devices (Hard Disk Drives, SSDs, NVMe drives) present themselves as vast, linear arrays of blocks (typically 512~B or 4~KiB) accessed via Linear Block Addressing (LBA).
 
@@ -2580,6 +2604,7 @@ The syscall interface is the primary attack surface of the kernel. The kernel mu
 For high-frequency operations where even the minimal syscall overhead is too high (e.g., querying the system time), one may employ \textbf{vDSO} (virtual Dynamic Shared Object). This mechanism maps a read-only page of kernel memory containing specific data and code into the user process. The application can then execute a standard function call to read this data without ever triggering a context switch or entering kernel mode (e.g., linux \cite{linux_vdso}).
 
 \subsection{Libc System Headers}
+\label{subsec:libc_headers}
 
 Although the system call interface constitutes the fundamental mechanism for interaction with the kernel, it operates at a level of abstraction that is unsuitable for general-purpose application development. In practice, application programmers do not invoke syscalls directly via assembly instructions. Instead, they rely on the \texttt{libc}, whose header files define the API between user space software and the operating system.
 
@@ -2599,6 +2624,7 @@ Custom operating systems frequently introduce features that fall outside the sco
 It is considered best practice to place operating system-specific extensions within a clearly separated namespace, for example, under a dedicated directory such as \texttt{<alkos/...>}. This approach enables applications developed specifically for the target operating system to access unique kernel features.
 
 \section{Host Environment --- Working OS}
+\label{sec:host_env}
 
 \subsection{Root File System (Rootfs)}
 \label{subsec:rootfs}
@@ -5137,6 +5163,7 @@ A hierarchy exists between policies, ensuring that threads from higher-priority 
 The system implements a tickless kernel architecture. Instead of relying on a periodic interrupt (the \textbf{Kernel Tick}) at a fixed frequency, the scheduler calculates precisely when the next timing event must occur. This approach improves efficiency and precision.
 
 \subsection{Policies}
+\label{subsec:policiesOverview}
 
 The following scheduling policies have been implemented:
 
@@ -5205,6 +5232,7 @@ To provide high-precision sleeping, the system relies on one-shot, precise timin
 % ==================================================================
 
 \chapter{User's Manual}
+\label{chap:users_manual}
 
 This section describes the usage of the AlkOS build environment and documents the public interfaces available to user space applications. It outlines the build and execution workflow, the integration of user programs, and the system call interface provided by the operating system.
 
