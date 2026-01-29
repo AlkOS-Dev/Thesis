@@ -2798,7 +2798,7 @@ The usage of reference counting offers multiple benefits:
     \item \textbf{Compile-time safety} -- Encapsulation within RAII-compliant wrappers (e.g., smart pointers) allows the compiler to enforce ownership semantics, automating reference management and structurally preventing resource leaks.
 \end{itemize}
 
-\subsection{Architecture Abstraction}
+\section{Architecture Abstraction}
 \label{sec:arch_abstraction}
 
 While the services provided by an operating system — such as process scheduling, file I/O, and inter-process communication — are conceptually uniform, the underlying hardware implementations vary significantly across architectures (e.g., x86-64, ARM64, RISC-V). Registers differ in naming and width, memory consistency models vary, and interrupt controllers function through disparate protocols.
