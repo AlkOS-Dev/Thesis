@@ -406,7 +406,7 @@ Beyond the educational barrier lie the technical hurdles: implementing device dr
 This thesis aims to address both aspects. It documents the technical creation of the AlkOS kernel --- our design choices, the problems we encountered, and the solutions we engineered (detailed in Chapters \ref{chap:low_level_implementation} and \ref{chap:high_level_subsystems}, with corresponding source code attached to this thesis). Simultaneously, it serves as a guide to the problem space itself (specifically in Chapter \ref{chap:os_from_scratch}), intended to assist future developers in their attempt to create an operating system from scratch.
 
 \section{Scope of the Thesis}
-\label{subsec:functional}
+\label{subsec:scope}
 
 The primary objective of this project, as initially defined, was to implement a functional scheduler capable of executing tasks within isolated address spaces. Specifically, the project aimed to achieve the following minimal technical goals:
 
@@ -426,8 +426,44 @@ At the outset of the project, specific requirements were not rigidly defined due
 
 \paragraph{Jakub Lisowski}
 
-\begin{itemize} 
-    \item opa
+\paragraph{Jakub Lisowski}
+\begin{itemize}
+    \item \textbf{Thesis Documentation and Analysis:}
+        \begin{itemize}
+            \item Section \ref{subsec:scope} --- Scope of the Thesis.
+            \item Section \ref{subsec:intrusive} --- Intrusive Data Structures.
+            \item Section \ref{sec:comms} --- Establishment of Basic Communication.
+            \item Section \ref{subsec:os-tutorial-interrupts} --- Enabling Interrupts and Exceptions.
+            \item Section \ref{sec:tracing} --- Tracing System.
+            \item Section \ref{sec:discovery} --- Discovering External Devices and System Capabilities.
+            \item Section \ref{sec:sched-tutorial} --- Scheduling Theory.
+            \item Section \ref{sec:linux-research} --- Linux Research and Analysis.
+            \item Section \ref{sec:interrupts} --- Interrupt Implementation.
+            \item Section \ref{sec:timing} --- Timing Implementation.
+            \item Section \ref{sec:scheduling-impl} --- Scheduling Implementation.
+            \item Section \ref{sec:results} --- Results and Conclusions.
+        \end{itemize}
+
+    \item \textbf{Kernel Subsystems:}
+        \begin{itemize}
+            \item \textbf{Scheduling:} Design of the Meta-scheduler, thread/process lifecycle management, and core task structures.
+            \item \textbf{Timing:} High-precision timing subsystem, sleep mechanisms, and hardware drivers (TSC, HPET, LAPIC Timer, RTC).
+            \item \textbf{Interrupts:} Interrupt subsystem architecture and hardware drivers (APIC, PIC).
+            \item \textbf{Observability:} Design and implementation of the kernel tracing and logging subsystem.
+        \end{itemize}
+
+    \item \textbf{Data Structures and Standard Library:}
+        \begin{itemize}
+            \item Implementation of the C Standard Library (\texttt{libc}) components: \texttt{time.h}, standard asserts, and extended diagnostic asserts.
+            \item Design of core intrusive data structures: doubly linked lists and Red-Black trees.
+            \item Implementation of specialized Hash Map structures.
+        \end{itemize}
+
+    \item \textbf{Tooling and Quality Assurance:}
+        \begin{itemize}
+            \item Development of the unit testing framework and automated regression tests.
+            \item Development of the project's automation infrastructure (majority of Bash scripts under \texttt{./scripts}).
+        \end{itemize}
 \end{itemize}
 
 \paragraph{Adam Ogieniewski}
@@ -561,232 +597,6 @@ In addition to general optimization settings, architecture-specific constraints 
 
 It is essential to establish an efficient testing strategy. In this context, hardware emulation becomes a critical tool. Two primary approaches exist for testing kernel software. The first involves utilizing a dedicated physical test machine, where the system image is flashed and booted for each iteration. While verifying kernel behavior on real hardware is strictly necessary to guarantee correctness, this process is time-consuming and often becomes a bottleneck during rapid development cycles. To address this efficiency issue, various emulation solutions are available, including QEMU \cite{qemu_website}, Bochs (x86 only) \cite{bochs_website}, and VirtualBox \cite{virtualbox_website}. These tools allow for the specification of the target machine architecture, enabling the kernel to run locally within the host system in an emulated environment. This setup significantly accelerates the workflow by facilitating quick execution, debugging, and state exploration. Consequently, the ideal solution combines both methods to maximize development speed while ensuring software quality.
 
-\section{General Design Considerations}
-
-Developing an operating system kernel is a complex software engineering challenge involving massive codebases and strict performance requirements. To manage this complexity and ensure code quality, it is advisable to leverage established architectural patterns and high-quality design solutions used in systems programming. This section discusses general design concepts that are beneficial in kernel development.
-
-\subsection{Intrusive Data Structures}
-\label{subsec:intrusive}
-
-Kernel development frequently involves managing collections of objects, such as linked lists or binary trees. Standard library implementations typically manage these collections by allocating a separate node structure for every element to hold the data and the navigation pointers. In a kernel environment, where objects are inserted and removed from lists with high frequency, the overhead of repeated allocation and deallocation is often unacceptable due to performance costs and memory fragmentation.
-
-A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
-
-By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is shown in Listing \ref{lst:intrusiveNodesExample}.
-\begin{cppcode}[caption={Intrusive Data Structures Example}, label={lst:intrusiveNodesExample}]
-template<class T>
-struct ListNode {
-    T* next;
-    T* prev;
-};
-
-struct Obj: ListNode<Obj> {
-    const char* name;
-};
-
-template<class T>
-struct LinkedList {
-    void PushFront(T* item) {
-        T* first = head->next;
-        
-        first->prev = item;
-
-        item->next = first;
-        item->prev = nullptr;
-
-        head->next = item;
-    }
-
-    // Other operations...
-
-private:
-    T sentinel{};
-
-    T* head = &sentinel;
-    T* tail = &sentinel;
-};
-
-void RemoveFromLinkedList(T* item) {
-    if (item->next == nullptr) {
-        return;
-    }
-
-    // Valid, because of the sentinel
-    item->prev->next = item->next;
-    item->next->prev = item->prev;
-
-    // Assure proper unassigned state
-    item->prev = item->next = nullptr;
-}
-
-\end{cppcode}
-
-The usage of intrusive data structures offers multiple benefits critical for systems programming:
-\begin{itemize}
-    \item \textbf{No dynamic allocation} --- Insertion and removal operations do not require memory allocation or deallocation, eliminating heap fragmentation and allocation latency.
-    \item \textbf{Improved memory access} --- The object is accessed directly, avoiding the pointer indirection required by external node structures.
-    \item \textbf{O(1) Verification} --- Determining whether an object belongs to a collection can be performed in constant time by inspecting the object's internal state.
-    \item \textbf{O(1) Removal} --- An object can be removed from a doubly linked list in constant time, given only a pointer to the object itself.
-    \item \textbf{Independent Removal} --- Removal operations do not require access to the doubly linked list head or the container object.
-\end{itemize}
-
-\subsection{Reference Counting}
-\label{subsec:refcounting}
-
-In a multitasking operating system, processes and kernel subsystems continuously acquire and release resources such as files, memory objects, and synchronization primitives. These resources are often shared: multiple processes may hold references to the same open file, or several kernel subsystems may access the same internal object concurrently. As long as at least one reference holder exists, the resource must remain valid. However, once the final holder releases its reference, the resource should be reclaimed promptly to avoid memory leaks and resource exhaustion.
-
-\textbf{Reference counting} provides a deterministic mechanism for managing such shared lifetimes. Each managed object maintains a counter representing the number of active references to it. The counter is incremented whenever a new reference is acquired and decremented when a reference is released. When the counter reaches zero, indicating that no execution context retains a reference, the object is safely deallocated. This approach allows the kernel to reclaim resources precisely at the moment they become unused, without requiring global coordination or non-deterministic garbage collection.
-
-
-\subsubsection{Storage Strategies}
-
-A central design decision in reference counting is the placement of the control metadata, namely the reference counter. As illustrated in Figure~\ref{fig:refcount_strategies_detail}, three principal strategies exist, each with distinct trade-offs in terms of allocation behavior, cache locality, and usability:
-
-\begin{enumerate}
-    \item \textbf{Intrusive Model (Embedded):} The reference counter is embedded directly within the object's data structure. Smart pointers maintain a single raw pointer to the object.
-    \item \textbf{External (Decoupled):} Common in user space libraries (e.g., \texttt{std::shared\_ptr}), where the control block is allocated separately and the smart pointer stores two pointers.
-    \item \textbf{External (Indirection):} The smart pointer references a control block that in turn references the object, effectively introducing a level of indirection.
-\end{enumerate}
-
-\begin{figure}[htbp]
-    \centering
-    \begin{tikzpicture}[
-        font=\sffamily\small,
-        % Style for the pointer variable on stack
-        smartptr/.style={
-            rectangle split,
-            rectangle split parts=1,
-            draw=black!80,
-            fill=blue!5,
-            minimum height=0.8cm,
-            text width=2.5cm,
-            align=center,
-            rounded corners=1pt
-        },
-        % Style for the heap object container
-        heapblock/.style={
-            rectangle split,
-            rectangle split parts=1,
-            draw=black!70,
-            fill=white,
-            text width=3cm,
-            align=center,
-            minimum height=0.8cm
-        },
-        % Style for the Control Block (Metadata)
-        ctrlblock/.style={
-            rectangle split parts=1,
-            draw=black!70,
-            fill=gray!20,
-            text width=3cm,
-            align=center,
-            minimum height=0.6cm
-        },
-        % Arrow style
-        ptr/.style={
-            -{Latex[length=3mm]},
-            thick,
-            draw=black!70
-        },
-        labeltext/.style={
-            font=\bfseries,
-            anchor=west
-        }
-    ]
-
-    % ==========================================================
-    % 1. INTRUSIVE MODEL
-    % ==========================================================
-    \node[labeltext] at (-1, 0) {1. Intrusive Model};
-    
-    % Smart Pointer
-    \node[smartptr] (sp1) at (0, -1.5) {\texttt{ptr\_object}};
-    \node[above=0.1cm of sp1, font=\scriptsize\itshape, color=gray] {Smart Pointer};
-
-    % The Object (One contiguous block)
-    \node[ctrlblock] (rc1) at (5, -1.2) {\texttt{ref\_count}};
-    \node[heapblock, below=0cm of rc1] (data1) {Object Data};
-    % Draw outline around the whole fused object
-    \node[draw=black!70, fit=(rc1) (data1), inner sep=0pt] (obj1) {};
-    \node[above=0.1cm of obj1, font=\scriptsize\itshape, color=gray] {Object};
-
-    % Arrow
-    \draw[ptr] (sp1.east) -- (obj1.north  west);
-
-
-    % ==========================================================
-    % 2. DECOUPLED (Two Pointers in SmartPtr)
-    % ==========================================================
-    \node[labeltext] at (-1, -3.5) {2. External: Decoupled};
-
-    % Smart Pointer (Split in two)
-    \node[smartptr, rectangle split parts=2] (sp2) at (0, -5) {
-        \texttt{ptr\_object}
-        \nodepart{second}
-        \texttt{ptr\_control}
-    };
-    \node[above=0.1cm of sp2, font=\scriptsize\itshape, color=gray] {Smart Pointer};
-
-    % Control Block (Count Only)
-    \node[ctrlblock] (cb2) at (5, -6) {\texttt{ref\_count}};
-    \node[above=0.1cm of cb2, font=\scriptsize\itshape, color=gray] {Control Block};
-
-    % Object Data
-    \node[heapblock] (obj2) at (5, -4.75) {Object Data};
-    \node[above=0.1cm of obj2, font=\scriptsize\itshape, color=gray] {Object};
-
-    % Arrows
-    % Arrow from first part of SP to Object
-    \draw[ptr] (sp2.text east) -- (obj2.west);
-    % Arrow from second part of SP to Control Block
-    \draw[ptr] (sp2.second east) -- (cb2.north west);
-
-
-    % ==========================================================
-    % 3. INDIRECTION (Pointer in Control Block)
-    % ==========================================================
-    \node[labeltext] at (-1, -7.5) {3. External: Indirection};
-
-    % Smart Pointer (One Pointer)
-    \node[smartptr] (sp3) at (0, -9) {\texttt{ptr\_control}};
-    \node[above=0.1cm of sp3, font=\scriptsize\itshape, color=gray] {Smart Pointer};
-
-    % Control Block (Count + Pointer)
-    \node[ctrlblock, rectangle split, rectangle split parts=2] (cb3) at (3.5, -9) {
-        \texttt{ref\_count}
-        \nodepart{second}
-        \texttt{ptr\_object}
-    };
-    \node[above=0.1cm of cb3, font=\scriptsize\itshape, color=gray] {Control Block};
-
-    % Object Data
-    \node[heapblock] (obj3) at (7.5, -9) {Object Data};
-    \node[above=0.1cm of obj3, font=\scriptsize\itshape, color=gray] {Object};
-
-    % Arrows
-    \draw[ptr] (sp3.east) -- (cb3.north west);
-    \draw[ptr] (cb3.second east) -- (obj3.west);
-
-    \end{tikzpicture}
-    \caption{Comparison of Reference Counting Storage Strategies}
-    \label{fig:refcount_strategies_detail}
-\end{figure}
-
-\subsubsection{Rationale for the Intrusive Model in Kernel Space}
-
-Most kernels employ the \textbf{intrusive reference counting model}. Although external models offer greater flexibility by avoiding modifications to object layouts, their associated costs are not justifiable within the kernel context. With an intrusive design, any subsystem holding a raw pointer can acquire ownership by incrementing the embedded counter, allowing objects to move freely between low-level components and higher-level abstractions without compromising correctness.
-
-The usage of reference counting offers multiple benefits:
-\begin{itemize}
-    \item \textbf{Deterministic deallocation} -- Resources are freed at the precise moment they become unused, without relying on garbage collection or deferred cleanup.
-    \item \textbf{Shared ownership} -- Multiple subsystems can safely share references to the same object without explicit coordination.
-    \item \textbf{Cache efficiency} -- The intrusive model ensures metadata is colocated with object data, improving memory access patterns.
-    \item \textbf{Lock-free operation} -- Atomic hardware primitives ensure safe concurrent access and correct object destruction in SMP environments without incurring the overhead of locks.
-    \item \textbf{Compile-time safety} -- Encapsulation within RAII-compliant wrappers (e.g., smart pointers) allows the compiler to enforce ownership semantics, automating reference management and structurally preventing resource leaks.
-\end{itemize}
-
-\subsection{Architecture Abstraction}
-TODO: KRYCZKA
 
 \section{Implementation of the Standard Library}
 \label{subsec:theory_std}
@@ -1221,7 +1031,7 @@ On general-purpose platforms (x86-64), the hardware is modular. The kernel canno
 \end{itemize}
 
 \subsection{Hardware Abstraction}
-How does the kernel handle such a diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and will be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
+How does the kernel handle such a diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and will be discussed in more detail in Section~\ref{sec:arch_abstraction}.
 
 \subsection{Discovering and Enabling CPU Features}
 \label{subsec:cpu_discovery}
@@ -1256,6 +1066,7 @@ A prime example is the Floating Point Unit (FPU) and Vector Extensions (SSE/AVX)
 This enabling phase is critical not only for allowing instruction execution but also for the scheduler. The operating system must know the size of the processor's register state (Context) to correctly save and restore threads during context switches. If AVX-512 is enabled, the context size increases significantly compared to standard SSE, impacting memory usage and context switch latency.
 
 \section{Establishment of Basic Communication}
+\label{sec:comms}
 
 One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port \cite{wikibooks-serial} that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on x86-64 desktop platforms \cite{osdev-barebones, osdev-vga}) or implement a basic network stack. It should be noted that at this stage, a rudimentary implementation is often sufficient. However, this serves as a provisional solution, to ensure correct handling in the future, a fully-fledged infrastructure and a proper hardware abstraction layer must be established. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing, and as development progresses, it is advisable to abandon this simple communication or disable it via compilation flags.
 
@@ -1323,6 +1134,7 @@ Architecture-specific details must also be considered. For example, the x86-64 a
 Finally, to enable Symmetric Multiprocessing (SMP) and utilize multiple cores, the interrupt mechanism serves as the primary method of inter-core communication.
 
 \section{Tracing System}
+\label{sec:tracing}
 
 As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. 
 
@@ -1331,6 +1143,7 @@ This can be achieved by allocating a large circular buffer for messages, which i
 This goes about the general design, but during initial development of the system, there is no need to have a full tracing system, simple print with formatting is enough to proceed.
 
 \section{Testing framework}
+\label{sec:testing}
 
 The reliability of an operating system kernel cannot be guaranteed solely through compilation checks or host-based logic verification. While some algorithmic components can be tested in a hosted environment (e.g., on a Linux host), the core kernel functionalities depend heavily on the specific hardware architecture, physical memory layout, and privileged CPU instructions. Consequently, a robust testing framework must be implemented to execute directly within the kernel on the target hardware or emulator.
 
@@ -2066,7 +1879,7 @@ By deferring allocation until the last possible moment --- specifically, the mom
 \subsection{Mechanisms: Overcommitment and Optimization}
 \label{subsec:vmm_mechanisms}
 
-The realization of the Theory of Locality in a modern kernel relies on three specific mechanisms: Demand Paging, Copy-on-Write, and the Zero Page. These features fundamentally change the role of the Page Fault Exception (\texttt{\#PF}) from an error condition to a core signaling mechanism of the memory subsystem.
+The realization of the Theory of Locality in a modern kernel relies on three specific mechanisms: Demand Paging, Copy-on-Write, and the Zero Page. These features allow the kernel to practice memory overcommitment —-- promising more virtual memory to processes than physically exists --— by deferring actual allocation until access occurs. They fundamentally change the role of the Page Fault Exception (\texttt{\#PF}) from an error condition to a core signaling mechanism of the memory subsystem.
 
 \subsubsection{Demand Paging}
 
@@ -2140,9 +1953,10 @@ This ensures that the expensive operation of memory copying occurs only when str
 
 \subsubsection{Swapping}
 
-It is worth noting that a complete virtual memory subsystem typically includes a swapping mechanism to support memory overcommitment. This allows inactive pages to be evicted to secondary storage, freeing physical RAM for active tasks. However, the theory presented in this section focuses on the fundamental aspects of memory virtualization: isolation, protection, and hardware abstraction. The implementation of swap and page replacement algorithms is considered a separate, advanced topic extending beyond these core principles.
+It is worth noting that a complete virtual memory subsystem typically includes a swapping mechanism to sustain high levels of memory overcommitment. While the mechanisms above allow virtual allocation to exceed physical capacity, swapping ensures stability when physical memory is finally exhausted. This allows inactive pages to be evicted to secondary storage, freeing physical RAM for active tasks. However, the theory presented in this section focuses on the fundamental aspects of memory virtualization: isolation, protection, and hardware abstraction. The implementation of swap and page replacement algorithms is considered a separate, advanced topic extending beyond these core principles.
 
 \section{Discovering External Devices and System Capabilities}
+\label{sec:discovery}
 
 Upon the successful initialization of the fully functional memory management subsystem, the kernel can proceed to discover external devices and implement subsystems for capabilities such as storage, input, and networking. It is not necessary to support an exhaustive list of peripherals to achieve a minimal working kernel. Therefore, this section covers only the absolute minimum set of devices required to support the scheduler and execute user-space programs.
 
@@ -2310,9 +2124,51 @@ Because the bootloader handles the disk I/O to load this image, the kernel does 
 This approach isolates the development of other subsystems from the complexities of physical storage hardware, serving as a critical bridge to a self-hosting system.
 
 \section{Screen Drawing}
-TODO: KRYCZKA
+\label{sec:screen_drawing_theory}
+
+Visual feedback constitutes the primary interface between the operating system and the user. However, the mechanism by which a kernel renders pixels to a display evolves significantly during the system's lifecycle, transitioning from primitive hardware interfaces to complex, software-managed abstractions.
+
+\subsection{Early Output and Debugging}
+
+In the first stages of kernel initialization, the full graphics subsystem is unavailable. To facilitate debugging and provide immediate feedback, operating systems rely on low-bandwidth, high-reliability communication channels provided by the hardware platform.
+
+The industry standard for this purpose is the \textbf{Serial Interface} (e.g., UART). Available across virtually all architectures --- from embedded RISC-V microcontrollers to server-grade x86-64 and ARM64 SoCs --- serial ports allow the kernel to transmit text streams byte-by-byte. This output is typically captured by a host machine via a physical cable or an emulator's logging facility. Because serial drivers are structurally simple and do not require complex memory management or bus enumeration, they serve as the reliable "black box" recorder for early system crashes.
+
+\subsection{The Linear Framebuffer Abstraction}
+
+As the system boots, it must transition from text streams to graphical output. Modern system firmware (such as UEFI on PC platforms or U-Boot on embedded systems) typically abstracts the display hardware into a \textbf{Linear Framebuffer}.
+
+Fundamentally, a linear framebuffer is a contiguous region of physical memory (Memory-Mapped I/O) where the data represents the visual state of the screen. The CPU interacts with the display by writing directly to these memory addresses. To utilize this region correctly, the kernel must respect specific geometric constraints provided by the firmware or hardware description structures (e.g., Device Tree):
+
+\begin{itemize}
+    \item \textbf{Pixel Format:} The layout of individual pixels (e.g., whether the byte order is Red-Green-Blue or Blue-Green-Red, and the bit-width of each channel).
+    \item \textbf{Stride (Pitch):} The width of a scanline in memory bytes. This value often exceeds the logical width of the screen ($\text{width} \times \text{bytes\_per\_pixel}$) due to hardware alignment requirements. Failing to account for stride results in skewed or distorted rendering.
+\end{itemize}
+
+\subsection{Software Rendering and Console Emulation}
+
+Unlike historical hardware which often included dedicated text-mode generators, modern display controllers are strictly pixel-based. Consequently, the operating system is responsible for all rendering logic.
+
+To display text logs or a command-line interface, the kernel must implement a \textbf{Software Rasterizer}. This subsystem loads a bitmap font, parses the bitmask for a specific character, and manually writes the corresponding pixel colors into the framebuffer. This process effectively emulates a textual console on top of a graphical surface, allowing the OS to present diagnostic information in a human-readable format without relying on specialized hardware modes.
+
+\subsection{The Concurrency Problem}
+
+In a multitasking operating system, the display represents a shared resource. If multiple processes were granted direct write access to the physical framebuffer simultaneously, the screen would become a chaotic collage of uncoordinated pixel updates. Furthermore, direct access to physical memory mapped I/O by user-space applications poses a significant stability and security risk.
+
+To address this, the operating system must virtualize the display hardware, revoking direct access from user applications and enforcing a strict ownership model.
+
+\subsection{Windowing and Composition}
+
+The solution to the concurrency problem is the implementation of a \textbf{Window Manager} or \textbf{Compositor}. In this architectural model, the kernel or a privileged display server acts as the sole owner of the physical framebuffer.
+
+\begin{enumerate}
+    \item \textbf{Virtual Surfaces:} Applications render their content into private, off-screen memory buffers (virtual framebuffers) located in standard RAM. They operate under the illusion that they own the entire display or a specific window.
+    \item \textbf{Composition:} The Compositor reads these off-screen buffers and "blits" (copies and combines) them onto the physical framebuffer. This step allows the system to enforce window stacking (Z-order), transparency, and clipping.
+    \item \textbf{Double Buffering:} To ensure visual consistency, the system typically employs double buffering. The Compositor constructs the next frame in a hidden \textbf{Backbuffer}. Only when the frame is fully rendered is it swapped to the \textbf{Frontbuffer} (the video memory scanned by the display controller). This technique prevents "screen tearing," an artifact that occurs when the display hardware refreshes while the memory is being written to.
+\end{enumerate}
 
 \section{Scheduling}
+\label{sec:sched-tutorial}
 
 With all requisite low-level components implemented, the development process transitions to the design and implementation of the scheduling subsystem. The initial step involves defining the data structures representing the units of execution. We begin by establishing the concept of a Process.
 
@@ -2766,11 +2622,290 @@ The compilation of user space programs can be automated and synchronized with th
 
 % ==================================================================
 
+\section{General Design Considerations}
+
+Developing an operating system kernel is a complex software engineering challenge involving massive codebases and strict performance requirements. To manage this complexity and ensure code quality, it is advisable to leverage established architectural patterns and high-quality design solutions used in systems programming. This section discusses general design concepts that are beneficial in kernel development.
+
+\subsection{Intrusive Data Structures}
+\label{subsec:intrusive}
+
+Kernel development frequently involves managing collections of objects, such as linked lists or binary trees. Standard library implementations typically manage these collections by allocating a separate node structure for every element to hold the data and the navigation pointers. In a kernel environment, where objects are inserted and removed from lists with high frequency, the overhead of repeated allocation and deallocation is often unacceptable due to performance costs and memory fragmentation.
+
+A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
+
+By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is shown in Listing \ref{lst:intrusiveNodesExample}.
+\begin{cppcode}[caption={Intrusive Data Structures Example}, label={lst:intrusiveNodesExample}]
+template<class T>
+struct ListNode {
+    T* next;
+    T* prev;
+};
+
+struct Obj: ListNode<Obj> {
+    const char* name;
+};
+
+template<class T>
+struct LinkedList {
+    void PushFront(T* item) {
+        T* first = head->next;
+        
+        first->prev = item;
+
+        item->next = first;
+        item->prev = nullptr;
+
+        head->next = item;
+    }
+
+    // Other operations...
+
+private:
+    T sentinel{};
+
+    T* head = &sentinel;
+    T* tail = &sentinel;
+};
+
+void RemoveFromLinkedList(T* item) {
+    if (item->next == nullptr) {
+        return;
+    }
+
+    // Valid, because of the sentinel
+    item->prev->next = item->next;
+    item->next->prev = item->prev;
+
+    // Assure proper unassigned state
+    item->prev = item->next = nullptr;
+}
+
+\end{cppcode}
+
+The usage of intrusive data structures offers multiple benefits critical for systems programming:
+\begin{itemize}
+    \item \textbf{No dynamic allocation} --- Insertion and removal operations do not require memory allocation or deallocation, eliminating heap fragmentation and allocation latency.
+    \item \textbf{Improved memory access} --- The object is accessed directly, avoiding the pointer indirection required by external node structures.
+    \item \textbf{O(1) Verification} --- Determining whether an object belongs to a collection can be performed in constant time by inspecting the object's internal state.
+    \item \textbf{O(1) Removal} --- An object can be removed from a doubly linked list in constant time, given only a pointer to the object itself.
+    \item \textbf{Independent Removal} --- Removal operations do not require access to the doubly linked list head or the container object.
+\end{itemize}
+
+\subsection{Reference Counting}
+\label{subsec:refcounting}
+
+In a multitasking operating system, processes and kernel subsystems continuously acquire and release resources such as files, memory objects, and synchronization primitives. These resources are often shared: multiple processes may hold references to the same open file, or several kernel subsystems may access the same internal object concurrently. As long as at least one reference holder exists, the resource must remain valid. However, once the final holder releases its reference, the resource should be reclaimed promptly to avoid memory leaks and resource exhaustion.
+
+\textbf{Reference counting} provides a deterministic mechanism for managing such shared lifetimes. Each managed object maintains a counter representing the number of active references to it. The counter is incremented whenever a new reference is acquired and decremented when a reference is released. When the counter reaches zero, indicating that no execution context retains a reference, the object is safely deallocated. This approach allows the kernel to reclaim resources precisely at the moment they become unused, without requiring global coordination or non-deterministic garbage collection.
+
+
+\subsubsection{Storage Strategies}
+
+A central design decision in reference counting is the placement of the control metadata, namely the reference counter. As illustrated in Figure~\ref{fig:refcount_strategies_detail}, three principal strategies exist, each with distinct trade-offs in terms of allocation behavior, cache locality, and usability:
+
+\begin{enumerate}
+    \item \textbf{Intrusive Model (Embedded):} The reference counter is embedded directly within the object's data structure. Smart pointers maintain a single raw pointer to the object.
+    \item \textbf{External (Decoupled):} Common in user space libraries (e.g., \texttt{std::shared\_ptr}), where the control block is allocated separately and the smart pointer stores two pointers.
+    \item \textbf{External (Indirection):} The smart pointer references a control block that in turn references the object, effectively introducing a level of indirection.
+\end{enumerate}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        font=\sffamily\small,
+        % Style for the pointer variable on stack
+        smartptr/.style={
+            rectangle split,
+            rectangle split parts=1,
+            draw=black!80,
+            fill=blue!5,
+            minimum height=0.8cm,
+            text width=2.5cm,
+            align=center,
+            rounded corners=1pt
+        },
+        % Style for the heap object container
+        heapblock/.style={
+            rectangle split,
+            rectangle split parts=1,
+            draw=black!70,
+            fill=white,
+            text width=3cm,
+            align=center,
+            minimum height=0.8cm
+        },
+        % Style for the Control Block (Metadata)
+        ctrlblock/.style={
+            rectangle split parts=1,
+            draw=black!70,
+            fill=gray!20,
+            text width=3cm,
+            align=center,
+            minimum height=0.6cm
+        },
+        % Arrow style
+        ptr/.style={
+            -{Latex[length=3mm]},
+            thick,
+            draw=black!70
+        },
+        labeltext/.style={
+            font=\bfseries,
+            anchor=west
+        }
+    ]
+
+    % ==========================================================
+    % 1. INTRUSIVE MODEL
+    % ==========================================================
+    \node[labeltext] at (-1, 0) {1. Intrusive Model};
+    
+    % Smart Pointer
+    \node[smartptr] (sp1) at (0, -1.5) {\texttt{ptr\_object}};
+    \node[above=0.1cm of sp1, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % The Object (One contiguous block)
+    \node[ctrlblock] (rc1) at (5, -1.2) {\texttt{ref\_count}};
+    \node[heapblock, below=0cm of rc1] (data1) {Object Data};
+    % Draw outline around the whole fused object
+    \node[draw=black!70, fit=(rc1) (data1), inner sep=0pt] (obj1) {};
+    \node[above=0.1cm of obj1, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrow
+    \draw[ptr] (sp1.east) -- (obj1.north  west);
+
+
+    % ==========================================================
+    % 2. DECOUPLED (Two Pointers in SmartPtr)
+    % ==========================================================
+    \node[labeltext] at (-1, -3.5) {2. External: Decoupled};
+
+    % Smart Pointer (Split in two)
+    \node[smartptr, rectangle split parts=2] (sp2) at (0, -5) {
+        \texttt{ptr\_object}
+        \nodepart{second}
+        \texttt{ptr\_control}
+    };
+    \node[above=0.1cm of sp2, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % Control Block (Count Only)
+    \node[ctrlblock] (cb2) at (5, -6) {\texttt{ref\_count}};
+    \node[above=0.1cm of cb2, font=\scriptsize\itshape, color=gray] {Control Block};
+
+    % Object Data
+    \node[heapblock] (obj2) at (5, -4.75) {Object Data};
+    \node[above=0.1cm of obj2, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrows
+    % Arrow from first part of SP to Object
+    \draw[ptr] (sp2.text east) -- (obj2.west);
+    % Arrow from second part of SP to Control Block
+    \draw[ptr] (sp2.second east) -- (cb2.north west);
+
+
+    % ==========================================================
+    % 3. INDIRECTION (Pointer in Control Block)
+    % ==========================================================
+    \node[labeltext] at (-1, -7.5) {3. External: Indirection};
+
+    % Smart Pointer (One Pointer)
+    \node[smartptr] (sp3) at (0, -9) {\texttt{ptr\_control}};
+    \node[above=0.1cm of sp3, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % Control Block (Count + Pointer)
+    \node[ctrlblock, rectangle split, rectangle split parts=2] (cb3) at (3.5, -9) {
+        \texttt{ref\_count}
+        \nodepart{second}
+        \texttt{ptr\_object}
+    };
+    \node[above=0.1cm of cb3, font=\scriptsize\itshape, color=gray] {Control Block};
+
+    % Object Data
+    \node[heapblock] (obj3) at (7.5, -9) {Object Data};
+    \node[above=0.1cm of obj3, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrows
+    \draw[ptr] (sp3.east) -- (cb3.north west);
+    \draw[ptr] (cb3.second east) -- (obj3.west);
+
+    \end{tikzpicture}
+    \caption{Comparison of Reference Counting Storage Strategies}
+    \label{fig:refcount_strategies_detail}
+\end{figure}
+
+\subsubsection{Rationale for the Intrusive Model in Kernel Space}
+
+Most kernels employ the \textbf{intrusive reference counting model}. Although external models offer greater flexibility by avoiding modifications to object layouts, their associated costs are not justifiable within the kernel context. With an intrusive design, any subsystem holding a raw pointer can acquire ownership by incrementing the embedded counter, allowing objects to move freely between low-level components and higher-level abstractions without compromising correctness.
+
+The usage of reference counting offers multiple benefits:
+\begin{itemize}
+    \item \textbf{Deterministic deallocation} -- Resources are freed at the precise moment they become unused, without relying on garbage collection or deferred cleanup.
+    \item \textbf{Shared ownership} -- Multiple subsystems can safely share references to the same object without explicit coordination.
+    \item \textbf{Cache efficiency} -- The intrusive model ensures metadata is colocated with object data, improving memory access patterns.
+    \item \textbf{Lock-free operation} -- Atomic hardware primitives ensure safe concurrent access and correct object destruction in SMP environments without incurring the overhead of locks.
+    \item \textbf{Compile-time safety} -- Encapsulation within RAII-compliant wrappers (e.g., smart pointers) allows the compiler to enforce ownership semantics, automating reference management and structurally preventing resource leaks.
+\end{itemize}
+
+\section{Architecture Abstraction}
+\label{sec:arch_abstraction}
+
+While the services provided by an operating system --- such as process scheduling, file I/O, and inter-process communication --- are conceptually uniform, the underlying hardware implementations vary significantly across architectures (e.g., x86-64, ARM64, RISC-V). Registers differ in naming and width, memory consistency models vary, and interrupt controllers function through disparate protocols.
+
+To address this variance without duplicating the entire kernel codebase for every target platform, a strict architectural abstraction is advised. 
+
+\subsubsection{The Necessity of Decoupling}
+
+The primary motivation for architecture abstraction is the portability of the kernel. In a naive implementation, a kernel might embed architecture-specific instructions directly into high-level logic. For example, a \texttt{yield()} function might directly execute x86-64 assembly instructions to load the CR3 register for virtual memory context switching.
+
+This approach, known as direct coupling, presents several risks:
+\begin{itemize}
+    \item \textbf{Portability Lock-in:} The high-level logic becomes inextricably bound to a specific instruction set architecture (ISA). Porting the system to a different architecture would require rewriting core subsystems rather than simply replacing a driver layer.
+    \item \textbf{Maintenance Overhead:} Hardware-specific details clutter algorithmic logic, reducing readability and increasing the cognitive load required to modify core system behaviors.
+\end{itemize}
+
+The goal of the abstraction layer in to define a clear boundary where the "what" (the logical operation, such as "switch to this address space") is separated from the "how" (the specific sequence of register moves and operations required).
+
+\subsubsection{Categorization of Kernel Code}
+
+One approach to enforce this separation is to divide kernel software into two distinct domains: Machine Independent (MI) code and Machine Dependent (MD) code.
+
+\subsubsection{Machine Independent Code (MI)}
+The Machine Independent layer implements the algorithmic logic and data management of the operating system. It operates on an idealized hardware model and manages abstract resources.
+
+\begin{itemize}
+    \item \textbf{Definition:} Code that remains valid regardless of the underlying CPU architecture or platform topology.
+    \item \textbf{Characteristics:} This code is written exclusively in standard programming language and relies on fixed-width integer types (e.g., \texttt{u64}, \texttt{size\_t}). It contains no inline assembly and does not access hardware registers directly.
+\end{itemize}
+
+\subsubsection{Machine Dependent Code (MD)}
+The Machine Dependent layer is responsible for translating the abstract commands issued by the MI layer into specific instruction sequences required by the target hardware.
+
+\begin{itemize}
+    \item \textbf{Definition:} Code responsible for the physical actuation of hardware features.
+    \item \textbf{Characteristics:} This code is highly specific to the target platform (e.g., x86-64). It frequently utilizes inline assembly, manages control registers (such as CR3, IDT, GDT), and handles hardware-specific quirks (e.g., APIC timer calibration or TLB invalidation).
+    \item \textbf{Role:} The MD layer serves as a driver for the CPU, shielding the MI layer from architectural implementation details.
+\end{itemize}
+
+\subsubsection{Memory Management Abstraction Example}
+The memory subsystem is typically the most complex area to abstract due to the tight coupling between software policies and hardware tables.
+\begin{itemize}
+    \item \textbf{Machine Independent (MI):} Manages the logical view of the address space. It operates on objects such as Virtual Memory Areas (VMAs) or Regions, handling high-level logic like permissions (Read/Write/Execute), file mappings, and copy-on-write policies.
+    \item \textbf{Machine Dependent (MD):} Acts as a driver for the Memory Management Unit (MMU). It implements the specific page table structure (e.g., PML4 on x86-64 vs. Translation Tables on ARM), handles TLB invalidation instructions (e.g., \texttt{invlpg}), and manages the loading of the page table base register (e.g., \texttt{mov cr3}).
+\end{itemize}
+
+\subsubsection{Context Switching Abstraction Example}
+The scheduler must save and restore the state of execution, but the definition of "state" varies by CPU.
+\begin{itemize}
+    \item \textbf{Machine Independent (MI):} Tracks the lifecycle of threads (Ready, Blocked, Running) and manages the decision logic of \textit{which} thread to run next. It views a thread simply as a pointer to a stack and a state enum.
+    \item \textbf{Machine Dependent (MD):} Performs the actual context switch. It knows exactly which registers must be saved (General Purpose Registers, Floating Point state, Vector registers), how to switch the stack pointer safely, and how to handle architecture-specific state (e.g., segment registers or shadow stack pointers).
+\end{itemize}
+
 \chapter{Analysis of Existing Solutions}
 
 \section{Linux}
+\label{sec:linux-research}
 
-The Linux operating system family is one of the most widely used globally, alongside Windows. The Linux kernel relies on a monolithic architecture. This implies that the kernel has a broad range of responsibilities, while user space contains applications that rely entirely on system capabilities. In practice, all code responsible for memory management, scheduling, interrupt handling, and device drivers resides within the kernel address space. This approach presents various advantages and disadvantages.
+The Linux operating system family is one of the most widely used globally, alongside Windows. The Linux kernel relies on a monolithic architecture. According to Tanenbaum, the monolithic approach is by far the most common organization for operating systems. In this model, the entire system runs as a single large executable binary program in kernel mode. This design allows for high efficiency, as any procedure within the kernel can directly call any other, facilitating rapid computation and minimal overhead. However, this lack of restriction leads to a system that can be 'unwieldy and difficult to understand'. A significant drawback of this is that a crash in any single procedure, such as a buggy device driver, can effectively take down the entire operating system \cite{tanenbaum2015modern}.
 
 \noindent Advantages:
 \begin{itemize}
@@ -2830,7 +2965,7 @@ This hight-precision framework has one major drawback - it can get slow for a la
 \subsection{The Process and Thread Model}
 \label{subsec:linux-task}
 
-Unlike many other operating systems that distinguish strictly between processes (containers of resources) and threads (units of execution), Linux treats them almost identically. The core data structure is the \texttt{task\_struct} \cite{linux_task}.
+Unlike many other operating systems that distinguish strictly between processes (containers of resources) and threads (units of execution), Linux treats them almost identically. The core data structure is the \texttt{task\_struct} \cite{linux_task, bovet2005understanding}.
 \begin{itemize}
     \item A \textbf{Process} is a \texttt{task\_struct} with a unique memory map and file descriptor table.
     \item A \textbf{Thread} is simply a \texttt{task\_struct} created via the \texttt{clone()} system call with flags such as \texttt{CLONE\_VM} and \texttt{CLONE\_FILES}, causing it to share the address space and resources with its parent.
@@ -2886,7 +3021,7 @@ As an architecture-independent kernel, Linux abstracts hardware details. Physica
     \item \texttt{ZONE\_HIGHMEM} --- Memory not covered by permanent kernel mappings, used only by some 32-bit architectures.
 \end{itemize}
 
-To enhance multi-core performance, Linux employs a two-step strategy \cite{linux_mem_phys}. It utilizes a global buddy allocator \cite{buddy_allocator} alongside Per-CPU Pagesets (PCP). Allocations are first attempted from the local PCP, and if that fails, the system falls back to the global allocator with full synchronization.
+To enhance multi-core performance, Linux employs a two-step allocation strategy. It utilizes a global buddy allocator alongside Per-CPU Pagesets (PCP). According to Bovet and Cesati, these per-CPU caches are further divided into "hot" and "cold" lists to optimize hardware cache usage. "Hot" pages are assumed to be present in the CPU's L1/L2 cache and are preferred for operations where the CPU will immediately write to the page, whereas "cold" pages are used for DMA operations to avoid invalidating useful cache lines \cite{bovet2005understanding}. Allocations are first attempted from these local caches without locking, falling back to the global allocator only when necessary.
 
 \subsubsection{Virtual Memory}
 
@@ -2922,9 +3057,9 @@ The \texttt{fork()} mechanism is rooted in historical design decisions. While co
 
 \section{Minix 3}
 
-Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, Minix 3 relocates the majority of operating system components --- including device drivers, file systems, memory management mechanisms, and scheduling services --- into user space processes. As a result, the kernel's responsibilities are strictly minimized to functions such as message passing, interrupt handling, and low-level scheduling. Currently, the system supports two hardware architectures: x86 and ARM.
+Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, which Tanenbaum argues are inherently prone to failure due to high bug density --- statistically between two and ten bugs per thousand lines of code \cite{tanenbaum2015modern} --- Minix 3 relocates the majority of operating system components into user space. This includes device drivers, file systems, and memory management mechanisms. As a result, the microkernel size is highly reduced, strictly limiting its responsibilities to essential functions such as interrupt handling, process management, and inter-process communication via message passing.
 
-This architectural approach provides several notable advantages. By isolating critical system services in user space, Minix 3 significantly improves fault tolerance, as failures in individual components do not lead to the compromise of the entire system. Moreover, these components can be restarted independently, enabling efficient recovery from faults instead of system-wide crashes. The resulting modularity also simplifies system maintenance and evolution, since services may be updated, replaced, or extended without requiring recompilation of the kernel.
+This architectural approach provides significant advantages in terms of fault tolerance. By running each device driver and server as a separate, relatively powerless user process, the kernel ensures that a bug in a single component, such as an audio driver, cannot crash the entire system. A key feature of this design is the "reincarnation server", which monitors system components and automatically replaces those that have failed, making the system effectively "self-healing" \cite{tanenbaum2015modern}. Furthermore, this modularity follows the principle of decoupling mechanism from policy. For example, while the kernel handles the mechanism of switching processes, the scheduling policy can be managed by user-mode processes. This ensures that each component has "exactly the power to do its work and nothing more" \cite{tanenbaum2015modern}, fundamentally enhancing system stability and maintainability.
 
 \begin{figure}[htbp]
   \centering
@@ -4885,6 +5020,7 @@ When a process closes a file descriptor (or terminates), the reference to the co
 Consequently, the destruction of an \texttt{OpenFileEntry} releases its hold on the underlying \texttt{File} object. Similarly, if the reference count of the \texttt{File} object reaches zero, it implies that no active streams are reading from or writing to that specific file. The system then automatically reclaims the associated memory from the \texttt{FileTable}. This cascading deallocation mechanism ensures that kernel memory is only consumed for files that are actively in use by at least one process.
 
 \section{Scheduling}
+\label{sec:scheduling-impl}
 
 The scheduling module is the final core component of the operating system, relying heavily on and utilizing the previously described modules. Although the current implementation targets a single-core architecture for simplicity, the design is extensible to multi-core systems, as discussed later in this document.
 
@@ -4958,7 +5094,7 @@ The process state has less significance than the Thread State (described later) 
 
 \subsubsection{Address Space}
 
-The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to \todo[inline]{Memory Management} for more information.
+The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to Section~\ref{sec:impl_vmm} for more information.
 
 \subsubsection{File Descriptor Table}
 
@@ -5740,12 +5876,13 @@ To support loading data from the file system, we expanded the \texttt{stdio} imp
 By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
 \chapter{Results}
+\label{sec:results}
 
 This chapter summarizes the work accomplished and the assumptions made during the development process. Furthermore, it provides a critical analysis of the implemented solution.
 
 \section{Achieved Functionalities}
 
-We successfully fulfilled all functional requirements defined in Section \ref{subsec:functional}, in addition to implementing several supplementary features. The following list details the additional functionalities achieved:
+We successfully fulfilled all functional requirements defined in Section \ref{subsec:scope}, in addition to implementing several supplementary features. The following list details all functionalities achieved:
 
 \begin{itemize} 
     \item \textbf{Hardware Abstraction Layer (HAL)} -- An architectural interface decoupling high-level kernel logic from platform-specific hardware instructions.
@@ -5775,12 +5912,13 @@ We successfully fulfilled all functional requirements defined in Section \ref{su
 
 \section{Limitations and Assumptions}
 
-TODO: KRYCZKA DODAJ SWOJE
-
 Developing an operating system kernel is an inherently complex task, further complicated by the intricacies of hardware architectures. To maintain a steady development pace and avoid getting stalled by exhaustive driver implementation or edge-case handling, several strategic assumptions were made. Consequently, for AlkOS to function correctly, the underlying hardware must meet the following requirements:
 
 \begin{itemize} 
-    \item \textbf{64-bit Architecture} -- The system supports only 64-bit instructions. Compatibility libraries for 32-bit applications are not provided. 
+    \item \textbf{64-bit Architecture} -- The system supports only 64-bit instructions. Compatibility libraries for 32-bit applications are not provided.
+    \item \textbf{Memory Management Unit (MMU)} -- The kernel relies on a standard Memory Management Unit (MMU). It assumes that the hardware enforces standard paging mechanics and does not support non-standard extensions or software-managed TLBs.
+    \item \textbf{Physical Memory Layout} -- The system expects a standard, flat physical memory map provided by the bootloader (via Multiboot2). It does not support tiered memory architectures, NUMA (Non-Uniform Memory Access) optimizations, or memory hot-plugging.
+    \item \textbf{Linear Framebuffer} -- Graphics support relies entirely on a pre-initialized linear framebuffer provided by the system firmware (VBE or UEFI GOP). Use of hardware acceleration or specific GPU drivers is not supported; all rendering operations are software-based.
     \item \textbf{AVX2 Support} -- The system requires AVX2 support. Implementation was restricted to this specific instruction set to avoid the complexity of supporting every possible vector extension. 
     \item \textbf{SWAPGS Instruction} -- The architecture must support the \texttt{swapgs} instruction, which is utilized to efficiently swap the GS register base address for Core Local Storage management. 
     \item \textbf{Invariant TSC} -- To avoid implementing a driver for every possible x86-64 timer, the system relies on the Time Stamp Counter (TSC) as the primary clock source. The hardware must support an invariant TSC to ensure timing consistency regardless of frequency scaling.
@@ -5794,8 +5932,6 @@ Developing an operating system kernel is an inherently complex task, further com
 \end{itemize}
 
 \section{Future Work}
-
-TODO: KRYCZKA DODAJ SWOJE
 
 The current solution can be extended and improved in several areas: 
 \begin{itemize} 
