@@ -2764,7 +2764,7 @@ The compilation of user space programs can be automated and synchronized with th
 \section{Linux}
 \label{sec:linux-research}
 
-The Linux operating system family is one of the most widely used globally, alongside Windows. The Linux kernel relies on a monolithic architecture. This implies that the kernel has a broad range of responsibilities, while user space contains applications that rely entirely on system capabilities. In practice, all code responsible for memory management, scheduling, interrupt handling, and device drivers resides within the kernel address space. This approach presents various advantages and disadvantages.
+The Linux operating system family is one of the most widely used globally, alongside Windows. The Linux kernel relies on a monolithic architecture. According to Tanenbaum, the monolithic approach is by far the most common organization for operating systems. In this model, the entire system runs as a single large executable binary program in kernel mode. This design allows for high efficiency, as any procedure within the kernel can directly call any other, facilitating rapid computation and minimal overhead. However, this lack of restriction leads to a system that can be 'unwieldy and difficult to understand'. A significant drawback of this is that a crash in any single procedure, such as a buggy device driver, can effectively take down the entire operating system \cite{tanenbaum2015modern}.
 
 \noindent Advantages:
 \begin{itemize}
@@ -2824,7 +2824,7 @@ This hight-precision framework has one major drawback - it can get slow for a la
 \subsection{The Process and Thread Model}
 \label{subsec:linux-task}
 
-Unlike many other operating systems that distinguish strictly between processes (containers of resources) and threads (units of execution), Linux treats them almost identically. The core data structure is the \texttt{task\_struct} \cite{linux_task}.
+Unlike many other operating systems that distinguish strictly between processes (containers of resources) and threads (units of execution), Linux treats them almost identically. The core data structure is the \texttt{task\_struct} \cite{linux_task, bovet2005understanding}.
 \begin{itemize}
     \item A \textbf{Process} is a \texttt{task\_struct} with a unique memory map and file descriptor table.
     \item A \textbf{Thread} is simply a \texttt{task\_struct} created via the \texttt{clone()} system call with flags such as \texttt{CLONE\_VM} and \texttt{CLONE\_FILES}, causing it to share the address space and resources with its parent.
@@ -2880,7 +2880,7 @@ As an architecture-independent kernel, Linux abstracts hardware details. Physica
     \item \texttt{ZONE\_HIGHMEM} --- Memory not covered by permanent kernel mappings, used only by some 32-bit architectures.
 \end{itemize}
 
-To enhance multi-core performance, Linux employs a two-step strategy \cite{linux_mem_phys}. It utilizes a global buddy allocator \cite{buddy_allocator} alongside Per-CPU Pagesets (PCP). Allocations are first attempted from the local PCP, and if that fails, the system falls back to the global allocator with full synchronization.
+To enhance multi-core performance, Linux employs a two-step allocation strategy. It utilizes a global buddy allocator alongside Per-CPU Pagesets (PCP). According to Bovet and Cesati, these per-CPU caches are further divided into "hot" and "cold" lists to optimize hardware cache usage. "Hot" pages are assumed to be present in the CPU's L1/L2 cache and are preferred for operations where the CPU will immediately write to the page, whereas "cold" pages are used for DMA operations to avoid invalidating useful cache lines \cite{bovet2005understanding}. Allocations are first attempted from these local caches without locking, falling back to the global allocator only when necessary.
 
 \subsubsection{Virtual Memory}
 
@@ -2916,9 +2916,9 @@ The \texttt{fork()} mechanism is rooted in historical design decisions. While co
 
 \section{Minix 3}
 
-Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, Minix 3 relocates the majority of operating system components --- including device drivers, file systems, memory management mechanisms, and scheduling services --- into user space processes. As a result, the kernel's responsibilities are strictly minimized to functions such as message passing, interrupt handling, and low-level scheduling. Currently, the system supports two hardware architectures: x86 and ARM.
+Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, which Tanenbaum argues are inherently prone to failure due to high bug density --- statistically between two and ten bugs per thousand lines of code \cite{tanenbaum2015modern} --- Minix 3 relocates the majority of operating system components into user space. This includes device drivers, file systems, and memory management mechanisms. As a result, the microkernel size is highly reduced, strictly limiting its responsibilities to essential functions such as interrupt handling, process management, and inter-process communication via message passing.
 
-This architectural approach provides several notable advantages. By isolating critical system services in user space, Minix 3 significantly improves fault tolerance, as failures in individual components do not lead to the compromise of the entire system. Moreover, these components can be restarted independently, enabling efficient recovery from faults instead of system-wide crashes. The resulting modularity also simplifies system maintenance and evolution, since services may be updated, replaced, or extended without requiring recompilation of the kernel.
+This architectural approach provides significant advantages in terms of fault tolerance. By running each device driver and server as a separate, relatively powerless user process, the kernel ensures that a bug in a single component, such as an audio driver, cannot crash the entire system. A key feature of this design is the "reincarnation server", which monitors system components and automatically replaces those that have failed, making the system effectively "self-healing" \cite{tanenbaum2015modern}. Furthermore, this modularity follows the principle of decoupling mechanism from policy. For example, while the kernel handles the mechanism of switching processes, the scheduling policy can be managed by user-mode processes. This ensures that each component has "exactly the power to do its work and nothing more" \cite{tanenbaum2015modern}, fundamentally enhancing system stability and maintainability.
 
 \begin{figure}[htbp]
   \centering
