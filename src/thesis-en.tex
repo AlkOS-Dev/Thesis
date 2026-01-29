@@ -403,7 +403,7 @@ Studying existing kernels like Linux or MINIX is often suggested, yet this prove
 
 Beyond the educational barrier lie the technical hurdles: implementing device drivers, creating memory management algorithms, and designing task schedulers. However, for the uninitiated, the lack of a structured theoretical framework remains the most formidable obstacle.
 
-This thesis aims to address both aspects. It documents the technical creation of the AlkOS kernel --- our design choices, the problems we encountered, and the solutions we engineered (detailed in Chapter \ref{chap:implementation}). Simultaneously, it serves as a guide to the problem space itself (specifically in Chapter \ref{chap:os_from_scratch}), intended to assist future developers in their attempt to create an operating system from scratch.
+This thesis aims to address both aspects. It documents the technical creation of the AlkOS kernel --- our design choices, the problems we encountered, and the solutions we engineered (detailed in Chapters \ref{chap:low_level_implementation} and \ref{chap:high_level_subsystems}, with corresponding source code attached to this thesis). Simultaneously, it serves as a guide to the problem space itself (specifically in Chapter \ref{chap:os_from_scratch}), intended to assist future developers in their attempt to create an operating system from scratch.
 
 \section{Scope of the Thesis}
 \label{subsec:functional}
@@ -3016,10 +3016,10 @@ System calls are dispatched to specialized servers according to their functional
 \end{itemize}
 The kernel acts solely as a transport mechanism and remains agnostic to the semantics of the system call. After processing a request, the server returns a reply message to the calling process, thereby unblocking it and delivering the result.
 
-\chapter{Our Implementation} 
-\label{chap:implementation} 
+\chapter{Low-Level Kernel Implementation} 
+\label{chap:low_level_implementation} 
 
-This chapter presents the implementation details of the AlkOS operating system. It focuses on the core subsystems and architectural decisions that form the foundation of the kernel. The specific mechanisms described herein correspond directly to the source code attached to this thesis.
+This chapter presents the implementation details of the low-level components of the AlkOS operating system. It covers the bootloader, memory management, interrupt handling, and timing infrastructure that form the foundation upon which all higher-level kernel subsystems are built.
 
 \section{Bootloader}
 
@@ -4476,6 +4476,13 @@ For x86-64, the selection of event clocks is based on the following priority ord
 \subsubsection{LAPIC Timer}
 Similar to the TSC, the LAPIC Timer is local to the processor core, ensuring extremely low-latency access to its registers. A significant advantage of this architecture is that each core possesses an independent timer, which eliminates the need for shared resource management or synchronization between cores. However, like the TSC, the LAPIC Timer operates at a frequency derived from the CPU bus or core frequency, which is not standard across various CPUs. Consequently, it requires calibration against a reference clock, for which the HPET is utilized.
 
+% ==================================================================
+
+\chapter{High-Level Subsystems}
+\label{chap:high_level_subsystems}
+
+This chapter describes the high-level subsystems of AlkOS that build upon the low-level kernel infrastructure presented in the chapter \ref{chap:low_level_implementation}. These components are the file system and the scheduler. 
+
 \section{File System}
 \label{section:fs}
 
@@ -5204,7 +5211,7 @@ To provide high-precision sleeping, the system relies on one-shot, precise timin
 
 This section describes the usage of the AlkOS build environment and documents the public interfaces available to user space applications. It outlines the build and execution workflow, the integration of user programs, and the system call interface provided by the operating system.
 
-\subsection{Building and Running the OS}
+\section{Building and Running the OS}
 
 AlkOS provides a command-line utility script, \texttt{alkos\_cli.bash}, located in the \texttt{scripts/} directory. This script automates the setup of the development environment, the compilation of the kernel, and the execution of the operating system within an emulator. The build infrastructure is based on CMake and requires a Linux host system.
 
@@ -5243,11 +5250,11 @@ The build and execution workflow consists of three sequential stages:
 
 In the event of errors occurring at any stage of the process, the scripts may be executed with the \texttt{\text{-}\text{-}verbose} flag, which enables detailed logging output to facilitate debugging.
 
-\subsection{Developing User Space Applications}
+\section{Developing User Space Applications}
 
 AlkOS supports user space applications written in C and C++. These applications are integrated into the operating system at build time and included directly in the generated root file system.
 
-\subsubsection{Project Structure}
+\subsection{Project Structure}
 
 User space programs reside in the \texttt{userspace/programs/} directory. Each application is placed in its own subdirectory and must include all relevant source files along with a \texttt{CMakeLists.txt} configuration file. A minimal example of a user application is shown in Listing \ref{lst:minimalUserAppStructure}.
 
@@ -5261,7 +5268,7 @@ extern "C" int main() {
 }
 \end{cppcode}
 
-\subsubsection{Build System Integration}
+\subsection{Build System Integration}
 
 To include a user space application in the build process, it must be registered with the CMake-based build system. AlkOS provides the helper macro \texttt{alkos\_register\_userspace\_app}, which automatically configures compiler flags and links the application against the custom C and C++ standard libraries (\texttt{libc} and \texttt{libc++}). An example registration is shown in Listing \ref{lst:userAppCMakeRegistration}.
 
@@ -5273,15 +5280,15 @@ alkos_register_userspace_app(my_app "${MY_APP_SOURCES}")
 
 After registration, the application is automatically compiled, linked, and placed in the \texttt{/bin} directory of the root file system during the next build.
 
-\subsection{C Standard Library}
+\section{C Standard Library}
 
 Instead of relying on an external standard library implementation, AlkOS provides a custom C standard library tailored to its kernel interface.
 
-\subsubsection{Standard C Support}
+\subsection{Standard C Support}
 
 The library includes implementations of commonly used standard headers such as \texttt{<stdio.h>}, \texttt{<stdlib.h>}, and \texttt{<string.h>}. This enables the compilation of conventional C programs with minimal adaptation. Standard file operations, including \texttt{fopen}, \texttt{fread}, and \texttt{fwrite}, are fully supported and internally routed through the VFS.
 
-\subsubsection{AlkOS-Specific Extensions}
+\subsection{AlkOS-Specific Extensions}
 
 Certain low-level system interactions are beyond the scope of the standard C library. To expose kernel-specific functionality, AlkOS provides additional interfaces via the \texttt{<alkos/calls.h>} header. These interfaces enable access to hardware abstraction, threading primitives, and system control mechanisms. The most important extensions include:
 
@@ -5299,11 +5306,11 @@ Certain low-level system interactions are beyond the scope of the standard C lib
     While standard I/O functions support file access, directory enumeration, and metadata queries require OS-specific calls. The \texttt{ReadDirectory} function enables directory traversal, and \texttt{FileInfo} provides information about file system objects.
 \end{itemize}
 
-\subsection{Syscalls}
+\section{Syscalls}
 
 The system call interface represents the controlled boundary between user space applications executing in Ring 3 and the kernel executing in Ring 0. On the \texttt{x86-64} architecture, AlkOS utilizes the \texttt{int 0x80} software interrupt mechanism to invoke system calls.
 
-\subsubsection{Calling Convention}
+\subsection{Calling Convention}
 
 The calling convention is largely inspired by the System V x86-64 ABI, with modifications to accommodate system call semantics. The register usage is summarized in Table \ref{tab:syscall_abi}.
 
@@ -5324,7 +5331,7 @@ The calling convention is largely inspired by the System V x86-64 ABI, with modi
 \label{tab:syscall_abi}
 \end{table}
 
-\subsubsection{Provided System Services}
+\subsection{Provided System Services}
 
 The available system calls are grouped into logical categories:
 
