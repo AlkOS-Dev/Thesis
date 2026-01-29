@@ -2100,30 +2100,6 @@ This ensures that the expensive operation of memory copying occurs only when str
 
 It is worth noting that a complete virtual memory subsystem typically includes a swapping mechanism to support memory overcommitment. This allows inactive pages to be evicted to secondary storage, freeing physical RAM for active tasks. However, the theory presented in this section focuses on the fundamental aspects of memory virtualization: isolation, protection, and hardware abstraction. The implementation of swap and page replacement algorithms is considered a separate, advanced topic extending beyond these core principles.
 
-\section{Scheduling Design}
-\label{sec:scheduling_approaches}
-
-Before going further, a fundamental design decision must be made regarding the characteristics of our scheduling algorithm. The choice of scheduling paradigm dictates the complexity of the kernel, the synchronization mechanisms required, and the hardware dependencies.
-
-\subsubsection{Cooperative Scheduling}
-In a cooperative scheduling model, the operating system never forcibly pauses a running task. Instead, the currently executing thread retains control of the CPU until it voluntarily yields execution (e.g., via a specific \texttt{yield()} system call) or blocks on an I/O operation.
-
-\begin{itemize}
-    \item \textbf{Advantages:} Implementation simplicity. Since context switches occur only at known, controlled points, race conditions are significantly rarer, and complex locking mechanisms are often unnecessary. 
-    \item \textbf{Disadvantages:} A single malicious or poorly written program (e.g., one entering an infinite loop) can freeze the entire system, as the kernel never regains control to schedule other tasks.
-\end{itemize}
-
-\subsubsection{Preemptive Scheduling}
-Preemptive scheduling is the standard for modern general-purpose operating systems. In this model, the kernel assigns a specific time slice to each task. If a task does not yield voluntarily before its time expires, the hardware generates an interrupt (driven by an Event Clock \ref{subsec:event_clocks}), returning control to the kernel. The scheduler then forcibly saves the current task's state and switches to another.
-
-\begin{itemize}
-    \item \textbf{Advantages:} Responsiveness and stability. No single task can monopolize the CPU, ensuring that the system remains responsive even if a user program hangs.
-    \item \textbf{Disadvantages:} High complexity. Because a task can be interrupted at any instruction, the kernel must employ rigorous synchronization primitives (mutexes, spinlocks) to protect shared data structures from race conditions.
-\end{itemize}
-
-\subsubsection{SMP Scheduling}
-Symmetric Multiprocessing (SMP) scheduling extends these concepts to systems with multiple processor cores. In this environment, the scheduler must not only decide \textit{which} task to run next but also \textit{where} to run it.
-
 \section{Discovering External Devices and System Capabilities}
 
 Upon the successful initialization of the fully functional memory management subsystem, the kernel can proceed to discover external devices and implement subsystems for capabilities such as storage, input, and networking. It is not necessary to support an exhaustive list of peripherals to achieve a minimal working kernel. Therefore, this section covers only the absolute minimum set of devices required to support the scheduler and execute user-space programs.
@@ -2186,7 +2162,7 @@ The first category of devices required is a simple clock capable of tracking the
 \subsection{Event Clocks}
 \label{subsec:event_clocks}
 
-At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. Crucially, to implement preemption as discussed in Section \ref{sec:scheduling_approaches}, these devices are required to forcibly interrupt the currently running task when its time slice expires.
+At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. Crucially, to implement preemption as discussed in Section \ref{subsec:scheduling_approaches}, these devices are required to forcibly interrupt the currently running task when its time slice expires.
 
 The first consideration is sleep granularity. A standard precision of approximately one millisecond is achievable on nearly every architecture using simple periodic interrupts. However, implementing high-precision nanosecond or microsecond sleep requires timer devices capable of extremely rapid reconfiguration. The minimum time interval between consecutive events is strictly limited by the hardware configuration latency. The kernel cannot schedule an interrupt to occur sooner than the time required to program the device. Older timing hardware often requires slow I/O port interactions, rendering them unsuitable for high-precision scheduling, whereas modern devices utilize faster interfaces. Additionally, it is common for a single hardware component to serve a dual purpose, acting as both a timekeeping source (Clock \ref{subsec:clocks-tutorial}) and an interrupt generator (Event Clock).
 
@@ -2296,6 +2272,30 @@ TODO: KRYCZKA
 \section{Scheduling}
 
 With all requisite low-level components implemented, the development process transitions to the design and implementation of the scheduling subsystem. The initial step involves defining the data structures representing the units of execution. We begin by establishing the concept of a Process.
+
+\subsection{Scheduling Design}
+\label{subsec:scheduling_approaches}
+
+Before going further, a fundamental design decision must be made regarding the characteristics of our scheduling algorithm. The choice of scheduling paradigm dictates the complexity of the kernel, the synchronization mechanisms required, and the hardware dependencies.
+
+\subsubsection{Cooperative Scheduling}
+In a cooperative scheduling model, the operating system never forcibly pauses a running task. Instead, the currently executing thread retains control of the CPU until it voluntarily yields execution (e.g., via a specific \texttt{yield()} system call) or blocks on an I/O operation.
+
+\begin{itemize}
+    \item \textbf{Advantages:} Implementation simplicity. Since context switches occur only at known, controlled points, race conditions are significantly rarer, and complex locking mechanisms are often unnecessary. 
+    \item \textbf{Disadvantages:} A single malicious or poorly written program (e.g., one entering an infinite loop) can freeze the entire system, as the kernel never regains control to schedule other tasks.
+\end{itemize}
+
+\subsubsection{Preemptive Scheduling}
+Preemptive scheduling is the standard for modern general-purpose operating systems. In this model, the kernel assigns a specific time slice to each task. If a task does not yield voluntarily before its time expires, the hardware generates an interrupt (driven by an Event Clock \ref{subsec:event_clocks}), returning control to the kernel. The scheduler then forcibly saves the current task's state and switches to another.
+
+\begin{itemize}
+    \item \textbf{Advantages:} Responsiveness and stability. No single task can monopolize the CPU, ensuring that the system remains responsive even if a user program hangs.
+    \item \textbf{Disadvantages:} High complexity. Because a task can be interrupted at any instruction, the kernel must employ rigorous synchronization primitives (mutexes, spinlocks) to protect shared data structures from race conditions.
+\end{itemize}
+
+\subsubsection{SMP Scheduling}
+Symmetric Multiprocessing (SMP) scheduling extends these concepts to systems with multiple processor cores. In this environment, the scheduler must not only decide \textit{which} task to run next but also \textit{where} to run it.
 
 \subsection{Process}
 
@@ -2432,7 +2432,7 @@ When designing the scheduler and internal kernel mechanisms, appropriate synchro
 
 \subsection{Scheduler}
 
-With thread and process management structures established, the final component required is the mechanism responsible for selecting the next task for execution during preemption or voluntary yielding. The primary responsibility of the scheduler is to track the execution state of threads and determine the optimal task to run according to a specific policy. The complexity of the implementation is largely dictated by the chosen scheduling paradigm (Section \ref{sec:scheduling_approaches}).
+With thread and process management structures established, the final component required is the mechanism responsible for selecting the next task for execution during preemption or voluntary yielding. The primary responsibility of the scheduler is to track the execution state of threads and determine the optimal task to run according to a specific policy. The complexity of the implementation is largely dictated by the chosen scheduling paradigm (Section \ref{subsec:scheduling_approaches}).
 
 The simplest approach is a single-core, non-preemptive (cooperative) scheduler. In this model, synchronization concerns within the scheduler are minimal, as context switches occur only at explicit yield points. Furthermore, the sleeping mechanism can be simplified, as tasks are not preempted, allowing wake-up checks to occur solely during yield calls without strict timing reliance.
 
