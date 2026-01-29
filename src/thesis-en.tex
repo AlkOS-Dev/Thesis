@@ -516,232 +516,6 @@ In addition to general optimization settings, architecture-specific constraints 
 
 It is essential to establish an efficient testing strategy. In this context, hardware emulation becomes a critical tool. Two primary approaches exist for testing kernel software. The first involves utilizing a dedicated physical test machine, where the system image is flashed and booted for each iteration. While verifying kernel behavior on real hardware is strictly necessary to guarantee correctness, this process is time-consuming and often becomes a bottleneck during rapid development cycles. To address this efficiency issue, various emulation solutions are available, including QEMU \cite{qemu_website}, Bochs (x86 only) \cite{bochs_website}, and VirtualBox \cite{virtualbox_website}. These tools allow for the specification of the target machine architecture, enabling the kernel to run locally within the host system in an emulated environment. This setup significantly accelerates the workflow by facilitating quick execution, debugging, and state exploration. Consequently, the ideal solution combines both methods to maximize development speed while ensuring software quality.
 
-\section{General Design Considerations}
-
-Developing an operating system kernel is a complex software engineering challenge involving massive codebases and strict performance requirements. To manage this complexity and ensure code quality, it is advisable to leverage established architectural patterns and high-quality design solutions used in systems programming. This section discusses general design concepts that are beneficial in kernel development.
-
-\subsection{Intrusive Data Structures}
-\label{subsec:intrusive}
-
-Kernel development frequently involves managing collections of objects, such as linked lists or binary trees. Standard library implementations typically manage these collections by allocating a separate node structure for every element to hold the data and the navigation pointers. In a kernel environment, where objects are inserted and removed from lists with high frequency, the overhead of repeated allocation and deallocation is often unacceptable due to performance costs and memory fragmentation.
-
-A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
-
-By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is shown in Listing \ref{lst:intrusiveNodesExample}.
-\begin{cppcode}[caption={Intrusive Data Structures Example}, label={lst:intrusiveNodesExample}]
-template<class T>
-struct ListNode {
-    T* next;
-    T* prev;
-};
-
-struct Obj: ListNode<Obj> {
-    const char* name;
-};
-
-template<class T>
-struct LinkedList {
-    void PushFront(T* item) {
-        T* first = head->next;
-        
-        first->prev = item;
-
-        item->next = first;
-        item->prev = nullptr;
-
-        head->next = item;
-    }
-
-    // Other operations...
-
-private:
-    T sentinel{};
-
-    T* head = &sentinel;
-    T* tail = &sentinel;
-};
-
-void RemoveFromLinkedList(T* item) {
-    if (item->next == nullptr) {
-        return;
-    }
-
-    // Valid, because of the sentinel
-    item->prev->next = item->next;
-    item->next->prev = item->prev;
-
-    // Assure proper unassigned state
-    item->prev = item->next = nullptr;
-}
-
-\end{cppcode}
-
-The usage of intrusive data structures offers multiple benefits critical for systems programming:
-\begin{itemize}
-    \item \textbf{No dynamic allocation} --- Insertion and removal operations do not require memory allocation or deallocation, eliminating heap fragmentation and allocation latency.
-    \item \textbf{Improved memory access} --- The object is accessed directly, avoiding the pointer indirection required by external node structures.
-    \item \textbf{O(1) Verification} --- Determining whether an object belongs to a collection can be performed in constant time by inspecting the object's internal state.
-    \item \textbf{O(1) Removal} --- An object can be removed from a doubly linked list in constant time, given only a pointer to the object itself.
-    \item \textbf{Independent Removal} --- Removal operations do not require access to the doubly linked list head or the container object.
-\end{itemize}
-
-\subsection{Reference Counting}
-\label{subsec:refcounting}
-
-In a multitasking operating system, processes and kernel subsystems continuously acquire and release resources such as files, memory objects, and synchronization primitives. These resources are often shared: multiple processes may hold references to the same open file, or several kernel subsystems may access the same internal object concurrently. As long as at least one reference holder exists, the resource must remain valid. However, once the final holder releases its reference, the resource should be reclaimed promptly to avoid memory leaks and resource exhaustion.
-
-\textbf{Reference counting} provides a deterministic mechanism for managing such shared lifetimes. Each managed object maintains a counter representing the number of active references to it. The counter is incremented whenever a new reference is acquired and decremented when a reference is released. When the counter reaches zero, indicating that no execution context retains a reference, the object is safely deallocated. This approach allows the kernel to reclaim resources precisely at the moment they become unused, without requiring global coordination or non-deterministic garbage collection.
-
-
-\subsubsection{Storage Strategies}
-
-A central design decision in reference counting is the placement of the control metadata, namely the reference counter. As illustrated in Figure~\ref{fig:refcount_strategies_detail}, three principal strategies exist, each with distinct trade-offs in terms of allocation behavior, cache locality, and usability:
-
-\begin{enumerate}
-    \item \textbf{Intrusive Model (Embedded):} The reference counter is embedded directly within the object's data structure. Smart pointers maintain a single raw pointer to the object.
-    \item \textbf{External (Decoupled):} Common in user space libraries (e.g., \texttt{std::shared\_ptr}), where the control block is allocated separately and the smart pointer stores two pointers.
-    \item \textbf{External (Indirection):} The smart pointer references a control block that in turn references the object, effectively introducing a level of indirection.
-\end{enumerate}
-
-\begin{figure}[htbp]
-    \centering
-    \begin{tikzpicture}[
-        font=\sffamily\small,
-        % Style for the pointer variable on stack
-        smartptr/.style={
-            rectangle split,
-            rectangle split parts=1,
-            draw=black!80,
-            fill=blue!5,
-            minimum height=0.8cm,
-            text width=2.5cm,
-            align=center,
-            rounded corners=1pt
-        },
-        % Style for the heap object container
-        heapblock/.style={
-            rectangle split,
-            rectangle split parts=1,
-            draw=black!70,
-            fill=white,
-            text width=3cm,
-            align=center,
-            minimum height=0.8cm
-        },
-        % Style for the Control Block (Metadata)
-        ctrlblock/.style={
-            rectangle split parts=1,
-            draw=black!70,
-            fill=gray!20,
-            text width=3cm,
-            align=center,
-            minimum height=0.6cm
-        },
-        % Arrow style
-        ptr/.style={
-            -{Latex[length=3mm]},
-            thick,
-            draw=black!70
-        },
-        labeltext/.style={
-            font=\bfseries,
-            anchor=west
-        }
-    ]
-
-    % ==========================================================
-    % 1. INTRUSIVE MODEL
-    % ==========================================================
-    \node[labeltext] at (-1, 0) {1. Intrusive Model};
-    
-    % Smart Pointer
-    \node[smartptr] (sp1) at (0, -1.5) {\texttt{ptr\_object}};
-    \node[above=0.1cm of sp1, font=\scriptsize\itshape, color=gray] {Smart Pointer};
-
-    % The Object (One contiguous block)
-    \node[ctrlblock] (rc1) at (5, -1.2) {\texttt{ref\_count}};
-    \node[heapblock, below=0cm of rc1] (data1) {Object Data};
-    % Draw outline around the whole fused object
-    \node[draw=black!70, fit=(rc1) (data1), inner sep=0pt] (obj1) {};
-    \node[above=0.1cm of obj1, font=\scriptsize\itshape, color=gray] {Object};
-
-    % Arrow
-    \draw[ptr] (sp1.east) -- (obj1.north  west);
-
-
-    % ==========================================================
-    % 2. DECOUPLED (Two Pointers in SmartPtr)
-    % ==========================================================
-    \node[labeltext] at (-1, -3.5) {2. External: Decoupled};
-
-    % Smart Pointer (Split in two)
-    \node[smartptr, rectangle split parts=2] (sp2) at (0, -5) {
-        \texttt{ptr\_object}
-        \nodepart{second}
-        \texttt{ptr\_control}
-    };
-    \node[above=0.1cm of sp2, font=\scriptsize\itshape, color=gray] {Smart Pointer};
-
-    % Control Block (Count Only)
-    \node[ctrlblock] (cb2) at (5, -6) {\texttt{ref\_count}};
-    \node[above=0.1cm of cb2, font=\scriptsize\itshape, color=gray] {Control Block};
-
-    % Object Data
-    \node[heapblock] (obj2) at (5, -4.75) {Object Data};
-    \node[above=0.1cm of obj2, font=\scriptsize\itshape, color=gray] {Object};
-
-    % Arrows
-    % Arrow from first part of SP to Object
-    \draw[ptr] (sp2.text east) -- (obj2.west);
-    % Arrow from second part of SP to Control Block
-    \draw[ptr] (sp2.second east) -- (cb2.north west);
-
-
-    % ==========================================================
-    % 3. INDIRECTION (Pointer in Control Block)
-    % ==========================================================
-    \node[labeltext] at (-1, -7.5) {3. External: Indirection};
-
-    % Smart Pointer (One Pointer)
-    \node[smartptr] (sp3) at (0, -9) {\texttt{ptr\_control}};
-    \node[above=0.1cm of sp3, font=\scriptsize\itshape, color=gray] {Smart Pointer};
-
-    % Control Block (Count + Pointer)
-    \node[ctrlblock, rectangle split, rectangle split parts=2] (cb3) at (3.5, -9) {
-        \texttt{ref\_count}
-        \nodepart{second}
-        \texttt{ptr\_object}
-    };
-    \node[above=0.1cm of cb3, font=\scriptsize\itshape, color=gray] {Control Block};
-
-    % Object Data
-    \node[heapblock] (obj3) at (7.5, -9) {Object Data};
-    \node[above=0.1cm of obj3, font=\scriptsize\itshape, color=gray] {Object};
-
-    % Arrows
-    \draw[ptr] (sp3.east) -- (cb3.north west);
-    \draw[ptr] (cb3.second east) -- (obj3.west);
-
-    \end{tikzpicture}
-    \caption{Comparison of Reference Counting Storage Strategies}
-    \label{fig:refcount_strategies_detail}
-\end{figure}
-
-\subsubsection{Rationale for the Intrusive Model in Kernel Space}
-
-Most kernels employ the \textbf{intrusive reference counting model}. Although external models offer greater flexibility by avoiding modifications to object layouts, their associated costs are not justifiable within the kernel context. With an intrusive design, any subsystem holding a raw pointer can acquire ownership by incrementing the embedded counter, allowing objects to move freely between low-level components and higher-level abstractions without compromising correctness.
-
-The usage of reference counting offers multiple benefits:
-\begin{itemize}
-    \item \textbf{Deterministic deallocation} -- Resources are freed at the precise moment they become unused, without relying on garbage collection or deferred cleanup.
-    \item \textbf{Shared ownership} -- Multiple subsystems can safely share references to the same object without explicit coordination.
-    \item \textbf{Cache efficiency} -- The intrusive model ensures metadata is colocated with object data, improving memory access patterns.
-    \item \textbf{Lock-free operation} -- Atomic hardware primitives ensure safe concurrent access and correct object destruction in SMP environments without incurring the overhead of locks.
-    \item \textbf{Compile-time safety} -- Encapsulation within RAII-compliant wrappers (e.g., smart pointers) allows the compiler to enforce ownership semantics, automating reference management and structurally preventing resource leaks.
-\end{itemize}
-
-\subsection{Architecture Abstraction}
-TODO: KRYCZKA
 
 \section{Implementation of the Standard Library}
 \label{subsec:theory_std}
@@ -2758,6 +2532,326 @@ In contrast, a customized toolchain encapsulates this configuration internally. 
 The compilation of user space programs can be automated and synchronized with the kernel build process. The build system manages the dependency graph, ensuring that changes to the system library trigger recompilation of user applications. The resulting binaries are then automatically staged for inclusion in the system image, as described in Section~\ref{subsec:rootfs}.
 
 % ==================================================================
+
+\section{General Design Considerations}
+
+Developing an operating system kernel is a complex software engineering challenge involving massive codebases and strict performance requirements. To manage this complexity and ensure code quality, it is advisable to leverage established architectural patterns and high-quality design solutions used in systems programming. This section discusses general design concepts that are beneficial in kernel development.
+
+\subsection{Intrusive Data Structures}
+\label{subsec:intrusive}
+
+Kernel development frequently involves managing collections of objects, such as linked lists or binary trees. Standard library implementations typically manage these collections by allocating a separate node structure for every element to hold the data and the navigation pointers. In a kernel environment, where objects are inserted and removed from lists with high frequency, the overhead of repeated allocation and deallocation is often unacceptable due to performance costs and memory fragmentation.
+
+A common solution to this problem is the use of \textbf{intrusive data structures}. In this paradigm, the pointers (such as \texttt{next} and \texttt{prev}) are embedded directly within the data object itself, rather than in an external node. This pattern is widely recognized in the C++ ecosystem and serves as the foundation for industry-standard libraries such as \textbf{Boost.Intrusive}\cite{boost_intrusive}.
+
+By adopting this approach, the container manipulates pointers that already exist within the object structure. A typical implementation of this pattern using C++ templates is shown in Listing \ref{lst:intrusiveNodesExample}.
+\begin{cppcode}[caption={Intrusive Data Structures Example}, label={lst:intrusiveNodesExample}]
+template<class T>
+struct ListNode {
+    T* next;
+    T* prev;
+};
+
+struct Obj: ListNode<Obj> {
+    const char* name;
+};
+
+template<class T>
+struct LinkedList {
+    void PushFront(T* item) {
+        T* first = head->next;
+        
+        first->prev = item;
+
+        item->next = first;
+        item->prev = nullptr;
+
+        head->next = item;
+    }
+
+    // Other operations...
+
+private:
+    T sentinel{};
+
+    T* head = &sentinel;
+    T* tail = &sentinel;
+};
+
+void RemoveFromLinkedList(T* item) {
+    if (item->next == nullptr) {
+        return;
+    }
+
+    // Valid, because of the sentinel
+    item->prev->next = item->next;
+    item->next->prev = item->prev;
+
+    // Assure proper unassigned state
+    item->prev = item->next = nullptr;
+}
+
+\end{cppcode}
+
+The usage of intrusive data structures offers multiple benefits critical for systems programming:
+\begin{itemize}
+    \item \textbf{No dynamic allocation} --- Insertion and removal operations do not require memory allocation or deallocation, eliminating heap fragmentation and allocation latency.
+    \item \textbf{Improved memory access} --- The object is accessed directly, avoiding the pointer indirection required by external node structures.
+    \item \textbf{O(1) Verification} --- Determining whether an object belongs to a collection can be performed in constant time by inspecting the object's internal state.
+    \item \textbf{O(1) Removal} --- An object can be removed from a doubly linked list in constant time, given only a pointer to the object itself.
+    \item \textbf{Independent Removal} --- Removal operations do not require access to the doubly linked list head or the container object.
+\end{itemize}
+
+\subsection{Reference Counting}
+\label{subsec:refcounting}
+
+In a multitasking operating system, processes and kernel subsystems continuously acquire and release resources such as files, memory objects, and synchronization primitives. These resources are often shared: multiple processes may hold references to the same open file, or several kernel subsystems may access the same internal object concurrently. As long as at least one reference holder exists, the resource must remain valid. However, once the final holder releases its reference, the resource should be reclaimed promptly to avoid memory leaks and resource exhaustion.
+
+\textbf{Reference counting} provides a deterministic mechanism for managing such shared lifetimes. Each managed object maintains a counter representing the number of active references to it. The counter is incremented whenever a new reference is acquired and decremented when a reference is released. When the counter reaches zero, indicating that no execution context retains a reference, the object is safely deallocated. This approach allows the kernel to reclaim resources precisely at the moment they become unused, without requiring global coordination or non-deterministic garbage collection.
+
+
+\subsubsection{Storage Strategies}
+
+A central design decision in reference counting is the placement of the control metadata, namely the reference counter. As illustrated in Figure~\ref{fig:refcount_strategies_detail}, three principal strategies exist, each with distinct trade-offs in terms of allocation behavior, cache locality, and usability:
+
+\begin{enumerate}
+    \item \textbf{Intrusive Model (Embedded):} The reference counter is embedded directly within the object's data structure. Smart pointers maintain a single raw pointer to the object.
+    \item \textbf{External (Decoupled):} Common in user space libraries (e.g., \texttt{std::shared\_ptr}), where the control block is allocated separately and the smart pointer stores two pointers.
+    \item \textbf{External (Indirection):} The smart pointer references a control block that in turn references the object, effectively introducing a level of indirection.
+\end{enumerate}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        font=\sffamily\small,
+        % Style for the pointer variable on stack
+        smartptr/.style={
+            rectangle split,
+            rectangle split parts=1,
+            draw=black!80,
+            fill=blue!5,
+            minimum height=0.8cm,
+            text width=2.5cm,
+            align=center,
+            rounded corners=1pt
+        },
+        % Style for the heap object container
+        heapblock/.style={
+            rectangle split,
+            rectangle split parts=1,
+            draw=black!70,
+            fill=white,
+            text width=3cm,
+            align=center,
+            minimum height=0.8cm
+        },
+        % Style for the Control Block (Metadata)
+        ctrlblock/.style={
+            rectangle split parts=1,
+            draw=black!70,
+            fill=gray!20,
+            text width=3cm,
+            align=center,
+            minimum height=0.6cm
+        },
+        % Arrow style
+        ptr/.style={
+            -{Latex[length=3mm]},
+            thick,
+            draw=black!70
+        },
+        labeltext/.style={
+            font=\bfseries,
+            anchor=west
+        }
+    ]
+
+    % ==========================================================
+    % 1. INTRUSIVE MODEL
+    % ==========================================================
+    \node[labeltext] at (-1, 0) {1. Intrusive Model};
+    
+    % Smart Pointer
+    \node[smartptr] (sp1) at (0, -1.5) {\texttt{ptr\_object}};
+    \node[above=0.1cm of sp1, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % The Object (One contiguous block)
+    \node[ctrlblock] (rc1) at (5, -1.2) {\texttt{ref\_count}};
+    \node[heapblock, below=0cm of rc1] (data1) {Object Data};
+    % Draw outline around the whole fused object
+    \node[draw=black!70, fit=(rc1) (data1), inner sep=0pt] (obj1) {};
+    \node[above=0.1cm of obj1, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrow
+    \draw[ptr] (sp1.east) -- (obj1.north  west);
+
+
+    % ==========================================================
+    % 2. DECOUPLED (Two Pointers in SmartPtr)
+    % ==========================================================
+    \node[labeltext] at (-1, -3.5) {2. External: Decoupled};
+
+    % Smart Pointer (Split in two)
+    \node[smartptr, rectangle split parts=2] (sp2) at (0, -5) {
+        \texttt{ptr\_object}
+        \nodepart{second}
+        \texttt{ptr\_control}
+    };
+    \node[above=0.1cm of sp2, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % Control Block (Count Only)
+    \node[ctrlblock] (cb2) at (5, -6) {\texttt{ref\_count}};
+    \node[above=0.1cm of cb2, font=\scriptsize\itshape, color=gray] {Control Block};
+
+    % Object Data
+    \node[heapblock] (obj2) at (5, -4.75) {Object Data};
+    \node[above=0.1cm of obj2, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrows
+    % Arrow from first part of SP to Object
+    \draw[ptr] (sp2.text east) -- (obj2.west);
+    % Arrow from second part of SP to Control Block
+    \draw[ptr] (sp2.second east) -- (cb2.north west);
+
+
+    % ==========================================================
+    % 3. INDIRECTION (Pointer in Control Block)
+    % ==========================================================
+    \node[labeltext] at (-1, -7.5) {3. External: Indirection};
+
+    % Smart Pointer (One Pointer)
+    \node[smartptr] (sp3) at (0, -9) {\texttt{ptr\_control}};
+    \node[above=0.1cm of sp3, font=\scriptsize\itshape, color=gray] {Smart Pointer};
+
+    % Control Block (Count + Pointer)
+    \node[ctrlblock, rectangle split, rectangle split parts=2] (cb3) at (3.5, -9) {
+        \texttt{ref\_count}
+        \nodepart{second}
+        \texttt{ptr\_object}
+    };
+    \node[above=0.1cm of cb3, font=\scriptsize\itshape, color=gray] {Control Block};
+
+    % Object Data
+    \node[heapblock] (obj3) at (7.5, -9) {Object Data};
+    \node[above=0.1cm of obj3, font=\scriptsize\itshape, color=gray] {Object};
+
+    % Arrows
+    \draw[ptr] (sp3.east) -- (cb3.north west);
+    \draw[ptr] (cb3.second east) -- (obj3.west);
+
+    \end{tikzpicture}
+    \caption{Comparison of Reference Counting Storage Strategies}
+    \label{fig:refcount_strategies_detail}
+\end{figure}
+
+\subsubsection{Rationale for the Intrusive Model in Kernel Space}
+
+Most kernels employ the \textbf{intrusive reference counting model}. Although external models offer greater flexibility by avoiding modifications to object layouts, their associated costs are not justifiable within the kernel context. With an intrusive design, any subsystem holding a raw pointer can acquire ownership by incrementing the embedded counter, allowing objects to move freely between low-level components and higher-level abstractions without compromising correctness.
+
+The usage of reference counting offers multiple benefits:
+\begin{itemize}
+    \item \textbf{Deterministic deallocation} -- Resources are freed at the precise moment they become unused, without relying on garbage collection or deferred cleanup.
+    \item \textbf{Shared ownership} -- Multiple subsystems can safely share references to the same object without explicit coordination.
+    \item \textbf{Cache efficiency} -- The intrusive model ensures metadata is colocated with object data, improving memory access patterns.
+    \item \textbf{Lock-free operation} -- Atomic hardware primitives ensure safe concurrent access and correct object destruction in SMP environments without incurring the overhead of locks.
+    \item \textbf{Compile-time safety} -- Encapsulation within RAII-compliant wrappers (e.g., smart pointers) allows the compiler to enforce ownership semantics, automating reference management and structurally preventing resource leaks.
+\end{itemize}
+
+\subsection{Architecture Abstraction}
+\label{sec:arch_abstraction}
+
+While the services provided by an operating system — such as process scheduling, file I/O, and inter-process communication — are conceptually uniform, the underlying hardware implementations vary significantly across architectures (e.g., x86-64, ARM64, RISC-V). Registers differ in naming and width, memory consistency models vary, and interrupt controllers function through disparate protocols.
+
+To address this variance without duplicating the entire kernel codebase for every target platform, a strict architectural abstraction is advised. This chapter details the design patterns used to decouple logical operations from hardware actuation.
+
+\subsection{The Necessity of Decoupling}
+
+The primary motivation for architecture abstraction is the portability and testability of the kernel. In a naive implementation, a kernel might embed architecture-specific instructions directly into high-level logic. For example, a \texttt{Process::Create} function might directly execute x86-64 assembly instructions to load the CR3 register for virtual memory context switching.
+
+This approach, known as direct coupling, presents several risks:
+\begin{itemize}
+    \item \textbf{Portability Lock-in:} The high-level logic becomes inextricably bound to a specific instruction set architecture (ISA). Porting the system to a different architecture would require rewriting core subsystems rather than simply replacing a driver layer.
+    \item \textbf{Testing Complexity:} Logic containing inline assembly or direct hardware manipulation is difficult to test in isolation. It prevents the execution of kernel unit tests in a hosted environment (e.g., running kernel scheduler tests on a Linux host), as the host CPU cannot execute privileged instructions intended for the target hardware.
+    \item \textbf{Maintenance Overhead:} Hardware-specific details clutter algorithmic logic, reducing readability and increasing the cognitive load required to modify core system behaviors.
+\end{itemize}
+
+The goal of the abstraction layer in to define a clear boundary where the "what" (the logical operation, such as "switch to this address space") is separated from the "how" (the specific sequence of register moves and barriers required to effect that change).
+
+\subsection{Categorization of Kernel Code}
+
+One approach to enforce this separation is to divide kernel software into two distinct domains: Machine Independent (MI) code and Machine Dependent (MD) code.
+
+\subsubsection{Platform Independent Code (MI)}
+The Machine Independent layer implements the algorithmic logic and data management of the operating system. It operates on an idealized hardware model and manages abstract resources.
+
+\begin{itemize}
+    \item \textbf{Definition:} Code that remains valid regardless of the underlying CPU architecture or platform topology.
+    \item \textbf{Characteristics:} This code is written exclusively in standard C++ and relies on fixed-width integer types (e.g., \texttt{u64}, \texttt{size\_t}). It contains no inline assembly and does not access hardware registers directly.
+    \item \textbf{Examples in AlkOS:} The Virtual File System (VFS) path resolution logic, Scheduling algorithms, the Buddy Allocator splitting logic can all implemented in the MI layer.
+\end{itemize}
+
+\subsubsection{Platform Dependent Code (MD)}
+The Machine Dependent layer is responsible for translating the abstract commands issued by the MI layer into specific electrical signals, register states, or instruction sequences required by the target hardware.
+
+\begin{itemize}
+    \item \textbf{Definition:} Code responsible for the physical actuation of hardware features.
+    \item \textbf{Characteristics:} This code is highly specific to the target platform (e.g., x86-64). It frequently utilizes inline assembly, manages control registers (such as CR3, IDT, GDT), and handles hardware-specific quirks (e.g., APIC timer calibration or TLB invalidation).
+    \item \textbf{Role:} The MD layer serves as a driver for the CPU, shielding the MI layer from architectural implementation details.
+\end{itemize}
+
+\subsection{The Hardware Abstraction Layer (HAL)}
+
+To practically implement the separation between Machine Independent (MI) and Machine Dependent (MD) code, an operating system requires a formal interface known as the Hardware Abstraction Layer (HAL). The HAL acts as a contract: the MI layer invokes functions defined in the HAL, and the MD layer implements them. This inversion of control allows the high-level kernel logic to remain agnostic of the underlying hardware implementation.
+
+When designing a HAL, the developer must choose an interface mechanism that balances performance overhead with architectural flexibility. There are three primary approaches used in modern kernel development.
+
+\subsubsection{Interface Design Mechanisms}
+
+\paragraph{Dynamic Dispatch (Abstract Classes)}
+The traditional object-oriented approach utilizes abstract base classes with virtual functions. The HAL defines an interface (e.g., \texttt{class InterruptController}) with pure virtual methods, and the architecture specific code provides a concrete implementation (e.g., \texttt{class Apic : public InterruptController}).
+\begin{itemize}
+    \item \textbf{Pros:} Runtime flexibility. This allows the kernel to support multiple different hardware implementations simultaneously (e.g., a generic timer and a high-precision timer) and swap them at runtime based on hardware discovery.
+    \item \textbf{Cons:} Performance overhead. Every call through the HAL incurs the cost of a virtual table lookup and an indirect jump, which can be prohibitive in "hot paths" like memory allocation or interrupt handling.
+\end{itemize}
+
+\paragraph{Static Polymorphism (Templates / CRTP)}
+In C++ kernel development, the Curiously Recurring Template Pattern (CRTP) or simple template specialization can be used to enforce interfaces at compile time. The HAL is defined as a template that expects specific method signatures, and the architecture provides a compliant class.
+\begin{itemize}
+    \item \textbf{Pros:} Zero-cost abstraction. The compiler resolves the function calls at build time, allowing for inlining and optimization identical to writing raw hardware code. Ideally suited for critical paths like context switching or page table manipulation.
+    \item \textbf{Cons:} Rigidity. The implementation is fixed at compile time. The kernel cannot dynamically switch between different implementations (e.g., switching from a PIC to an APIC driver) without recompilation or complex build system logic.
+\end{itemize}
+
+\paragraph{C-Style API Boundaries}
+This approach relies on declaring global functions in header files (e.g., \texttt{void hal\_switch\_context(void* stack);}) that the MI layer calls. The specific architecture directory provides the implementation of these functions, which are linked at build time.
+\begin{itemize}
+    \item \textbf{Pros:} Simplicity and stability. It provides a clean, C-compatible ABI that is easy to implement in assembly language, which is often required for low-level HAL functions (like register saving).
+    \item \textbf{Cons:} Lack of encapsulation. It relies on the linker to resolve symbols, which can lead to namespace pollution or link-time errors if not managed carefully.
+\end{itemize}
+
+\subsection{Key Abstraction Boundaries}
+
+Designing a robust architecture abstraction requires identifying exactly where the logical responsibility ends and the hardware manipulation begins. In a general-purpose monolithic kernel, this split is most critical in three specific subsystems.
+
+\subsubsection{Memory Management}
+The memory subsystem is typically the most complex area to abstract due to the tight coupling between software policies and hardware tables.
+\begin{itemize}
+    \item \textbf{Machine Independent (MI):} Manages the logical view of the address space. It operates on objects such as Virtual Memory Areas (VMAs) or Regions, handling high-level logic like permissions (Read/Write/Execute), file mappings, and copy-on-write policies.
+    \item \textbf{Machine Dependent (MD):} Acts as a driver for the Memory Management Unit (MMU). It implements the specific page table structure (e.g., PML4 on x86-64 vs. Translation Tables on ARM), handles TLB invalidation instructions (e.g., \texttt{invlpg}), and manages the loading of the page table base register (e.g., \texttt{mov cr3}).
+\end{itemize}
+
+\subsubsection{Context Switching}
+The scheduler must save and restore the state of execution, but the definition of "state" varies by CPU.
+\begin{itemize}
+    \item \textbf{Machine Independent (MI):} Tracks the lifecycle of threads (Ready, Blocked, Running) and manages the decision logic of \textit{which} thread to run next. It views a thread simply as a pointer to a stack and a state enum.
+    \item \textbf{Machine Dependent (MD):} Performs the actual context switch. It knows exactly which registers must be saved (General Purpose Registers, Floating Point state, Vector registers), how to switch the stack pointer safely, and how to handle architecture-specific state (e.g., segment registers or shadow stack pointers).
+\end{itemize}
+
+\subsubsection{Interrupts}
+Interrupt handling requires bridging the gap between asynchronous hardware signals and synchronous software handlers.
+\begin{itemize}
+    \item \textbf{Machine Independent (MI):} Maintains a Logical Interrupt Table (LIT) or a table of handler functions. It manages the registration of drivers to IRQ lines and handles the logic of signal dispatching or thread waking.
+    \item \textbf{Machine Dependent (MD):} Configures the hardware interrupt controller (e.g., APIC, GIC, PLIC). It provides the assembly "trampolines" or "stubs" required to catch the CPU exception, save the volatile register state, align the stack, and call the C++ dispatcher.
+\end{itemize}
 
 \chapter{Analysis of Existing Solutions}
 
