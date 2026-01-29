@@ -2264,7 +2264,48 @@ Because the bootloader handles the disk I/O to load this image, the kernel does 
 This approach isolates the development of other subsystems from the complexities of physical storage hardware, serving as a critical bridge to a self-hosting system.
 
 \section{Screen Drawing}
-TODO: KRYCZKA
+\label{sec:screen_drawing_theory}
+
+Visual feedback constitutes the primary interface between the operating system and the user. However, the mechanism by which a kernel renders pixels to a display evolves significantly during the system's lifecycle, transitioning from primitive hardware interfaces to complex, software-managed abstractions.
+
+\subsection{Early Output and Debugging}
+
+In the first stages of kernel initialization, the full graphics subsystem is unavailable. To facilitate debugging and provide immediate feedback, operating systems rely on low-bandwidth, high-reliability communication channels provided by the hardware platform.
+
+The industry standard for this purpose is the \textbf{Serial Interface} (e.g., UART). Available across virtually all architectures --- from embedded RISC-V microcontrollers to server-grade x86-64 and ARM64 SoCs --- serial ports allow the kernel to transmit text streams byte-by-byte. This output is typically captured by a host machine via a physical cable or an emulator's logging facility. Because serial drivers are structurally simple and do not require complex memory management or bus enumeration, they serve as the reliable "black box" recorder for early system crashes.
+
+\subsection{The Linear Framebuffer Abstraction}
+
+As the system boots, it must transition from text streams to graphical output. Modern system firmware (such as UEFI on PC platforms or U-Boot on embedded systems) typically abstracts the display hardware into a \textbf{Linear Framebuffer}.
+
+Fundamentally, a linear framebuffer is a contiguous region of physical memory (Memory-Mapped I/O) where the data represents the visual state of the screen. The CPU interacts with the display by writing directly to these memory addresses. To utilize this region correctly, the kernel must respect specific geometric constraints provided by the firmware or hardware description structures (e.g., Device Tree):
+
+\begin{itemize}
+    \item \textbf{Pixel Format:} The layout of individual pixels (e.g., whether the byte order is Red-Green-Blue or Blue-Green-Red, and the bit-width of each channel).
+    \item \textbf{Stride (Pitch):} The width of a scanline in memory bytes. This value often exceeds the logical width of the screen ($\text{width} \times \text{bytes\_per\_pixel}$) due to hardware alignment requirements. Failing to account for stride results in skewed or distorted rendering.
+\end{itemize}
+
+\subsection{Software Rendering and Console Emulation}
+
+Unlike historical hardware which often included dedicated text-mode generators, modern display controllers are strictly pixel-based. Consequently, the operating system is responsible for all rendering logic.
+
+To display text logs or a command-line interface, the kernel must implement a \textbf{Software Rasterizer}. This subsystem loads a bitmap font, parses the bitmask for a specific character, and manually writes the corresponding pixel colors into the framebuffer. This process effectively emulates a textual console on top of a graphical surface, allowing the OS to present diagnostic information in a human-readable format without relying on specialized hardware modes.
+
+\subsection{The Concurrency Problem}
+
+In a multitasking operating system, the display represents a shared resource. If multiple processes were granted direct write access to the physical framebuffer simultaneously, the screen would become a chaotic collage of uncoordinated pixel updates. Furthermore, direct access to physical memory mapped I/O by user-space applications poses a significant stability and security risk.
+
+To address this, the operating system must virtualize the display hardware, revoking direct access from user applications and enforcing a strict ownership model.
+
+\subsection{Windowing and Composition}
+
+The solution to the concurrency problem is the implementation of a \textbf{Window Manager} or \textbf{Compositor}. In this architectural model, the kernel or a privileged display server acts as the sole owner of the physical framebuffer.
+
+\begin{enumerate}
+    \item \textbf{Virtual Surfaces:} Applications render their content into private, off-screen memory buffers (virtual framebuffers) located in standard RAM. They operate under the illusion that they own the entire display or a specific window.
+    \item \textbf{Composition:} The Compositor reads these off-screen buffers and "blits" (copies and combines) them onto the physical framebuffer. This step allows the system to enforce window stacking (Z-order), transparency, and clipping.
+    \item \textbf{Double Buffering:} To ensure visual consistency, the system typically employs double buffering. The Compositor constructs the next frame in a hidden \textbf{Backbuffer}. Only when the frame is fully rendered is it swapped to the \textbf{Frontbuffer} (the video memory scanned by the display controller). This technique prevents "screen tearing," an artifact that occurs when the display hardware refreshes while the memory is being written to.
+\end{enumerate}
 
 \section{Scheduling}
 
