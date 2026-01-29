@@ -509,10 +509,17 @@ At the outset of the project, specific requirements were not rigidly defined due
             \item \textbf{User Space Environment:} ELF executable loader, implementation of the System Shell (before porting it to userspace) and GUI enablement.
         \end{itemize}
 
+    \item \textbf{Data Structures and Standard Library:}
+        \begin{itemize}
+            \item Implementation of the C++ Standard Library (\texttt{libcpp}) components: \texttt{expected.hpp}
+            \item Implementation of specialized cyclic buffers for different consummer producer scenarios
+        \end{itemize}
+
     \item \textbf{Project Infrastructure:}
         \begin{itemize}
             \item Architecture of the CMake-based build system.
             \item Configuration of the Cross-Compilation Toolchain.
+            \item Setup of host based tests
             \item Setup of CI/CD pipelines and development scripts.
         \end{itemize}
 \end{itemize}
