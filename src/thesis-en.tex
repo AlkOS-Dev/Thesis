@@ -986,7 +986,7 @@ On general-purpose platforms (x86-64), the hardware is modular. The kernel canno
 \end{itemize}
 
 \subsection{Hardware Abstraction}
-How does the kernel handle such a diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and will be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
+How does the kernel handle such a diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and will be discussed in more detail in Section~\ref{sec:arch_abstraction}.
 
 \subsection{Discovering and Enabling CPU Features}
 \label{subsec:cpu_discovery}
@@ -5088,7 +5088,7 @@ The process state has less significance than the Thread State (described later) 
 
 \subsubsection{Address Space}
 
-The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to \todo[inline]{Memory Management} for more information.
+The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to Section~\ref{sec:impl_vmm} for more information.
 
 \subsubsection{File Descriptor Table}
 
