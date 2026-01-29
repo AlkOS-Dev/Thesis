@@ -2801,38 +2801,36 @@ The usage of reference counting offers multiple benefits:
 \section{Architecture Abstraction}
 \label{sec:arch_abstraction}
 
-While the services provided by an operating system — such as process scheduling, file I/O, and inter-process communication — are conceptually uniform, the underlying hardware implementations vary significantly across architectures (e.g., x86-64, ARM64, RISC-V). Registers differ in naming and width, memory consistency models vary, and interrupt controllers function through disparate protocols.
+While the services provided by an operating system --- such as process scheduling, file I/O, and inter-process communication --- are conceptually uniform, the underlying hardware implementations vary significantly across architectures (e.g., x86-64, ARM64, RISC-V). Registers differ in naming and width, memory consistency models vary, and interrupt controllers function through disparate protocols.
 
-To address this variance without duplicating the entire kernel codebase for every target platform, a strict architectural abstraction is advised. This chapter details the design patterns used to decouple logical operations from hardware actuation.
+To address this variance without duplicating the entire kernel codebase for every target platform, a strict architectural abstraction is advised. 
 
-\subsection{The Necessity of Decoupling}
+\subsubsection{The Necessity of Decoupling}
 
-The primary motivation for architecture abstraction is the portability and testability of the kernel. In a naive implementation, a kernel might embed architecture-specific instructions directly into high-level logic. For example, a \texttt{Process::Create} function might directly execute x86-64 assembly instructions to load the CR3 register for virtual memory context switching.
+The primary motivation for architecture abstraction is the portability of the kernel. In a naive implementation, a kernel might embed architecture-specific instructions directly into high-level logic. For example, a \texttt{yield()} function might directly execute x86-64 assembly instructions to load the CR3 register for virtual memory context switching.
 
 This approach, known as direct coupling, presents several risks:
 \begin{itemize}
     \item \textbf{Portability Lock-in:} The high-level logic becomes inextricably bound to a specific instruction set architecture (ISA). Porting the system to a different architecture would require rewriting core subsystems rather than simply replacing a driver layer.
-    \item \textbf{Testing Complexity:} Logic containing inline assembly or direct hardware manipulation is difficult to test in isolation. It prevents the execution of kernel unit tests in a hosted environment (e.g., running kernel scheduler tests on a Linux host), as the host CPU cannot execute privileged instructions intended for the target hardware.
     \item \textbf{Maintenance Overhead:} Hardware-specific details clutter algorithmic logic, reducing readability and increasing the cognitive load required to modify core system behaviors.
 \end{itemize}
 
-The goal of the abstraction layer in to define a clear boundary where the "what" (the logical operation, such as "switch to this address space") is separated from the "how" (the specific sequence of register moves and barriers required to effect that change).
+The goal of the abstraction layer in to define a clear boundary where the "what" (the logical operation, such as "switch to this address space") is separated from the "how" (the specific sequence of register moves and operations required).
 
-\subsection{Categorization of Kernel Code}
+\subsubsection{Categorization of Kernel Code}
 
 One approach to enforce this separation is to divide kernel software into two distinct domains: Machine Independent (MI) code and Machine Dependent (MD) code.
 
-\subsubsection{Platform Independent Code (MI)}
+\subsubsection{Machine Independent Code (MI)}
 The Machine Independent layer implements the algorithmic logic and data management of the operating system. It operates on an idealized hardware model and manages abstract resources.
 
 \begin{itemize}
     \item \textbf{Definition:} Code that remains valid regardless of the underlying CPU architecture or platform topology.
-    \item \textbf{Characteristics:} This code is written exclusively in standard C++ and relies on fixed-width integer types (e.g., \texttt{u64}, \texttt{size\_t}). It contains no inline assembly and does not access hardware registers directly.
-    \item \textbf{Examples in AlkOS:} The Virtual File System (VFS) path resolution logic, Scheduling algorithms, the Buddy Allocator splitting logic can all implemented in the MI layer.
+    \item \textbf{Characteristics:} This code is written exclusively in standard programming language and relies on fixed-width integer types (e.g., \texttt{u64}, \texttt{size\_t}). It contains no inline assembly and does not access hardware registers directly.
 \end{itemize}
 
-\subsubsection{Platform Dependent Code (MD)}
-The Machine Dependent layer is responsible for translating the abstract commands issued by the MI layer into specific electrical signals, register states, or instruction sequences required by the target hardware.
+\subsubsection{Machine Dependent Code (MD)}
+The Machine Dependent layer is responsible for translating the abstract commands issued by the MI layer into specific instruction sequences required by the target hardware.
 
 \begin{itemize}
     \item \textbf{Definition:} Code responsible for the physical actuation of hardware features.
@@ -2840,58 +2838,18 @@ The Machine Dependent layer is responsible for translating the abstract commands
     \item \textbf{Role:} The MD layer serves as a driver for the CPU, shielding the MI layer from architectural implementation details.
 \end{itemize}
 
-\subsection{The Hardware Abstraction Layer (HAL)}
-
-To practically implement the separation between Machine Independent (MI) and Machine Dependent (MD) code, an operating system requires a formal interface known as the Hardware Abstraction Layer (HAL). The HAL acts as a contract: the MI layer invokes functions defined in the HAL, and the MD layer implements them. This inversion of control allows the high-level kernel logic to remain agnostic of the underlying hardware implementation.
-
-When designing a HAL, the developer must choose an interface mechanism that balances performance overhead with architectural flexibility. There are three primary approaches used in modern kernel development.
-
-\subsubsection{Interface Design Mechanisms}
-
-\paragraph{Dynamic Dispatch (Abstract Classes)}
-The traditional object-oriented approach utilizes abstract base classes with virtual functions. The HAL defines an interface (e.g., \texttt{class InterruptController}) with pure virtual methods, and the architecture specific code provides a concrete implementation (e.g., \texttt{class Apic : public InterruptController}).
-\begin{itemize}
-    \item \textbf{Pros:} Runtime flexibility. This allows the kernel to support multiple different hardware implementations simultaneously (e.g., a generic timer and a high-precision timer) and swap them at runtime based on hardware discovery.
-    \item \textbf{Cons:} Performance overhead. Every call through the HAL incurs the cost of a virtual table lookup and an indirect jump, which can be prohibitive in "hot paths" like memory allocation or interrupt handling.
-\end{itemize}
-
-\paragraph{Static Polymorphism (Templates / CRTP)}
-In C++ kernel development, the Curiously Recurring Template Pattern (CRTP) or simple template specialization can be used to enforce interfaces at compile time. The HAL is defined as a template that expects specific method signatures, and the architecture provides a compliant class.
-\begin{itemize}
-    \item \textbf{Pros:} Zero-cost abstraction. The compiler resolves the function calls at build time, allowing for inlining and optimization identical to writing raw hardware code. Ideally suited for critical paths like context switching or page table manipulation.
-    \item \textbf{Cons:} Rigidity. The implementation is fixed at compile time. The kernel cannot dynamically switch between different implementations (e.g., switching from a PIC to an APIC driver) without recompilation or complex build system logic.
-\end{itemize}
-
-\paragraph{C-Style API Boundaries}
-This approach relies on declaring global functions in header files (e.g., \texttt{void hal\_switch\_context(void* stack);}) that the MI layer calls. The specific architecture directory provides the implementation of these functions, which are linked at build time.
-\begin{itemize}
-    \item \textbf{Pros:} Simplicity and stability. It provides a clean, C-compatible ABI that is easy to implement in assembly language, which is often required for low-level HAL functions (like register saving).
-    \item \textbf{Cons:} Lack of encapsulation. It relies on the linker to resolve symbols, which can lead to namespace pollution or link-time errors if not managed carefully.
-\end{itemize}
-
-\subsection{Key Abstraction Boundaries}
-
-Designing a robust architecture abstraction requires identifying exactly where the logical responsibility ends and the hardware manipulation begins. In a general-purpose monolithic kernel, this split is most critical in three specific subsystems.
-
-\subsubsection{Memory Management}
+\subsubsection{Memory Management Abstraction Example}
 The memory subsystem is typically the most complex area to abstract due to the tight coupling between software policies and hardware tables.
 \begin{itemize}
     \item \textbf{Machine Independent (MI):} Manages the logical view of the address space. It operates on objects such as Virtual Memory Areas (VMAs) or Regions, handling high-level logic like permissions (Read/Write/Execute), file mappings, and copy-on-write policies.
     \item \textbf{Machine Dependent (MD):} Acts as a driver for the Memory Management Unit (MMU). It implements the specific page table structure (e.g., PML4 on x86-64 vs. Translation Tables on ARM), handles TLB invalidation instructions (e.g., \texttt{invlpg}), and manages the loading of the page table base register (e.g., \texttt{mov cr3}).
 \end{itemize}
 
-\subsubsection{Context Switching}
+\subsubsection{Context Switching Abstraction Example}
 The scheduler must save and restore the state of execution, but the definition of "state" varies by CPU.
 \begin{itemize}
     \item \textbf{Machine Independent (MI):} Tracks the lifecycle of threads (Ready, Blocked, Running) and manages the decision logic of \textit{which} thread to run next. It views a thread simply as a pointer to a stack and a state enum.
     \item \textbf{Machine Dependent (MD):} Performs the actual context switch. It knows exactly which registers must be saved (General Purpose Registers, Floating Point state, Vector registers), how to switch the stack pointer safely, and how to handle architecture-specific state (e.g., segment registers or shadow stack pointers).
-\end{itemize}
-
-\subsubsection{Interrupts}
-Interrupt handling requires bridging the gap between asynchronous hardware signals and synchronous software handlers.
-\begin{itemize}
-    \item \textbf{Machine Independent (MI):} Maintains a Logical Interrupt Table (LIT) or a table of handler functions. It manages the registration of drivers to IRQ lines and handles the logic of signal dispatching or thread waking.
-    \item \textbf{Machine Dependent (MD):} Configures the hardware interrupt controller (e.g., APIC, GIC, PLIC). It provides the assembly "trampolines" or "stubs" required to catch the CPU exception, save the volatile register state, align the stack, and call the C++ dispatcher.
 \end{itemize}
 
 \chapter{Analysis of Existing Solutions}
