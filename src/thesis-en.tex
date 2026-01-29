@@ -424,27 +424,24 @@ At the outset of the project, specific requirements were not rigidly defined due
 
 \section{Work Division}
 
-\subsubsection{Code}
-
-The division of labor regarding the source code was determined by the distinct and complex subsystems inherent to operating system development. Responsibilities were allocated according to specific technical domains:
-
 \paragraph{Jakub Lisowski}
 
-Responsible for scheduling, process and thread lifecycle management, context switching, scheduling algorithms, thread sleeping mechanisms, interrupts, and timer devices.
+\begin{itemize} 
+    \item opa
+\end{itemize}
 
 \paragraph{Adam Ogieniewski}
 
-Responsible for storage and file system management (including the abstraction layer and implementation of the FAT file system family), the standard C library (libc), the system interface (syscalls and libc extensions), and hardware interaction via ACPI and other drivers.
+\begin{itemize} 
+    \item opa
+\end{itemize}
 
 \paragraph{Łukasz Kryczka}
 
-Responsible primarily for virtual memory, physical memory management, allocation strategies, bootloader, and graphics.
+\begin{itemize} 
+    \item opa
+\end{itemize}
 
-\subsubsection{Thesis}
-
-TODO: PODPUNKTY
-
-The division of work regarding the written thesis mirrors the distribution of coding responsibilities. The content was authored based on each contributor's specific area of implementation, technical expertise, and role within the project. The overall contribution effort was distributed evenly among the authors.
 
 % ==================================================================
 
@@ -2100,30 +2097,6 @@ This ensures that the expensive operation of memory copying occurs only when str
 
 It is worth noting that a complete virtual memory subsystem typically includes a swapping mechanism to support memory overcommitment. This allows inactive pages to be evicted to secondary storage, freeing physical RAM for active tasks. However, the theory presented in this section focuses on the fundamental aspects of memory virtualization: isolation, protection, and hardware abstraction. The implementation of swap and page replacement algorithms is considered a separate, advanced topic extending beyond these core principles.
 
-\section{Scheduling Design}
-\label{sec:scheduling_approaches}
-
-Before going further, a fundamental design decision must be made regarding the characteristics of our scheduling algorithm. The choice of scheduling paradigm dictates the complexity of the kernel, the synchronization mechanisms required, and the hardware dependencies.
-
-\subsubsection{Cooperative Scheduling}
-In a cooperative scheduling model, the operating system never forcibly pauses a running task. Instead, the currently executing thread retains control of the CPU until it voluntarily yields execution (e.g., via a specific \texttt{yield()} system call) or blocks on an I/O operation.
-
-\begin{itemize}
-    \item \textbf{Advantages:} Implementation simplicity. Since context switches occur only at known, controlled points, race conditions are significantly rarer, and complex locking mechanisms are often unnecessary. 
-    \item \textbf{Disadvantages:} A single malicious or poorly written program (e.g., one entering an infinite loop) can freeze the entire system, as the kernel never regains control to schedule other tasks.
-\end{itemize}
-
-\subsubsection{Preemptive Scheduling}
-Preemptive scheduling is the standard for modern general-purpose operating systems. In this model, the kernel assigns a specific time slice to each task. If a task does not yield voluntarily before its time expires, the hardware generates an interrupt (driven by an Event Clock \ref{subsec:event_clocks}), returning control to the kernel. The scheduler then forcibly saves the current task's state and switches to another.
-
-\begin{itemize}
-    \item \textbf{Advantages:} Responsiveness and stability. No single task can monopolize the CPU, ensuring that the system remains responsive even if a user program hangs.
-    \item \textbf{Disadvantages:} High complexity. Because a task can be interrupted at any instruction, the kernel must employ rigorous synchronization primitives (mutexes, spinlocks) to protect shared data structures from race conditions.
-\end{itemize}
-
-\subsubsection{SMP Scheduling}
-Symmetric Multiprocessing (SMP) scheduling extends these concepts to systems with multiple processor cores. In this environment, the scheduler must not only decide \textit{which} task to run next but also \textit{where} to run it.
-
 \section{Discovering External Devices and System Capabilities}
 
 Upon the successful initialization of the fully functional memory management subsystem, the kernel can proceed to discover external devices and implement subsystems for capabilities such as storage, input, and networking. It is not necessary to support an exhaustive list of peripherals to achieve a minimal working kernel. Therefore, this section covers only the absolute minimum set of devices required to support the scheduler and execute user-space programs.
@@ -2186,7 +2159,7 @@ The first category of devices required is a simple clock capable of tracking the
 \subsection{Event Clocks}
 \label{subsec:event_clocks}
 
-At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. Crucially, to implement preemption as discussed in Section \ref{sec:scheduling_approaches}, these devices are required to forcibly interrupt the currently running task when its time slice expires.
+At this stage, the approach to timing event logic must be established, depending on the target architecture and the capabilities exposed to users. Crucially, to implement preemption as discussed in Section \ref{subsec:scheduling_approaches}, these devices are required to forcibly interrupt the currently running task when its time slice expires.
 
 The first consideration is sleep granularity. A standard precision of approximately one millisecond is achievable on nearly every architecture using simple periodic interrupts. However, implementing high-precision nanosecond or microsecond sleep requires timer devices capable of extremely rapid reconfiguration. The minimum time interval between consecutive events is strictly limited by the hardware configuration latency. The kernel cannot schedule an interrupt to occur sooner than the time required to program the device. Older timing hardware often requires slow I/O port interactions, rendering them unsuitable for high-precision scheduling, whereas modern devices utilize faster interfaces. Additionally, it is common for a single hardware component to serve a dual purpose, acting as both a timekeeping source (Clock \ref{subsec:clocks-tutorial}) and an interrupt generator (Event Clock).
 
@@ -2296,6 +2269,30 @@ TODO: KRYCZKA
 \section{Scheduling}
 
 With all requisite low-level components implemented, the development process transitions to the design and implementation of the scheduling subsystem. The initial step involves defining the data structures representing the units of execution. We begin by establishing the concept of a Process.
+
+\subsection{Scheduling Design}
+\label{subsec:scheduling_approaches}
+
+Before going further, a fundamental design decision must be made regarding the characteristics of our scheduling algorithm. The choice of scheduling paradigm dictates the complexity of the kernel, the synchronization mechanisms required, and the hardware dependencies.
+
+\subsubsection{Cooperative Scheduling}
+In a cooperative scheduling model, the operating system never forcibly pauses a running task. Instead, the currently executing thread retains control of the CPU until it voluntarily yields execution (e.g., via a specific \texttt{yield()} system call) or blocks on an I/O operation.
+
+\begin{itemize}
+    \item \textbf{Advantages:} Implementation simplicity. Since context switches occur only at known, controlled points, race conditions are significantly rarer, and complex locking mechanisms are often unnecessary. 
+    \item \textbf{Disadvantages:} A single malicious or poorly written program (e.g., one entering an infinite loop) can freeze the entire system, as the kernel never regains control to schedule other tasks.
+\end{itemize}
+
+\subsubsection{Preemptive Scheduling}
+Preemptive scheduling is the standard for modern general-purpose operating systems. In this model, the kernel assigns a specific time slice to each task. If a task does not yield voluntarily before its time expires, the hardware generates an interrupt (driven by an Event Clock \ref{subsec:event_clocks}), returning control to the kernel. The scheduler then forcibly saves the current task's state and switches to another.
+
+\begin{itemize}
+    \item \textbf{Advantages:} Responsiveness and stability. No single task can monopolize the CPU, ensuring that the system remains responsive even if a user program hangs.
+    \item \textbf{Disadvantages:} High complexity. Because a task can be interrupted at any instruction, the kernel must employ rigorous synchronization primitives (mutexes, spinlocks) to protect shared data structures from race conditions.
+\end{itemize}
+
+\subsubsection{SMP Scheduling}
+Symmetric Multiprocessing (SMP) scheduling extends these concepts to systems with multiple processor cores. In this environment, the scheduler must not only decide \textit{which} task to run next but also \textit{where} to run it.
 
 \subsection{Process}
 
@@ -2432,7 +2429,7 @@ When designing the scheduler and internal kernel mechanisms, appropriate synchro
 
 \subsection{Scheduler}
 
-With thread and process management structures established, the final component required is the mechanism responsible for selecting the next task for execution during preemption or voluntary yielding. The primary responsibility of the scheduler is to track the execution state of threads and determine the optimal task to run according to a specific policy. The complexity of the implementation is largely dictated by the chosen scheduling paradigm (Section \ref{sec:scheduling_approaches}).
+With thread and process management structures established, the final component required is the mechanism responsible for selecting the next task for execution during preemption or voluntary yielding. The primary responsibility of the scheduler is to track the execution state of threads and determine the optimal task to run according to a specific policy. The complexity of the implementation is largely dictated by the chosen scheduling paradigm (Section \ref{subsec:scheduling_approaches}).
 
 The simplest approach is a single-core, non-preemptive (cooperative) scheduler. In this model, synchronization concerns within the scheduler are minimal, as context switches occur only at explicit yield points. Furthermore, the sleeping mechanism can be simplified, as tasks are not preempted, allowing wake-up checks to occur solely during yield calls without strict timing reliance.
 
@@ -4899,7 +4896,7 @@ struct Process : hal::Process {
 \subsubsection{PID}
 \label{subsubsec:pid}
 
-As mentioned in the limitations section \ref{subsec:limitations}, the system imposes a hard limit on the maximum number of existing processes. This constraint allows for optimized process lookup via direct indexing. The \textbf{PID} (Process Identifier) is composed of a reservable identifier and an atomic counter, ensuring that each PID remains unique throughout the entire lifetime of the system.
+The system imposes a hard limit on the maximum number of existing processes, exactly 4096 processes. This constraint allows for optimized process lookup via direct indexing. The \textbf{PID} (Process Identifier) is composed of a reservable identifier and an atomic counter, ensuring that each PID remains unique throughout the entire lifetime of the system.
 
 \subsubsection{Process Flags}
 
@@ -5744,33 +5741,6 @@ Developing an operating system kernel is an inherently complex task, further com
     \item \textbf{FAT12/16/32 Support} -- The system supports the FAT12, FAT16, and FAT32 file system variants. Long file name (LFN) support is not implemented; filenames are therefore limited to the 8.3 format.
     \item \textbf{Ramdisk} -- The system is bootstrapped using an in-memory file system mounted as the initial root file system. Loading a root file system from persistent storage is not supported, and thus, no permanent modifications are possible. The expected file system is hardcoded to FAT16.
     \item \textbf{ELF64} -- User space applications must be compiled as ELF64 binaries. Dynamic linking is not supported. In particular, binaries containing a \texttt{PT\_INTERP} segment \cite{elf-spec-dynamic} or relying on shared libraries cannot be executed.
-\end{itemize}
-
-\subsection{Known Limitations}
-\label{subsec:limitations}
-
-TODO: KRYCZKA DODAJ SWOJE
-
-The following section outlines the internal constraints established during development. These constants are hardcoded within the codebase, and multiple system mechanisms rely on them for correct operation. While these are compile-time values that can be modified, we cannot guarantee correct functionality if they are changed.
-
-\begin{itemize} 
-    \item \textbf{Max Process Name Size} -- 128 bytes -- Defined by the static storage size within the process structure. 
-    \item \textbf{Max Processes} -- 4096 -- This limit simplifies indexing and memory management. Exceeding this number would likely result in memory exhaustion given current constraints.
-    \item \textbf{Max Threads} -- 8192 -- Similar to processes, this limit simplifies data structures and resource allocation. 
-    \item \textbf{Kernel Stack Size} -- 64 KB -- The kernel stack is allocated per thread. Keeping this size minimal prevents excessive memory consumption. 
-    \item \textbf{User Stack Size} -- 8 MB -- A large stack is provided for user-space threads to facilitate the smooth execution of standard applications. 
-    \item \textbf{User Space Address Range} -- \texttt{0x0 - 0x00007FFFFFFFFFFF}. 
-    \item \textbf{Kernel Space Address Range} -- \texttt{0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF}. 
-    \item \textbf{Max Cores} -- 512 -- This limit exceeds the core count of most current processors and simplifies various internal data structures. 
-    \item \textbf{Max Path Length} -- 1024 -- The absolute maximum length of a file path string accepted by the VFS.
-    \item \textbf{Max Path Depth} -- 64 -- The maximum number of directory components (slashes) allowed in a single path.
-    \item \textbf{Max Filename Length} -- 128 -- The maximum length permitted for a single file or directory name component.
-    \item \textbf{Max Open Files per Process} -- 128 -- The hard limit on file descriptors allocated to a single process.
-    \item \textbf{Max System Open Files} -- 1024 -- The capacity of the global open-file table, limiting the total number of files that may be open system-wide at any given time.
-    \item \textbf{Max Active Files Cache} -- 512 -- The limit of the internal file objects, restricting how many unique files can be actively referenced by the system simultaneously.
-    \item \textbf{Pipe Buffer Size} -- 4~KB -- The fixed circular buffer size used for standard I/O streams.
-    \item \textbf{Max Heap Size} -- 16~GB -- The maximum virtual address range available for a user space process's heap.
-    \item \textbf{Max Syscall Arguments} -- 6 -- The maximum number of arguments that can be passed to a system call.
 \end{itemize}
 
 \section{Future Work}
