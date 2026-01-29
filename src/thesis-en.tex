@@ -4899,7 +4899,7 @@ struct Process : hal::Process {
 \subsubsection{PID}
 \label{subsubsec:pid}
 
-As mentioned in the limitations section \ref{subsec:limitations}, the system imposes a hard limit on the maximum number of existing processes. This constraint allows for optimized process lookup via direct indexing. The \textbf{PID} (Process Identifier) is composed of a reservable identifier and an atomic counter, ensuring that each PID remains unique throughout the entire lifetime of the system.
+The system imposes a hard limit on the maximum number of existing processes, exactly 4096 processes. This constraint allows for optimized process lookup via direct indexing. The \textbf{PID} (Process Identifier) is composed of a reservable identifier and an atomic counter, ensuring that each PID remains unique throughout the entire lifetime of the system.
 
 \subsubsection{Process Flags}
 
