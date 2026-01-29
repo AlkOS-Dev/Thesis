@@ -444,7 +444,7 @@ At the outset of the project, specific requirements were not rigidly defined due
             \item Section \ref{subsec:intrusive} --- Intrusive Data Structures.
         \end{itemize}
 
-        \item Chapter 4 --- Analysis of Existing Solutions:
+        \item Chapter 3 --- Analysis of Existing Solutions:
         \begin{itemize}
             \item Section \ref{sec:linux-research} --- Linux Research and Analysis.
         \end{itemize}
@@ -503,6 +503,11 @@ At the outset of the project, specific requirements were not rigidly defined due
             \item Subsection \ref{subsubsec:syscalls} --- Syscalls
             \item Subsection \ref{subsec:libc_headers} --- Libc System Headers
             \item Section \ref{sec:host_env} --- Host Environment --- Working OS
+        \end{itemize}
+
+        \item Chapter 3 --- Analysis of Existing Solutions:
+        \begin{itemize}
+            \item Section \ref{sec:minix-research} --- Minix 3 Research and Analysis.
         \end{itemize}
 
         \item Chapter \ref{chap:high_level_subsystems} --- High-Level Subsystems:
@@ -3078,6 +3083,7 @@ The \texttt{fork()} mechanism is rooted in historical design decisions. While co
 \end{itemize}
 
 \section{Minix 3}
+\label{sec:minix-research}
 
 Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, which Tanenbaum argues are inherently prone to failure due to high bug density --- statistically between two and ten bugs per thousand lines of code \cite{tanenbaum2015modern} --- Minix 3 relocates the majority of operating system components into user space. This includes device drivers, file systems, and memory management mechanisms. As a result, the microkernel size is highly reduced, strictly limiting its responsibilities to essential functions such as interrupt handling, process management, and inter-process communication via message passing.
 
