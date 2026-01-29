@@ -986,7 +986,7 @@ On general-purpose platforms (x86-64), the hardware is modular. The kernel canno
 \end{itemize}
 
 \subsection{Hardware Abstraction}
-How does the kernel handle such a diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and will be discussed in more detail in \todo[inline]{add label to hardware abstraction layer / problem}
+How does the kernel handle such a diverse set of methods of querying the memory? This is a part of a bigger topic --- namely Hardware / Architecture Abstraction --- and will be discussed in more detail in Section~\ref{sec:arch_abstraction}.
 
 \subsection{Discovering and Enabling CPU Features}
 \label{subsec:cpu_discovery}
@@ -1834,7 +1834,7 @@ By deferring allocation until the last possible moment --- specifically, the mom
 \subsection{Mechanisms: Overcommitment and Optimization}
 \label{subsec:vmm_mechanisms}
 
-The realization of the Theory of Locality in a modern kernel relies on three specific mechanisms: Demand Paging, Copy-on-Write, and the Zero Page. These features fundamentally change the role of the Page Fault Exception (\texttt{\#PF}) from an error condition to a core signaling mechanism of the memory subsystem.
+The realization of the Theory of Locality in a modern kernel relies on three specific mechanisms: Demand Paging, Copy-on-Write, and the Zero Page. These features allow the kernel to practice memory overcommitment —-- promising more virtual memory to processes than physically exists --— by deferring actual allocation until access occurs. They fundamentally change the role of the Page Fault Exception (\texttt{\#PF}) from an error condition to a core signaling mechanism of the memory subsystem.
 
 \subsubsection{Demand Paging}
 
@@ -1908,7 +1908,7 @@ This ensures that the expensive operation of memory copying occurs only when str
 
 \subsubsection{Swapping}
 
-It is worth noting that a complete virtual memory subsystem typically includes a swapping mechanism to support memory overcommitment. This allows inactive pages to be evicted to secondary storage, freeing physical RAM for active tasks. However, the theory presented in this section focuses on the fundamental aspects of memory virtualization: isolation, protection, and hardware abstraction. The implementation of swap and page replacement algorithms is considered a separate, advanced topic extending beyond these core principles.
+It is worth noting that a complete virtual memory subsystem typically includes a swapping mechanism to sustain high levels of memory overcommitment. While the mechanisms above allow virtual allocation to exceed physical capacity, swapping ensures stability when physical memory is finally exhausted. This allows inactive pages to be evicted to secondary storage, freeing physical RAM for active tasks. However, the theory presented in this section focuses on the fundamental aspects of memory virtualization: isolation, protection, and hardware abstraction. The implementation of swap and page replacement algorithms is considered a separate, advanced topic extending beyond these core principles.
 
 \section{Discovering External Devices and System Capabilities}
 \label{sec:discovery}
@@ -2798,7 +2798,7 @@ The usage of reference counting offers multiple benefits:
     \item \textbf{Compile-time safety} -- Encapsulation within RAII-compliant wrappers (e.g., smart pointers) allows the compiler to enforce ownership semantics, automating reference management and structurally preventing resource leaks.
 \end{itemize}
 
-\subsection{Architecture Abstraction}
+\section{Architecture Abstraction}
 \label{sec:arch_abstraction}
 
 While the services provided by an operating system — such as process scheduling, file I/O, and inter-process communication — are conceptually uniform, the underlying hardware implementations vary significantly across architectures (e.g., x86-64, ARM64, RISC-V). Registers differ in naming and width, memory consistency models vary, and interrupt controllers function through disparate protocols.
@@ -5088,7 +5088,7 @@ The process state has less significance than the Thread State (described later) 
 
 \subsubsection{Address Space}
 
-The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to \todo[inline]{Memory Management} for more information.
+The address space is a fundamental component of the process structure. It defines all information regarding virtual memory, specifically establishing the translation between the virtual and physical layers. Each process operates within its own virtual address space, facilitating simpler memory management regarding fragmentation, performance, and security. Refer to Section~\ref{sec:impl_vmm} for more information.
 
 \subsubsection{File Descriptor Table}
 
