@@ -406,7 +406,7 @@ Beyond the educational barrier lie the technical hurdles: implementing device dr
 This thesis aims to address both aspects. It documents the technical creation of the AlkOS kernel --- our design choices, the problems we encountered, and the solutions we engineered (detailed in Chapters \ref{chap:low_level_implementation} and \ref{chap:high_level_subsystems}, with corresponding source code attached to this thesis). Simultaneously, it serves as a guide to the problem space itself (specifically in Chapter \ref{chap:os_from_scratch}), intended to assist future developers in their attempt to create an operating system from scratch.
 
 \section{Scope of the Thesis}
-\label{subsec:functional}
+\label{subsec:scope}
 
 The primary objective of this project, as initially defined, was to implement a functional scheduler capable of executing tasks within isolated address spaces. Specifically, the project aimed to achieve the following minimal technical goals:
 
@@ -426,8 +426,44 @@ At the outset of the project, specific requirements were not rigidly defined due
 
 \paragraph{Jakub Lisowski}
 
-\begin{itemize} 
-    \item opa
+\paragraph{Jakub Lisowski}
+\begin{itemize}
+    \item \textbf{Thesis Documentation and Analysis:}
+        \begin{itemize}
+            \item Section \ref{subsec:scope} --- Scope of the Thesis.
+            \item Section \ref{subsec:intrusive} --- Intrusive Data Structures.
+            \item Section \ref{sec:comms} --- Establishment of Basic Communication.
+            \item Section \ref{subsec:os-tutorial-interrupts} --- Enabling Interrupts and Exceptions.
+            \item Section \ref{sec:tracing} --- Tracing System.
+            \item Section \ref{sec:discovery} --- Discovering External Devices and System Capabilities.
+            \item Section \ref{sec:sched-tutorial} --- Scheduling Theory.
+            \item Section \ref{sec:linux-research} --- Linux Research and Analysis.
+            \item Section \ref{sec:interrupts} --- Interrupt Implementation.
+            \item Section \ref{sec:timing} --- Timing Implementation.
+            \item Section \ref{sec:scheduling-impl} --- Scheduling Implementation.
+            \item Section \ref{sec:results} --- Results and Conclusions.
+        \end{itemize}
+
+    \item \textbf{Kernel Subsystems:}
+        \begin{itemize}
+            \item \textbf{Scheduling:} Design of the Meta-scheduler, thread/process lifecycle management, and core task structures.
+            \item \textbf{Timing:} High-precision timing subsystem, sleep mechanisms, and hardware drivers (TSC, HPET, LAPIC Timer, RTC).
+            \item \textbf{Interrupts:} Interrupt subsystem architecture and hardware drivers (APIC, PIC).
+            \item \textbf{Observability:} Design and implementation of the kernel tracing and logging subsystem.
+        \end{itemize}
+
+    \item \textbf{Data Structures and Standard Library:}
+        \begin{itemize}
+            \item Implementation of the C Standard Library (\texttt{libc}) components: \texttt{time.h}, standard asserts, and extended diagnostic asserts.
+            \item Design of core intrusive data structures: doubly linked lists and Red-Black trees.
+            \item Implementation of specialized Hash Map structures.
+        \end{itemize}
+
+    \item \textbf{Tooling and Quality Assurance:}
+        \begin{itemize}
+            \item Development of the unit testing framework and automated regression tests.
+            \item Development of the project's automation infrastructure (majority of Bash scripts under \texttt{./scripts}).
+        \end{itemize}
 \end{itemize}
 
 \paragraph{Adam Ogieniewski}
@@ -1211,6 +1247,7 @@ A prime example is the Floating Point Unit (FPU) and Vector Extensions (SSE/AVX)
 This enabling phase is critical not only for allowing instruction execution but also for the scheduler. The operating system must know the size of the processor's register state (Context) to correctly save and restore threads during context switches. If AVX-512 is enabled, the context size increases significantly compared to standard SSE, impacting memory usage and context switch latency.
 
 \section{Establishment of Basic Communication}
+\label{sec:comms}
 
 One of the primary objectives when initializing code on a target architecture is to establish an external communication channel. In an emulation environment, this is often achieved by interacting with the emulator's framework (e.g., QEMU utilizes a serial port \cite{wikibooks-serial} that can be attached to a Linux shell session). On physical hardware, the developer may need to render fonts on a screen (e.g., using the VGA standard on x86-64 desktop platforms \cite{osdev-barebones, osdev-vga}) or implement a basic network stack. It should be noted that at this stage, a rudimentary implementation is often sufficient. However, this serves as a provisional solution, to ensure correct handling in the future, a fully-fledged infrastructure and a proper hardware abstraction layer must be established. The preferred method should support bidirectional communication during the early development stages to facilitate testing and provide input to the kernel. This functionality is primarily required for debugging and testing, and as development progresses, it is advisable to abandon this simple communication or disable it via compilation flags.
 
@@ -1278,6 +1315,7 @@ Architecture-specific details must also be considered. For example, the x86-64 a
 Finally, to enable Symmetric Multiprocessing (SMP) and utilize multiple cores, the interrupt mechanism serves as the primary method of inter-core communication.
 
 \section{Tracing System}
+\label{sec:tracing}
 
 As discussed in Section \ref{subsec:os-tutorial-interrupts}, direct tracing inside interrupt handlers is generally discouraged due to latency concerns. However, in a general context, kernel logs and debug messages must be preserved to a file or terminal. The challenge is that writing to a file or physical device incurs significant latency, while system code must execute as rapidly as possible. To resolve this, the tracing framework must be robust enough to operate in a concurrent environment (handling interrupts and SMP) while decoupling the generation of traces from their output. 
 
@@ -1286,6 +1324,7 @@ This can be achieved by allocating a large circular buffer for messages, which i
 This goes about the general design, but during initial development of the system, there is no need to have a full tracing system, simple print with formatting is enough to proceed.
 
 \section{Testing framework}
+\label{sec:testing}
 
 The reliability of an operating system kernel cannot be guaranteed solely through compilation checks or host-based logic verification. While some algorithmic components can be tested in a hosted environment (e.g., on a Linux host), the core kernel functionalities depend heavily on the specific hardware architecture, physical memory layout, and privileged CPU instructions. Consequently, a robust testing framework must be implemented to execute directly within the kernel on the target hardware or emulator.
 
@@ -2098,6 +2137,7 @@ This ensures that the expensive operation of memory copying occurs only when str
 It is worth noting that a complete virtual memory subsystem typically includes a swapping mechanism to support memory overcommitment. This allows inactive pages to be evicted to secondary storage, freeing physical RAM for active tasks. However, the theory presented in this section focuses on the fundamental aspects of memory virtualization: isolation, protection, and hardware abstraction. The implementation of swap and page replacement algorithms is considered a separate, advanced topic extending beyond these core principles.
 
 \section{Discovering External Devices and System Capabilities}
+\label{sec:discovery}
 
 Upon the successful initialization of the fully functional memory management subsystem, the kernel can proceed to discover external devices and implement subsystems for capabilities such as storage, input, and networking. It is not necessary to support an exhaustive list of peripherals to achieve a minimal working kernel. Therefore, this section covers only the absolute minimum set of devices required to support the scheduler and execute user-space programs.
 
@@ -2267,6 +2307,7 @@ This approach isolates the development of other subsystems from the complexities
 TODO: KRYCZKA
 
 \section{Scheduling}
+\label{sec:sched-tutorial}
 
 With all requisite low-level components implemented, the development process transitions to the design and implementation of the scheduling subsystem. The initial step involves defining the data structures representing the units of execution. We begin by establishing the concept of a Process.
 
@@ -2721,6 +2762,7 @@ The compilation of user space programs can be automated and synchronized with th
 \chapter{Analysis of Existing Solutions}
 
 \section{Linux}
+\label{sec:linux-research}
 
 The Linux operating system family is one of the most widely used globally, alongside Windows. The Linux kernel relies on a monolithic architecture. This implies that the kernel has a broad range of responsibilities, while user space contains applications that rely entirely on system capabilities. In practice, all code responsible for memory management, scheduling, interrupt handling, and device drivers resides within the kernel address space. This approach presents various advantages and disadvantages.
 
@@ -4837,6 +4879,7 @@ When a process closes a file descriptor (or terminates), the reference to the co
 Consequently, the destruction of an \texttt{OpenFileEntry} releases its hold on the underlying \texttt{File} object. Similarly, if the reference count of the \texttt{File} object reaches zero, it implies that no active streams are reading from or writing to that specific file. The system then automatically reclaims the associated memory from the \texttt{FileTable}. This cascading deallocation mechanism ensures that kernel memory is only consumed for files that are actively in use by at least one process.
 
 \section{Scheduling}
+\label{sec:scheduling-impl}
 
 The scheduling module is the final core component of the operating system, relying heavily on and utilizing the previously described modules. Although the current implementation targets a single-core architecture for simplicity, the design is extensible to multi-core systems, as discussed later in this document.
 
@@ -5690,12 +5733,13 @@ To support loading data from the file system, we expanded the \texttt{stdio} imp
 By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
 \chapter{Results}
+\label{sec:results}
 
 This chapter summarizes the work accomplished and the assumptions made during the development process. Furthermore, it provides a critical analysis of the implemented solution.
 
 \section{Achieved Functionalities}
 
-We successfully fulfilled all functional requirements defined in Section \ref{subsec:functional}, in addition to implementing several supplementary features. The following list details the additional functionalities achieved:
+We successfully fulfilled all functional requirements defined in Section \ref{subsec:scope}, in addition to implementing several supplementary features. The following list details all functionalities achieved:
 
 \begin{itemize} 
     \item \textbf{Hardware Abstraction Layer (HAL)} -- An architectural interface decoupling high-level kernel logic from platform-specific hardware instructions.
