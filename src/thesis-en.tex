@@ -474,8 +474,47 @@ At the outset of the project, specific requirements were not rigidly defined due
 
 \paragraph{Łukasz Kryczka}
 
-\begin{itemize} 
-    \item opa
+\begin{itemize}
+    \item \textbf{Thesis Documentation and Analysis:}
+        \begin{itemize}
+            \item Chapter 1 --- Introduction (Background, Motivation, Scale, Difficulties).
+            \item Chapter \ref{chap:os_from_scratch} --- Creating an Operating System from Scratch:
+            \begin{itemize}
+                \item Section \ref{subsec:theory_bootloader} --- Bootloader Theory.
+                \item Section \ref{sec:mem_discovery} --- Memory Preloading and Discovery.
+                \item Section \ref{subsubsec:physical_memory_management} --- Physical Memory Management Theory (Fragmentation, Allocators).
+                \item Section \ref{sec:vmm} --- Virtual Memory Management Theory (Hardware, Architecture, Algorithms, Locality).
+                \item Section \ref{sec:screen_drawing_theory} --- Screen Drawing Theory.
+            \end{itemize}
+            \item Chapter \ref{chap:low_level_implementation} --- Low-Level Kernel Implementation:
+            \begin{itemize}
+                \item Section 4.1 --- Bootloader Implementation (Loader32, Loader64).
+                \item Section \ref{sec:impl_pmm} --- Physical Memory Management Implementation.
+                \item Section \ref{sec:impl_vmm} --- Virtual Memory Management Implementation.
+                \item Section \ref{sec:arch_abstraction} --- Architecture Abstraction.
+            \end{itemize}
+        \end{itemize}
+
+    \item \textbf{Core Kernel Infrastructure:}
+        \begin{itemize}
+            \item \textbf{Bootloader:} Design and implementation of the two-stage internal bootloader (Loader32 and Loader64), ELF64 loading, and mode transitions (Protected to Long Mode).
+            \item \textbf{Memory Management:} Implementation of the Physical Memory Manager (Bitmap and Buddy allocators), Slab Allocator for kernel objects, and the Virtual Memory Manager (Paging, recursive mapping, demand paging, and page fault handling).
+            \item \textbf{Hardware Abstraction:} Implementation of the HAL interface.
+        \end{itemize}
+
+    \item \textbf{User Space and Graphics:}
+        \begin{itemize}
+            \item \textbf{Graphics Subsystem:} Linear framebuffer drivers, software rasterizer, font rendering, and the Window Manager.
+            \item \textbf{Input Subsystem:} PS/2 Keyboard driver and input event routing.
+            \item \textbf{User Space Environment:} ELF executable loader, implementation of the System Shell (before porting it to userspace) and GUI enablement.
+        \end{itemize}
+
+    \item \textbf{Project Infrastructure:}
+        \begin{itemize}
+            \item Architecture of the CMake-based build system.
+            \item Configuration of the Cross-Compilation Toolchain.
+            \item Setup of CI/CD pipelines and development scripts.
+        \end{itemize}
 \end{itemize}
 
 
