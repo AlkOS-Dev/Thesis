@@ -5746,33 +5746,6 @@ Developing an operating system kernel is an inherently complex task, further com
     \item \textbf{ELF64} -- User space applications must be compiled as ELF64 binaries. Dynamic linking is not supported. In particular, binaries containing a \texttt{PT\_INTERP} segment \cite{elf-spec-dynamic} or relying on shared libraries cannot be executed.
 \end{itemize}
 
-\subsection{Known Limitations}
-\label{subsec:limitations}
-
-TODO: KRYCZKA DODAJ SWOJE
-
-The following section outlines the internal constraints established during development. These constants are hardcoded within the codebase, and multiple system mechanisms rely on them for correct operation. While these are compile-time values that can be modified, we cannot guarantee correct functionality if they are changed.
-
-\begin{itemize} 
-    \item \textbf{Max Process Name Size} -- 128 bytes -- Defined by the static storage size within the process structure. 
-    \item \textbf{Max Processes} -- 4096 -- This limit simplifies indexing and memory management. Exceeding this number would likely result in memory exhaustion given current constraints.
-    \item \textbf{Max Threads} -- 8192 -- Similar to processes, this limit simplifies data structures and resource allocation. 
-    \item \textbf{Kernel Stack Size} -- 64 KB -- The kernel stack is allocated per thread. Keeping this size minimal prevents excessive memory consumption. 
-    \item \textbf{User Stack Size} -- 8 MB -- A large stack is provided for user-space threads to facilitate the smooth execution of standard applications. 
-    \item \textbf{User Space Address Range} -- \texttt{0x0 - 0x00007FFFFFFFFFFF}. 
-    \item \textbf{Kernel Space Address Range} -- \texttt{0xFFFF800000000000 - 0xFFFFFFFFFFFFFFFF}. 
-    \item \textbf{Max Cores} -- 512 -- This limit exceeds the core count of most current processors and simplifies various internal data structures. 
-    \item \textbf{Max Path Length} -- 1024 -- The absolute maximum length of a file path string accepted by the VFS.
-    \item \textbf{Max Path Depth} -- 64 -- The maximum number of directory components (slashes) allowed in a single path.
-    \item \textbf{Max Filename Length} -- 128 -- The maximum length permitted for a single file or directory name component.
-    \item \textbf{Max Open Files per Process} -- 128 -- The hard limit on file descriptors allocated to a single process.
-    \item \textbf{Max System Open Files} -- 1024 -- The capacity of the global open-file table, limiting the total number of files that may be open system-wide at any given time.
-    \item \textbf{Max Active Files Cache} -- 512 -- The limit of the internal file objects, restricting how many unique files can be actively referenced by the system simultaneously.
-    \item \textbf{Pipe Buffer Size} -- 4~KB -- The fixed circular buffer size used for standard I/O streams.
-    \item \textbf{Max Heap Size} -- 16~GB -- The maximum virtual address range available for a user space process's heap.
-    \item \textbf{Max Syscall Arguments} -- 6 -- The maximum number of arguments that can be passed to a system call.
-\end{itemize}
-
 \section{Future Work}
 
 TODO: KRYCZKA DODAJ SWOJE
