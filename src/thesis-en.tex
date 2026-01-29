@@ -385,7 +385,7 @@ It is precisely because of the aforementioned complexities that the implementati
 
 \subsection{Scale}
 
-Given the magnitude of the task, operating system development is predominantly an enterprise-level initiative involving large teams of seasoned professionals. Independent or hobbyist operating systems, developed by individuals or small groups, are exceptionally rare.
+Given the magnitude of the task, operating system development is predominantly an enterprise-level initiative involving large teams of seasoned professionals. Independent or hobbyist operating systems, developed by individuals or small groups, are exceptionally rare. Notably, even in an era dominated by Windows, macOS, and Linux, new operating systems continue to emerge --- as evidenced by reports of Google developing an Android-based operating system with AI at its core \cite{google_aluminium_os}.
 
 To put this scarcity into perspective, consider the software landscape. The number of PC games is estimated in the tens of thousands, with over 121,000 available on Steam alone as of early 2026. Mobile applications number in the millions, with approximately 2.18 million on the Google Play Store \cite{stats_google_play}. The web is even more vast, with the total number of websites estimated at 1.34 billion \cite{stats_websites}. All of these software artifacts rely on the operating system as their host.
 
@@ -426,23 +426,45 @@ At the outset of the project, specific requirements were not rigidly defined due
 
 \paragraph{Jakub Lisowski}
 
-\paragraph{Jakub Lisowski}
 \begin{itemize}
     \item \textbf{Thesis Documentation and Analysis:}
+    \begin{itemize}
+        \item Chapter 1 --- Introduction:
         \begin{itemize}
             \item Section \ref{subsec:scope} --- Scope of the Thesis.
-            \item Section \ref{subsec:intrusive} --- Intrusive Data Structures.
+        \end{itemize}
+
+        \item Chapter \ref{chap:os_from_scratch} --- Creating an Operating System from Scratch:
+        \begin{itemize}
             \item Section \ref{sec:comms} --- Establishment of Basic Communication.
             \item Section \ref{subsec:os-tutorial-interrupts} --- Enabling Interrupts and Exceptions.
             \item Section \ref{sec:tracing} --- Tracing System.
             \item Section \ref{sec:discovery} --- Discovering External Devices and System Capabilities.
             \item Section \ref{sec:sched-tutorial} --- Scheduling Theory.
+            \item Section \ref{subsec:intrusive} --- Intrusive Data Structures.
+        \end{itemize}
+
+        \item Chapter 3 --- Analysis of Existing Solutions:
+        \begin{itemize}
             \item Section \ref{sec:linux-research} --- Linux Research and Analysis.
+        \end{itemize}
+
+        \item Chapter \ref{chap:low_level_implementation} --- Low-Level Kernel Implementation:
+        \begin{itemize}
             \item Section \ref{sec:interrupts} --- Interrupt Implementation.
             \item Section \ref{sec:timing} --- Timing Implementation.
+        \end{itemize}
+
+        \item Chapter \ref{chap:high_level_subsystems} --- High-Level Subsystems:
+        \begin{itemize}
             \item Section \ref{sec:scheduling-impl} --- Scheduling Implementation.
+        \end{itemize}
+
+        \item Chapter \ref{sec:results} --- Results:
+        \begin{itemize}
             \item Section \ref{sec:results} --- Results and Conclusions.
         \end{itemize}
+    \end{itemize}
 
     \item \textbf{Kernel Subsystems:}
         \begin{itemize}
@@ -469,7 +491,56 @@ At the outset of the project, specific requirements were not rigidly defined due
 \paragraph{Adam Ogieniewski}
 
 \begin{itemize} 
-    \item opa
+    \item \textbf{Thesis Documentation and Analysis:}
+    \begin{itemize}
+        \item Chapter \ref{chap:os_from_scratch} --- Creating an Operating System from Scratch:
+        \begin{itemize}
+            \item Section \ref{subsec:theory_toolchain} --- Cross-Compilation Toolchain
+            \item Subsection \ref{subsec:building_machinery} --- Building Machinery
+            \item Section \ref{subsec:refcounting} --- Reference Counting
+            \item Section \ref{subsec:theory_std} --- Implementation of the Standard Library
+            \item Section \ref{sec:theory_fs} --- File Systems
+            \item Subsection \ref{subsubsec:syscalls} --- Syscalls
+            \item Subsection \ref{subsec:libc_headers} --- Libc System Headers
+            \item Section \ref{sec:host_env} --- Host Environment --- Working OS
+        \end{itemize}
+
+        \item Chapter 3 --- Analysis of Existing Solutions:
+        \begin{itemize}
+            \item Section \ref{sec:minix-research} --- Minix 3 Research and Analysis.
+        \end{itemize}
+
+        \item Chapter \ref{chap:high_level_subsystems} --- High-Level Subsystems:
+        \begin{itemize}
+            \item Section \ref{section:fs} --- File System
+            \item Subsection \ref{subsec:policiesOverview} --- MLFQ Scheduling Policy
+        \end{itemize}
+
+        \item Chapter \ref{chap:users_manual} --- User's Manual
+    \end{itemize}
+
+    \item \textbf{Kernel Subsystems:}
+    \begin{itemize}
+        \item \textbf{Virtual File System (VFS):} Designed the core VFS abstraction layer, mount point management using efficient prefix matching, and a three-tier file descriptor management system supporting file and pipe resources.
+        \item \textbf{FAT Filesystem Driver:} Implemented FAT driver that unifies FAT12, FAT16, and FAT32 logic, abstracting I/O operations to support both block devices and in-memory ramdisks.
+        \item \textbf{System Call Interface:} Architected the userspace transition mechanism, utilizing a compile-time type-deducing dispatch table to automatically map CPU registers to C++ function arguments, ensuring ABI compliance.
+        \item \textbf{Hardware \& ACPI:} Integrated the \texttt{uACPI} \cite{uacpi_repo} library with the kernel, implemented the OS abstraction layer (OSL), designed the ACPI table retrieval mechanism, and implemented shutdown and reboot procedures via ACPI.
+    \end{itemize}
+
+    \item \textbf{Data Structures and Standard Library:}
+    \begin{itemize}
+        \item Implementation of core C standard library components (\texttt{libc}), including C runtime startup (\texttt{crt0}), string manipulation (\texttt{strcpy}, \texttt{strlen}, \texttt{strcat}, \dots), formatted output (\texttt{snprintf}), dynamic memory management (\texttt{malloc}, \texttt{free}), and character classification (\texttt{ctype.h}).
+        \item Implementation of selected C++ standard library components (\texttt{libc++}), including \texttt{std::span}, \texttt{std::string\_view}, and \texttt{std::atomic}.
+        \item Design and implementation of core kernel data structures: \texttt{CritBitTree} (efficient string lookup), \texttt{TaggedPtr} (pointer-embedded metadata), \texttt{RefCounter} (intrusive reference counting), \texttt{BitField} (platform-safe bit-field), and \texttt{LruCache} (fixed-capacity cache with eviction policy).
+    \end{itemize}
+
+    \item \textbf{Tooling and Quality Assurance:}
+    \begin{itemize}
+        \item Development of build infrastructure, including a root filesystem image generation system with overlay support and cached toolchain build artifacts to improve CI/CD performance.
+        \item Implementation of additional Git hooks for enforcing code style invariants (e.g., header guards, newline termination) and automated generation of shell completion scripts.
+        \item Integration of users pace applications into the build system, including porting Doom and transitioning previously hardcoded applications (e.g., the shell) into the unified build pipeline.
+    \end{itemize}
+
 \end{itemize}
 
 \paragraph{Łukasz Kryczka}
@@ -550,6 +621,7 @@ Two distinct build environments are used throughout the system's development. In
 Kernel components and early system initialization code are built in a freestanding environment, as they execute before any operating system services are available. User space programs, on the other hand, are compiled in a hosted environment once the operating system and its runtime infrastructure have been established. The required runtime libraries are provided by the operating system (see Subsection~\ref{subsec:theory_std}).
 
 \subsection{Building Machinery}
+\label{subsec:building_machinery}
 
 The construction of an operating system kernel requires the coordinated build of components, including loaders, the kernel, third-party libraries, and user space applications. Managing this through manual compiler invocations or ad-hoc shell scripts does not scale and frequently results in maintenance issues. Consequently, the design of a robust build infrastructure is essential for efficient development. We outline several key considerations for establishing such a system.
 
@@ -2042,6 +2114,7 @@ Most modern architectures support both local and high-precision timers. For exam
 Lastly, we need some way to provide input to the kernel on the real machine, not only emulated environment. For that, we will need some keyboard handling. First easier way is to utilize some simple ports like PS/2 \cite{osdev-ps21, osdev-ps22} if they are available on our device (it is quite popular on embedded systems). Otherwise, we will probably have to implement some USB drivers, which will be much more difficult \cite{usb20-spec, osdev-usb}.
 
 \section{File Systems}
+\label{sec:theory_fs}
 
 Once the kernel has established memory management and basic device communication, the next major milestone is the management of persistent data. In a raw hardware context, storage devices (Hard Disk Drives, SSDs, NVMe drives) present themselves as vast, linear arrays of blocks (typically 512~B or 4~KiB) accessed via Linear Block Addressing (LBA).
 
@@ -2127,12 +2200,6 @@ This approach isolates the development of other subsystems from the complexities
 \label{sec:screen_drawing_theory}
 
 Visual feedback constitutes the primary interface between the operating system and the user. However, the mechanism by which a kernel renders pixels to a display evolves significantly during the system's lifecycle, transitioning from primitive hardware interfaces to complex, software-managed abstractions.
-
-\subsection{Early Output and Debugging}
-
-In the first stages of kernel initialization, the full graphics subsystem is unavailable. To facilitate debugging and provide immediate feedback, operating systems rely on low-bandwidth, high-reliability communication channels provided by the hardware platform.
-
-The industry standard for this purpose is the \textbf{Serial Interface} (e.g., UART). Available across virtually all architectures --- from embedded RISC-V microcontrollers to server-grade x86-64 and ARM64 SoCs --- serial ports allow the kernel to transmit text streams byte-by-byte. This output is typically captured by a host machine via a physical cable or an emulator's logging facility. Because serial drivers are structurally simple and do not require complex memory management or bus enumeration, they serve as the reliable "black box" recorder for early system crashes.
 
 \subsection{The Linear Framebuffer Abstraction}
 
@@ -2482,6 +2549,7 @@ The syscall interface is the primary attack surface of the kernel. The kernel mu
 For high-frequency operations where even the minimal syscall overhead is too high (e.g., querying the system time), one may employ \textbf{vDSO} (virtual Dynamic Shared Object). This mechanism maps a read-only page of kernel memory containing specific data and code into the user process. The application can then execute a standard function call to read this data without ever triggering a context switch or entering kernel mode (e.g., linux \cite{linux_vdso}).
 
 \subsection{Libc System Headers}
+\label{subsec:libc_headers}
 
 Although the system call interface constitutes the fundamental mechanism for interaction with the kernel, it operates at a level of abstraction that is unsuitable for general-purpose application development. In practice, application programmers do not invoke syscalls directly via assembly instructions. Instead, they rely on the \texttt{libc}, whose header files define the API between user space software and the operating system.
 
@@ -2501,6 +2569,7 @@ Custom operating systems frequently introduce features that fall outside the sco
 It is considered best practice to place operating system-specific extensions within a clearly separated namespace, for example, under a dedicated directory such as \texttt{<alkos/...>}. This approach enables applications developed specifically for the target operating system to access unique kernel features.
 
 \section{Host Environment --- Working OS}
+\label{sec:host_env}
 
 \subsection{Root File System (Rootfs)}
 \label{subsec:rootfs}
@@ -3054,6 +3123,7 @@ The \texttt{fork()} mechanism is rooted in historical design decisions. While co
 \end{itemize}
 
 \section{Minix 3}
+\label{sec:minix-research}
 
 Minix 3 is a microkernel-based operating system designed with a strong emphasis on high reliability. Unlike monolithic kernel architectures, which Tanenbaum argues are inherently prone to failure due to high bug density --- statistically between two and ten bugs per thousand lines of code \cite{tanenbaum2015modern} --- Minix 3 relocates the majority of operating system components into user space. This includes device drivers, file systems, and memory management mechanisms. As a result, the microkernel size is highly reduced, strictly limiting its responsibilities to essential functions such as interrupt handling, process management, and inter-process communication via message passing.
 
@@ -5319,6 +5389,7 @@ A hierarchy exists between policies, ensuring that threads from higher-priority 
 The system implements a tickless kernel architecture. Instead of relying on a periodic interrupt (the \textbf{Kernel Tick}) at a fixed frequency, the scheduler calculates precisely when the next timing event must occur. This approach improves efficiency and precision.
 
 \subsection{Policies}
+\label{subsec:policiesOverview}
 
 The following scheduling policies have been implemented:
 
@@ -5387,6 +5458,7 @@ To provide high-precision sleeping, the system relies on one-shot, precise timin
 % ==================================================================
 
 \chapter{User's Manual}
+\label{chap:users_manual}
 
 This section describes the usage of the AlkOS build environment and documents the public interfaces available to user space applications. It outlines the build and execution workflow, the integration of user programs, and the system call interface provided by the operating system.
 
@@ -5850,7 +5922,7 @@ The internal rendering engine of Doom operates in an 8-bit indexed color mode, u
 
 \subsubsection{Input Event Mapping}
 
-Doom expects a queue of input events (key presses and releases) using its own internal key codes. AlkOS, however, exposes a polling-based interface via the \texttt{GetKeyState} syscall, which returns the instantaneous state of a \texttt{VirtualKey} (keyboard layout agnostic key codes).
+Doom expects a queue of input events (key presses and releases) using its own internal key codes. AlkOS, however, exposes a polling-based interface via the \texttt{GetKeyState} syscall, which returns the instantaneous state of a \texttt{VirtualKey} (keyboard layout agnostic key code).
 
 To bridge this gap, we implemented a translation layer in \texttt{doomgeneric\_alkos.c}. The system maintains an array of previous key states for all keys relevant to the game (movement, action, and menu keys). During every frame tick, the wrapper polls the current state of these keys using the kernel API. By comparing the current state with the previous state, we synthesize "Press" and "Release" events and push them into Doom's internal event queue.
 
@@ -5985,6 +6057,7 @@ ABI & Application Binary Interface \\
 ACPI & Advanced Configuration and Power Interface \\
 AES-NI & Advanced Encryption Standard New Instructions \\
 AHCI & Advanced Host Controller Interface \\
+AI & Artificial Intelligence \\
 API & Application Programming Interface \\
 APIC & Advanced Programmable Interrupt Controller \\
 ASLR & Address Space Layout Randomization \\
