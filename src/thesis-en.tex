@@ -5862,12 +5862,13 @@ We successfully fulfilled all functional requirements defined in Section \ref{su
 
 \section{Limitations and Assumptions}
 
-TODO: KRYCZKA DODAJ SWOJE
-
 Developing an operating system kernel is an inherently complex task, further complicated by the intricacies of hardware architectures. To maintain a steady development pace and avoid getting stalled by exhaustive driver implementation or edge-case handling, several strategic assumptions were made. Consequently, for AlkOS to function correctly, the underlying hardware must meet the following requirements:
 
 \begin{itemize} 
-    \item \textbf{64-bit Architecture} -- The system supports only 64-bit instructions. Compatibility libraries for 32-bit applications are not provided. 
+    \item \textbf{64-bit Architecture} -- The system supports only 64-bit instructions. Compatibility libraries for 32-bit applications are not provided.
+    \item \textbf{Memory Management Unit (MMU)} -- The kernel relies on a standard Memory Management Unit (MMU). It assumes that the hardware enforces standard paging mechanics and does not support non-standard extensions or software-managed TLBs.
+    \item \textbf{Physical Memory Layout} -- The system expects a standard, flat physical memory map provided by the bootloader (via Multiboot2). It does not support tiered memory architectures, NUMA (Non-Uniform Memory Access) optimizations, or memory hot-plugging.
+    \item \textbf{Linear Framebuffer} -- Graphics support relies entirely on a pre-initialized linear framebuffer provided by the system firmware (VBE or UEFI GOP). Use of hardware acceleration or specific GPU drivers is not supported; all rendering operations are software-based.
     \item \textbf{AVX2 Support} -- The system requires AVX2 support. Implementation was restricted to this specific instruction set to avoid the complexity of supporting every possible vector extension. 
     \item \textbf{SWAPGS Instruction} -- The architecture must support the \texttt{swapgs} instruction, which is utilized to efficiently swap the GS register base address for Core Local Storage management. 
     \item \textbf{Invariant TSC} -- To avoid implementing a driver for every possible x86-64 timer, the system relies on the Time Stamp Counter (TSC) as the primary clock source. The hardware must support an invariant TSC to ensure timing consistency regardless of frequency scaling.
@@ -5881,8 +5882,6 @@ Developing an operating system kernel is an inherently complex task, further com
 \end{itemize}
 
 \section{Future Work}
-
-TODO: KRYCZKA DODAJ SWOJE
 
 The current solution can be extended and improved in several areas: 
 \begin{itemize} 
