@@ -2155,12 +2155,6 @@ This approach isolates the development of other subsystems from the complexities
 
 Visual feedback constitutes the primary interface between the operating system and the user. However, the mechanism by which a kernel renders pixels to a display evolves significantly during the system's lifecycle, transitioning from primitive hardware interfaces to complex, software-managed abstractions.
 
-\subsection{Early Output and Debugging}
-
-In the first stages of kernel initialization, the full graphics subsystem is unavailable. To facilitate debugging and provide immediate feedback, operating systems rely on low-bandwidth, high-reliability communication channels provided by the hardware platform.
-
-The industry standard for this purpose is the \textbf{Serial Interface} (e.g., UART). Available across virtually all architectures --- from embedded RISC-V microcontrollers to server-grade x86-64 and ARM64 SoCs --- serial ports allow the kernel to transmit text streams byte-by-byte. This output is typically captured by a host machine via a physical cable or an emulator's logging facility. Because serial drivers are structurally simple and do not require complex memory management or bus enumeration, they serve as the reliable "black box" recorder for early system crashes.
-
 \subsection{The Linear Framebuffer Abstraction}
 
 As the system boots, it must transition from text streams to graphical output. Modern system firmware (such as UEFI on PC platforms or U-Boot on embedded systems) typically abstracts the display hardware into a \textbf{Linear Framebuffer}.
