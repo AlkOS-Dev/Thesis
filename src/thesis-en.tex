@@ -360,6 +360,7 @@ Od strony technicznej, AlkOS posiada własny dwuetapowy program rozruchowy (boot
 \pagenumbering{arabic}
 \setcounter{page}{11}
 \chapter{Introduction}
+\label{chap:introduction}
 % \markboth{}{Introduction}
 % \addcontentsline{toc}{chapter}{Introduction}
 
@@ -523,7 +524,7 @@ At the outset of the project, specific requirements were not rigidly defined due
     \begin{itemize}
         \item \textbf{Virtual File System (VFS):} Designed the core VFS abstraction layer, mount point management using efficient prefix matching, and a three-tier file descriptor management system supporting file and pipe resources.
         \item \textbf{FAT File System Driver:} Implemented FAT driver that unifies FAT12, FAT16, and FAT32 logic, abstracting I/O operations to support both block devices and in-memory ramdisks.
-        \item \textbf{System Call Interface:} Architected the user space transition mechanism, utilizing a compile-time type-deducing dispatch table to automatically map CPU registers to C++ function arguments, ensuring ABI compliance.
+        \item \textbf{System Call Interface:} Designed the user space transition mechanism, utilizing a compile-time type-deducing dispatch table to automatically map CPU registers to C++ function arguments, ensuring ABI compliance.
         \item \textbf{Hardware \& ACPI:} Integrated the \texttt{uACPI} \cite{uacpi_repo} library with the kernel, implemented the OS abstraction layer (OSL), designed the ACPI table retrieval mechanism, and implemented shutdown and reboot procedures via ACPI.
     \end{itemize}
 
@@ -536,7 +537,7 @@ At the outset of the project, specific requirements were not rigidly defined due
 
     \item \textbf{Tooling and Quality Assurance:}
     \begin{itemize}
-        \item Development of build infrastructure, including a root filesystem image generation system with overlay support and cached toolchain build artifacts to improve CI/CD performance.
+        \item Development of build infrastructure, including a root file system image generation system with overlay support and cached toolchain build artifacts to improve CI/CD performance.
         \item Implementation of additional Git hooks for enforcing code style invariants (e.g., header guards, newline termination) and automated generation of shell completion scripts.
         \item Integration of user space applications into the build system, including porting Doom and migrating previously hardcoded applications (e.g., the shell) into the unified build pipeline.
     \end{itemize}
@@ -548,7 +549,7 @@ At the outset of the project, specific requirements were not rigidly defined due
 \begin{itemize}
     \item \textbf{Thesis Documentation and Analysis:}
         \begin{itemize}
-            \item Chapter 1 --- Introduction (Background, Motivation, Scale, Difficulties).
+            \item Chapter \ref{chap:introduction} --- Introduction (Background, Motivation, Scale, Difficulties).
             \item Chapter \ref{chap:os_from_scratch} --- Creating an Operating System from Scratch:
             \begin{itemize}
                 \item Section \ref{subsec:theory_bootloader} --- Bootloader Theory.
@@ -559,7 +560,7 @@ At the outset of the project, specific requirements were not rigidly defined due
             \end{itemize}
             \item Chapter \ref{chap:low_level_implementation} --- Low-Level Kernel Implementation:
             \begin{itemize}
-                \item Section 4.1 --- Bootloader Implementation (Loader32, Loader64).
+                \item Section \ref{sec:bootloader_implementation} --- Bootloader Implementation (Loader32, Loader64).
                 \item Section \ref{sec:impl_pmm} --- Physical Memory Management Implementation.
                 \item Section \ref{sec:impl_vmm} --- Virtual Memory Management Implementation.
                 \item Section \ref{sec:arch_abstraction} --- Architecture Abstraction.
@@ -583,7 +584,7 @@ At the outset of the project, specific requirements were not rigidly defined due
     \item \textbf{Data Structures and Standard Library:}
         \begin{itemize}
             \item Implementation of the C++ Standard Library (\texttt{libcpp}) components: \texttt{expected.hpp}
-            \item Implementation of specialized cyclic buffers for different consumer-producer scenarios
+            \item Implementation of specialized cyclic buffers for different consumer-producer scenarios.
         \end{itemize}
 
     \item \textbf{Project Infrastructure:}
@@ -3270,6 +3271,7 @@ The kernel acts solely as a transport mechanism and remains agnostic to the sema
 This chapter presents the implementation details of the low-level components of the AlkOS operating system. It covers the bootloader, memory management, interrupt handling, and timing infrastructure that form the foundation upon which all higher-level kernel subsystems are built.
 
 \section{Bootloader}
+\label{sec:bootloader_implementation}
 
 Before the architecture-agnostic kernel can commence execution, the underlying hardware must be brought to a known, deterministic state. As discussed in Section \ref{subsec:theory_bootloader}, the initialization protocols differ significantly depending on the specific hardware architecture and the firmware interface.
 
