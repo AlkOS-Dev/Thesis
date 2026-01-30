@@ -369,7 +369,7 @@ The creation of a functional operating system kernel stands as one of the most c
 
 Perhaps it's to abstract away the underlying hardware and achieve portability of programs between different machines. Most likely, it's the enablement of parallel execution of a different set of programs. Perhaps even the programs can't be trusted --- they must be run as if they existed in isolated environments, unaware of each other and incapable of interfering in each other's work. 
 
-If that were to be the case, certainly they'd require a method of receiving parts of memory to use, of compute time, of whatever resources the machine has at its disposal - cameras, microphones, TPU's, GPU's, NIC's or custom chipsets. If the programs had to access these resources, then the OS would need to provision them, to manage them, and, for that reason, bookkeep and gatekeep them. If a set of programs wanted to communicate with each other, it'd need to facilitate that communication. The OS that has to do it becomes, in consequence, the middleman and the orchestrator of the programs, as well as the master of the machine.
+If that were to be the case, certainly they'd require a method of receiving parts of memory to use, of compute time, of whatever resources the machine has at its disposal - cameras, microphones, TPUs, GPUs, NICs or custom chipsets. If the programs had to access these resources, then the OS would need to provision them, to manage them, and, for that reason, bookkeep and gatekeep them. If a set of programs wanted to communicate with each other, it'd need to facilitate that communication. The OS that has to do it becomes, in consequence, the middleman and the orchestrator of the programs, as well as the master of the machine.
 
 One can imagine that errors in the master of the machine would be quite catastrophic for every operation running on the machine. The impact: evident in every single program. Mere slowness of execution is quite the favorable scenario here --- a total and utter corruption of the system's state and its following crash --- or, in more extreme circumstances --- the damaging of the hardware itself --- are all possible cases. The most insidious being minor bugs that are subtle enough to remain untouched, yet severe enough to impact the outcome of the program, perhaps affecting someone's life in the process, if the system happened to be responsible for a matter of such importance. 
 
@@ -484,7 +484,7 @@ At the outset of the project, specific requirements were not rigidly defined due
     \item \textbf{Tooling and Quality Assurance:}
         \begin{itemize}
             \item Development of the unit testing framework and automated regression tests.
-            \item Development of the project's automation infrastructure (majority of Bash scripts under \texttt{./scripts}).
+            \item Development of the project's automation infrastructure (the majority of Bash scripts under \texttt{./scripts}).
         \end{itemize}
 \end{itemize}
 
@@ -522,8 +522,8 @@ At the outset of the project, specific requirements were not rigidly defined due
     \item \textbf{Kernel Subsystems:}
     \begin{itemize}
         \item \textbf{Virtual File System (VFS):} Designed the core VFS abstraction layer, mount point management using efficient prefix matching, and a three-tier file descriptor management system supporting file and pipe resources.
-        \item \textbf{FAT Filesystem Driver:} Implemented FAT driver that unifies FAT12, FAT16, and FAT32 logic, abstracting I/O operations to support both block devices and in-memory ramdisks.
-        \item \textbf{System Call Interface:} Architected the userspace transition mechanism, utilizing a compile-time type-deducing dispatch table to automatically map CPU registers to C++ function arguments, ensuring ABI compliance.
+        \item \textbf{FAT File System Driver:} Implemented FAT driver that unifies FAT12, FAT16, and FAT32 logic, abstracting I/O operations to support both block devices and in-memory ramdisks.
+        \item \textbf{System Call Interface:} Architected the user space transition mechanism, utilizing a compile-time type-deducing dispatch table to automatically map CPU registers to C++ function arguments, ensuring ABI compliance.
         \item \textbf{Hardware \& ACPI:} Integrated the \texttt{uACPI} \cite{uacpi_repo} library with the kernel, implemented the OS abstraction layer (OSL), designed the ACPI table retrieval mechanism, and implemented shutdown and reboot procedures via ACPI.
     \end{itemize}
 
@@ -538,7 +538,7 @@ At the outset of the project, specific requirements were not rigidly defined due
     \begin{itemize}
         \item Development of build infrastructure, including a root filesystem image generation system with overlay support and cached toolchain build artifacts to improve CI/CD performance.
         \item Implementation of additional Git hooks for enforcing code style invariants (e.g., header guards, newline termination) and automated generation of shell completion scripts.
-        \item Integration of users pace applications into the build system, including porting Doom and transitioning previously hardcoded applications (e.g., the shell) into the unified build pipeline.
+        \item Integration of user space applications into the build system, including porting Doom and migrating previously hardcoded applications (e.g., the shell) into the unified build pipeline.
     \end{itemize}
 
 \end{itemize}
@@ -577,20 +577,20 @@ At the outset of the project, specific requirements were not rigidly defined due
         \begin{itemize}
             \item \textbf{Graphics Subsystem:} Linear framebuffer drivers, software rasterizer, font rendering, and the Window Manager.
             \item \textbf{Input Subsystem:} PS/2 Keyboard driver and input event routing.
-            \item \textbf{User Space Environment:} ELF executable loader, implementation of the System Shell (before porting it to userspace) and GUI enablement.
+            \item \textbf{User Space Environment:} ELF executable loader, implementation of the System Shell (before porting it to user space), and GUI enablement.
         \end{itemize}
 
     \item \textbf{Data Structures and Standard Library:}
         \begin{itemize}
             \item Implementation of the C++ Standard Library (\texttt{libcpp}) components: \texttt{expected.hpp}
-            \item Implementation of specialized cyclic buffers for different consummer producer scenarios
+            \item Implementation of specialized cyclic buffers for different consumer-producer scenarios
         \end{itemize}
 
     \item \textbf{Project Infrastructure:}
         \begin{itemize}
             \item Architecture of the CMake-based build system.
             \item Configuration of the Cross-Compilation Toolchain.
-            \item Setup of host based tests
+            \item Setup of host-based tests.
             \item Setup of CI/CD pipelines and development scripts.
         \end{itemize}
 \end{itemize}
@@ -2124,7 +2124,7 @@ Operating directly on raw sectors is impractical for a general-purpose operating
 
 A non-trivial kernel must support multiple file system formats (e.g., FAT32 \cite{fat-spec} for UEFI compatibility, Ext2 \cite{ext2-spec} for Linux compatibility, or ISO9660 \cite{iso9660-spec} for optical media). Implementing system calls like \texttt{open()} or \texttt{read()} separately for each format would lead to a tight coupling between the kernel core and specific driver implementations.
 
-To resolve this, modern kernels implement a \textbf{Virtual File System} (VFS). The VFS is a kernel subsystem that provides a unified abstract interface for file operations. It defines generic structures --- such as file metadata, directory entries, and mounted filesystems --- and a set of operations that concrete file system drivers must implement. By using a function pointer table, the VFS decouples the high-level system calls from low-level storage details.
+To resolve this, modern kernels implement a \textbf{Virtual File System} (VFS). The VFS is a kernel subsystem that provides a unified abstract interface for file operations. It defines generic structures --- such as file metadata, directory entries, and mounted file systems --- and a set of operations that concrete file system drivers must implement. By using a function pointer table, the VFS decouples the high-level system calls from low-level storage details.
 
 \subsection{Block Device Abstraction}
 
@@ -2621,7 +2621,7 @@ A common approach to managing such data is the use of a configuration overlay. I
 
 Once the staging directory has been fully populated, it must be transformed into a single binary image conforming to a specific file system format, such as FAT, EXT2, or an archive-based format.
 
-In academic and hobbyist operating system projects, simpler filesystems such as FAT are frequently preferred over more sophisticated journaling filesystems. FAT offers broad host-side tool support, simplifying inspection and debugging, and its relatively simple on-disk structures reduce driver implementation complexity.
+In academic and hobbyist operating system projects, simpler file systems such as FAT are frequently preferred over more sophisticated journaling file systems. FAT offers broad host-side tool support, simplifying inspection and debugging, and its relatively simple on-disk structures reduce driver implementation complexity.
 
 Image synthesis is typically performed using host-side utilities (e.g., \texttt{mtools} and \texttt{mkfs.fat}). These tools determine the required image size, format a blank image file, and populate it with the contents of the staging directory. The output is a file system image ready for deployment alongside the kernel.
 
@@ -3688,7 +3688,6 @@ struct PACK alignas(64) KernelArguments {
     u64 multiboot_header_start_addr;
     u64 multiboot_header_end_addr;
 };
-}
 \end{cppcode}
 
 The final transition to the kernel is a simple jump (Listing~\ref{lst:enter_kernel}):
@@ -5061,7 +5060,7 @@ FdResult<fd_t> FdManager::Open(const vfs::Path &path, OpenMode flags)
     // Check if file exists in VFS
     auto exists_result = VfsModule::Get().FileExists(path);
     RET_UNEXPECTED_IF(!exists_result, FdError::kIoError);
-    RET_UNEXPECTED_IF(!*exists_result, FdError::kNotFound));
+    RET_UNEXPECTED_IF(!*exists_result, FdError::kNotFound);
 
     auto file_result = file_table_.GetOrCreate(path);
     RET_UNEXPECTED_IF_ERR(file_result);
@@ -6013,10 +6012,10 @@ The current solution can be extended and improved in several areas:
     \item \textbf{Networking Stack} -- Adding a network layer to support TCP/IP communication.
     \item \textbf{USB Controller Driver} -- Implementing a USB controller driver to support USB devices.
     \item \textbf{Physical Storage Drivers} -- Replacing the RAM disk with drivers for physical storage media (e.g., AHCI/NVMe). 
-    \item \textbf{Abstract Filesystems} -- Add pseudo filesystems (e.g., \texttt{procfs}, \texttt{sysfs}) for extensible system interfaces.
+    \item \textbf{Abstract File Systems} -- Add pseudo file systems (e.g., \texttt{procfs}, \texttt{sysfs}) for extensible system interfaces.
     \item \textbf{File System Caching} -- Introduce caching to improve file system performance.
     \item \textbf{File System Permissions} -- Implement file and directory permissions for security and access control.
-    \item \textbf{Fast System Call} -- Replace the current interrupt-based syscall mechanism with the \texttt{syscall}/\texttt{sysret} instructions to reduce overhead and improve kernel entry performance.
+    \item \textbf{Fast System Call Mechanism} -- Replace the current interrupt-based syscall mechanism with the \texttt{syscall}/\texttt{sysret} instructions to reduce overhead and improve kernel entry performance.
     \item \textbf{Syscall Restriction} -- Implement a mechanism to restrict access to system calls based on process privileges or roles.
     \item \textbf{Compositing Window Manager} -- Implementing a compositing window manager to support a window-based graphical user interface.
 \end{itemize}
