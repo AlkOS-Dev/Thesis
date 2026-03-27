@@ -255,10 +255,6 @@
 
 % ------- END OF PREAMBLE PART (MOSTLY) ----------
 
-
-
-
-
 % ---------- USER SETTINGS ---------
 
 \newcommand{\tytul}{Funkcjonalne jądro systemu operacyjnego: AlkOS}
@@ -275,21 +271,6 @@
 \includepdf[pages=-]{titlepage-en}
 
 \null\thispagestyle{empty}\newpage
-
-% ------ PAGE WITH SIGNATURES ------------
-
-%\thispagestyle{empty}\newpage
-%\null
-%
-%\vfill
-%
-%\begin{center}
-%\begin{tabular}[t]{ccc}
-%............................................. & \hspace*{100pt} & .............................................\\
-%supervisor's signature & \hspace*{100pt} & author's signature
-%\end{tabular}
-%\end{center}
-%
 
 
 % ---------- ABSTRACT -----------
@@ -5995,7 +5976,7 @@ The Doom engine, particularly the WAD management system, relies on case-insensit
 To support loading data from the file system, we expanded the \texttt{stdio} implementation to include \texttt{fopen}, \texttt{fread}, \texttt{fseek}, and \texttt{ftell}, backed by the underlying syscalls (\texttt{open}, \texttt{read}, \texttt{seek}). This allowed the Doom engine to seamlessly load WAD files from the root file system using standard I/O semantics. Also, \texttt{create\_directory} needed to be implemented to create the \texttt{saves/} directory for saving game progress. \\
 
 \enlargethispage{\baselineskip}
-By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library~implementations.
+By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
 
 \chapter{Results}
 \label{sec:results}
