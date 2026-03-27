@@ -909,7 +909,7 @@ Therefore, a robust operating system must implement its own initialization stage
 
 \section{Memory Preloading and Discovery}
 \label{sec:mem_discovery}
-One of the first and most critical responsibilities of a kernel during the bootstrap phase is to establish an authoritative map of the system's physical memory. Unlike user-space applications, which simply request memory from the operating system via system calls (e.g., \texttt{malloc} or \texttt{mmap}), the kernel is the manager responsible for fulfilling those requests. Upon entry, the kernel does not know how much RAM is available, where it is located, or which memory ranges are reserved for hardware-mapped I/O (MMIO).
+One of the first and most critical responsibilities of a kernel during the bootstrap phase is to establish an authoritative map of the system's physical memory. Unlike user space applications, which simply request memory from the operating system via system calls (e.g., \texttt{malloc} or \texttt{mmap}), the kernel is the manager responsible for fulfilling those requests. Upon entry, the kernel does not know how much RAM is available, where it is located, or which memory ranges are reserved for hardware-mapped I/O (MMIO).
 
 This discovery process is not standardized. It is strictly coupled to the target architecture, the silicon vendor, and the residing firmware. Depending on the platform complexity, the kernel may acquire the memory map through one of three primary mechanisms: static definition, firmware interrogation, or hardware description structures.
 
@@ -1182,7 +1182,7 @@ This goes about the general design, but during initial development of the system
 
 The reliability of an operating system kernel cannot be guaranteed solely through compilation checks or host-based logic verification. While some algorithmic components can be tested in a hosted environment (e.g., on a Linux host), the core kernel functionalities depend heavily on the specific hardware architecture, physical memory layout, and privileged CPU instructions. Consequently, a robust testing framework must be implemented to execute directly within the kernel on the target hardware or emulator.
 
-This in-kernel framework should function similarly to user-space unit testing libraries but operates within the kernel. It allows developers to define test cases for critical subsystems, such as memory allocators, intrusive data structures, and scheduling algorithms, and execute them in the actual runtime environment. This approach is the only way to detect architecture-specific issues, such as unaligned memory accesses, incorrect register usage during context switches, or paging faults caused by invalid table entries, which would remain undetected in a hosted simulation or simply impossible to test.
+This in-kernel framework should function similarly to user space unit testing libraries but operates within the kernel. It allows developers to define test cases for critical subsystems, such as memory allocators, intrusive data structures, and scheduling algorithms, and execute them in the actual runtime environment. This approach is the only way to detect architecture-specific issues, such as unaligned memory accesses, incorrect register usage during context switches, or paging faults caused by invalid table entries, which would remain undetected in a hosted simulation or simply impossible to test.
 
 A critical design requirement for such a framework is test isolation. In a kernel environment, a failure often results in a system panic, infinite loop, or silent memory corruption that compromises the global state. To prevent side effects from a failed test influencing subsequent assertions (creating false positives or negatives), the framework should ideally ensure a clean state for each test suite. In early development stages, this often necessitates implementing mechanisms to reset subsystems between test executions, ensuring that results are deterministic and reproducible.
 
@@ -1192,7 +1192,7 @@ A critical design requirement for such a framework is test isolation. In a kerne
 The Physical Memory Manager (PMM) constitutes the foundational layer of the operating system's memory subsystem. Its primary responsibility is the accounting of the machine's finite Random Access Memory (RAM). In a monolithic kernel with virtual memory support, the PMM typically operates at two distinct levels of granularity:
 
 \begin{enumerate}
-\item \textbf{Page Frame Allocation:} The allocation of raw, contiguous physical memory in fixed-size units called \textit{page frames} (typically 4096 bytes on x86-64). This is primarily used to back Virtual Memory mappings for user-space processes.
+\item \textbf{Page Frame Allocation:} The allocation of raw, contiguous physical memory in fixed-size units called \textit{page frames} (typically 4096 bytes on x86-64). This is primarily used to back Virtual Memory mappings for user space processes.
 \item \textbf{Kernel Heap Allocation:} The sub-allocation of memory within those pages for the kernel's own internal data structures (e.g., thread control blocks, file descriptors). These requests vary wildly in size, from a few bytes to several kilobytes.
 \end{enumerate}
 
@@ -1516,7 +1516,7 @@ By introducing this layer of indirection, the operating system provides each pro
 
 The primary focus in kernel design remains on the protection and organization capabilities of the architecture. The VMM is essential for:
 \begin{itemize}
-    \item \textbf{Isolation:} Enforcing privilege boundaries so that user-space applications cannot modify kernel memory or interfere with each other.
+    \item \textbf{Isolation:} Enforcing privilege boundaries so that user space applications cannot modify kernel memory or interfere with each other.
     \item \textbf{Flexibility:} Allowing programs to be linked to fixed virtual addresses regardless of their actual physical location or the amount of installed RAM.
     \item \textbf{Efficiency:} Enabling advanced mechanisms such as demand paging and Copy-on-Write (CoW), which optimize physical RAM usage by sharing data until modification is strictly necessary.
 \end{itemize}
@@ -1992,7 +1992,7 @@ It is worth noting that a complete virtual memory subsystem typically includes a
 \section{Discovering External Devices and System Capabilities}
 \label{sec:discovery}
 
-Upon the successful initialization of the fully functional memory management subsystem, the kernel can proceed to discover external devices and implement subsystems for capabilities such as storage, input, and networking. It is not necessary to support an exhaustive list of peripherals to achieve a minimal working kernel. Therefore, this section covers only the absolute minimum set of devices required to support the scheduler and execute user-space programs.
+Upon the successful initialization of the fully functional memory management subsystem, the kernel can proceed to discover external devices and implement subsystems for capabilities such as storage, input, and networking. It is not necessary to support an exhaustive list of peripherals to achieve a minimal working kernel. Therefore, this section covers only the absolute minimum set of devices required to support the scheduler and execute user space programs.
 
 \subsection{Discovery and Abstraction (Drivers)}
 
@@ -2034,7 +2034,7 @@ Implementing an SMP kernel necessitates an infrastructure for accessing core-loc
 
 Fundamentally, Core Local Storage (CLS) enables the kernel to maintain state unique to each processing unit, such as the currently executing thread, scheduler queues, and performance counters, without the contention and latency costs associated with global synchronization primitives. To achieve this efficiently, the hardware architecture must provide a low-latency mechanism to retrieve the address of these structures. While implementation details vary, most modern architectures dedicate a specific register for this purpose. For instance, ARM64 utilizes the specialized \texttt{TPIDR\_EL1}\cite{AArch64-cls} system register, whereas RISC-V reserves the \texttt{tp}\cite{RISCV-registers} (Thread Pointer) general-purpose register by convention.
 
-On the x86-64 architecture, this is typically implemented using the \texttt{GS} or \texttt{FS} segment registers. Since the full 64-bit base address cannot be loaded into these segment selectors directly, the kernel must utilize Model Specific Registers (specifically \texttt{IA32\_GS\_BASE} or \texttt{IA32\_KERNEL\_GS\_BASE}~\cite{Intel-segment-loading}) to map the per-core structure to the logical address space. The \texttt{SWAPGS}\cite{osdev-gs} instruction is then employed during interrupt entry and exit to switch between user-space and kernel-space thread-local storage transparently.
+On the x86-64 architecture, this is typically implemented using the \texttt{GS} or \texttt{FS} segment registers. Since the full 64-bit base address cannot be loaded into these segment selectors directly, the kernel must utilize Model Specific Registers (specifically \texttt{IA32\_GS\_BASE} or \texttt{IA32\_KERNEL\_GS\_BASE}~\cite{Intel-segment-loading}) to map the per-core structure to the logical address space. The \texttt{SWAPGS}~\cite{osdev-gs} instruction is then employed during interrupt entry and exit to switch between user space and kernel space thread-local storage transparently.
 
 \subsection{Core Identification}
 
@@ -2181,7 +2181,7 @@ To display text logs or a command-line interface, the kernel must implement a \t
 
 \subsection{The Concurrency Problem}
 
-In a multitasking operating system, the display represents a shared resource. If multiple processes were granted direct write access to the physical framebuffer simultaneously, the screen would become a chaotic collage of uncoordinated pixel updates. Furthermore, direct access to physical memory mapped I/O by user-space applications poses a significant stability and security risk.
+In a multitasking operating system, the display represents a shared resource. If multiple processes were granted direct write access to the physical framebuffer simultaneously, the screen would become a chaotic collage of uncoordinated pixel updates. Furthermore, direct access to physical memory mapped I/O by user space applications poses a significant stability and security risk.
 
 To address this, the operating system must virtualize the display hardware, revoking direct access from user applications and enforcing a strict ownership model.
 
@@ -2325,7 +2325,7 @@ With the context storage mechanism defined, the next step is context initializat
 
 \subsubsection{Context Conversion}
 
-Before a context switch can occur, an initial context must exist. This implies the creation of the first process and the preparation of all associated structures described previously, utilizing the context initialization logic~\ref{subsec:context-init}. Several approaches exist to achieve this. For example, the kernel may spawn an initial user-space program (init) responsible for booting other programs, or it may create a kernel-space process to perform further system initialization.
+Before a context switch can occur, an initial context must exist. This implies the creation of the first process and the preparation of all associated structures described previously, utilizing the context initialization logic~\ref{subsec:context-init}. Several approaches exist to achieve this. For example, the kernel may spawn an initial user space program (init) responsible for booting other programs, or it may create a kernel space process to perform further system initialization.
 
 \subsubsection{Context Switch}
 
@@ -2445,7 +2445,7 @@ In contrast, for a tickless kernel where interrupts are scheduled dynamically, t
 
 \section{User Space}
 
-With the foundational kernel components established, the development process transitions to enabling the execution of unprivileged tasks created by the user. To facilitate the execution of user-space programs, several key mechanisms and components must be implemented:
+With the foundational kernel components established, the development process transitions to enabling the execution of unprivileged tasks created by the user. To facilitate the execution of user space programs, several key mechanisms and components must be implemented:
 
 \begin{itemize} 
     \item \textbf{System Calls} --- A mechanism for communication with the kernel, providing a controlled method for privilege escalation.
@@ -2509,7 +2509,7 @@ This method guarantees $O(1)$ constant-time performance, ensuring that the laten
 The syscall interface is the primary attack surface of the kernel. The kernel must treat all data from user space as untrusted.
 \begin{itemize}
     \item \textbf{Pointer Validation:} The kernel must ensure that pointers passed by the user actually point to valid user space memory. Failing to perform this check allows a malicious program to trick the kernel into reading or overwriting its own internal structures (see the "Confused Deputy" problem~\cite{confused_deputy_problem}).
-    \item \textbf{TOCTOU (Time-of-Check to Time-of-Use):} If the kernel validates data in user memory and reads it later, a separate thread could modify that data in between. For example, a kernel might check that a filename pointer is valid, but before it reads the actual filename, another thread could modify that memory to point to a privileged file. To prevent this, the kernel must copy data into kernel-space buffers \textit{before} validation and processing.
+    \item \textbf{TOCTOU (Time-of-Check to Time-of-Use):} If the kernel validates data in user memory and reads it later, a separate thread could modify that data in between. For example, a kernel might check that a filename pointer is valid, but before it reads the actual filename, another thread could modify that memory to point to a privileged file. To prevent this, the kernel must copy data into kernel space buffers \textit{before} validation and processing.
 \end{itemize}
 
 \paragraph{Performance Optimization}
@@ -2956,7 +2956,7 @@ The Linux operating system family is one of the most widely used globally, along
 \noindent Disadvantages:
 \begin{itemize}
     \item \textbf{Stability} --- A bug in a single driver, even for an unused device, can compromise the stability of the entire system.
-    \item \textbf{Security} --- Vulnerabilities in drivers can potentially expose the kernel address space to malicious user-space execution.
+    \item \textbf{Security} --- Vulnerabilities in drivers can potentially expose the kernel address space to malicious user space execution.
     \item \textbf{Scalability challenges} --- For large-scale projects, strict standards are necessary. Without them, the code base can easily become unmaintainable due to complex webs of references and dependencies.
 \end{itemize}
 
@@ -2998,7 +2998,7 @@ To enhance extensibility and avoid the need for recompilation when adding driver
 
 Historically, Linux utilized a strictly periodic tick (defined by hardware), configuring hardware timers to generate interrupts at a fixed frequency (e.g., 100 Hz or 1000 Hz). While this design was straightforward, it imposed limitations on sleep granularity and power efficiency. To address these issues, Linux introduced High Resolution Timers (\texttt{hrtimers}), which allow the kernel to schedule interrupts with nanosecond precision based on immediate needs rather than a fixed cadence. Despite the capabilities of high-resolution timers, the concept of a periodic tick is maintained within the kernel for performance reasons and architectural legacy, by simulating the tick with a high precision framework.
 
-This high-precision framework has one major drawback - it can get slow for a large number of events, as it is based on a priority queue with $O(\log n)$complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism~\cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers $O(1)$ complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
+This high-precision framework has one major drawback - it can get slow for a large number of events, as it is based on a priority queue with $O(\log n)$ time complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism~\cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers $O(1)$ time complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
 
 \subsection{The Process and Thread Model}
 \label{subsec:linux-task}
@@ -4120,13 +4120,13 @@ This hierarchical structure ensures that AlkOS balances the fast, low-fragmentat
 \section{Virtual Memory Management}
 \label{sec:impl_vmm}
 
-While the Physical Memory Manager accounts for raw RAM usage, the Virtual Memory Manager (VMM) allows the kernel to shape the execution environment. Our implementation aims to provide a robust, architecture-agnostic interface that supports advanced features like lazy allocation and efficient kernel-space management, while abstracting away the specifics of the x86-64 paging hardware.
+While the Physical Memory Manager accounts for raw RAM usage, the Virtual Memory Manager (VMM) allows the kernel to shape the execution environment. Our implementation aims to provide a robust, architecture-agnostic interface that supports advanced features like lazy allocation and efficient kernel space management, while abstracting away the specifics of the x86-64 paging hardware.
 
 \subsection{Design Overview and Architecture}
 
 The cornerstone of the AlkOS memory layout is the \textbf{Higher-Half Kernel} architecture combined with a \textbf{Direct Physical Mapping}. 
 
-Upon initialization, the bootloader (Loader64) ensures that the kernel executable is linked and loaded at the top of the virtual address space, specifically starting at \texttt{0xFFFFFFFE00000000}. This design choice keeps the lower half of the address space (canonical addresses starting with \texttt{0x0000...}) strictly reserved for user-space applications, enforcing a clean separation between kernel and user contexts.
+Upon initialization, the bootloader (Loader64) ensures that the kernel executable is linked and loaded at the top of the virtual address space, specifically starting at \texttt{0xFFFFFFFE00000000}. This design choice keeps the lower half of the address space (canonical addresses starting with \texttt{0x0000...}) strictly reserved for user space applications, enforcing a clean separation between kernel and user contexts.
 
 \subsubsection{The Direct Physical Map (HHDM)}
 
@@ -4194,7 +4194,7 @@ To ensure data consistency in a potentially multi-threaded environment (or durin
 
 \subsubsection{User Space Initialization}
 
-When creating a new user address space, the system must ensure that the process can still access essential kernel services (such as interrupt handlers and syscall entry points). The \texttt{AddressSpace::InitUser} method allocates a new, empty PML4 table and immediately copies the kernel-space mappings from the global kernel address space. This creates a "split" view where the lower half is empty (ready for user program code), and the upper half mirrors the kernel.
+When creating a new user address space, the system must ensure that the process can still access essential kernel services (such as interrupt handlers and syscall entry points). The \texttt{AddressSpace::InitUser} method allocates a new, empty PML4 table and immediately copies the kernel space mappings from the global kernel address space. This creates a "split" view where the lower half is empty (ready for user program code), and the upper half mirrors the kernel.
 
 \subsection{Virtual Memory Areas (VMAs)}
 
@@ -4211,7 +4211,7 @@ The \texttt{AnonymousVMemArea} represents standard, volatile RAM used for stacks
 The \texttt{DirectMappingVMemArea} is used when a specific range of physical memory must be exposed to virtual memory. This is essential for:
 \begin{itemize}
     \item \textbf{Memory Mapped I/O (MMIO):} Mapping hardware device registers.
-    \item \textbf{Framebuffers:} Exposing the video memory to user-space applications (as seen in the Window Manager implementation).
+    \item \textbf{Framebuffers:} Exposing the video memory to user space applications (as seen in the Window Manager implementation).
 \end{itemize}
 
 Unlike anonymous memory, this area ignores the "Not Present" fault mechanism for allocation; it simply maps the pre-existing physical range.
@@ -4248,12 +4248,12 @@ bool KernelSyncVMemArea::HandleFault(
 
 \subsection{Initialization and Handover}
 
-The transition from the bootloader to the kernel's internal memory management is a critical phase. When the kernel's main function receives control, the system is running on page tables created by \texttt{Loader64}. These tables contain a temporary identity mapping (0-10 GB) that is necessary for the loader but undesirable for the kernel, as it exposes physical memory to user-space (NULL pointer dereferences would be valid accesses to physical address 0).
+The transition from the bootloader to the kernel's internal memory management is a critical phase. When the kernel's main function receives control, the system is running on page tables created by \texttt{Loader64}. These tables contain a temporary identity mapping (0-10 GB) that is necessary for the loader but undesirable for the kernel, as it exposes physical memory to user space (NULL pointer dereferences would be valid accesses to physical address 0).
 
 To sanitize this state, we implemented the \texttt{Mem::Boot::BootMmuCleaner}. Its responsibilities are twofold:
 
 \begin{enumerate}
-    \item \textbf{Cleaning Identity Mappings:} It iterates through the lower half of the PML4 table and unmaps all entries. This ensures that the user-space range is completely empty before the first process is spawned.
+    \item \textbf{Cleaning Identity Mappings:} It iterates through the lower half of the PML4 table and unmaps all entries. This ensures that the user space range is completely empty before the first process is spawned.
     \item \textbf{Metadata Reconstruction:} The physical frames used by the bootloader to store the page tables themselves must be accounted for. The \texttt{BootMmuCleaner} walks the existing page table hierarchy. For every table frame encountered, it updates the global \texttt{PageMetaTable} to mark that frame's type as \texttt{PageTable} and initializes its reference count. This prevents the Physical Memory Manager from accidentally treating these critical frames as free memory.
 \end{enumerate}
 
@@ -4461,7 +4461,7 @@ isr_wrapper_%+%2:
 
 \subsubsection{Synchronization}
 
-Since an interrupt can potentially trigger a context switch, synchronization is crucial. This applies to both kernel-space threads at any moment of their lifetime and user space programs executing system calls. It would be catastrophic if a timer interrupt forced a context switch while the kernel was in the middle of updating scheduler structures or memory tables. Therefore, even on a single-core system, synchronization must be enforced. This is achieved by disabling hardware interrupts (using \textbf{CLI} and \textbf{STI} instructions on x86-64) during critical sections.
+Since an interrupt can potentially trigger a context switch, synchronization is crucial. This applies to both kernel space threads at any moment of their lifetime and user space programs executing system calls. It would be catastrophic if a timer interrupt forced a context switch while the kernel was in the middle of updating scheduler structures or memory tables. Therefore, even on a single-core system, synchronization must be enforced. This is achieved by disabling hardware interrupts (using \textbf{CLI} and \textbf{STI} instructions on x86-64) during critical sections.
 
 \subsection{Unified Interrupt Frame}
 \label{subsec:unifiedFrame}
@@ -5174,7 +5174,7 @@ The system imposes a hard limit on the maximum number of existing processes, exa
 
 \subsubsection{Process Flags}
 
-\textbf{KernelSpaceOnly} --- enables the creation of kernel-only threads and processes. These processes do not require a separate user-space address space or user-space stack. This minimization of resource consumption improves performance. Additionally, context switching between kernel-only threads does not necessitate switching the address space.
+\textbf{KernelSpaceOnly} --- enables the creation of kernel-only threads and processes. These processes do not require a separate user space address space or user space stack. This minimization of resource consumption improves performance. Additionally, context switching between kernel-only threads does not necessitate switching the address space.
 
 \textbf{PreserveFloats} --- indicates that all threads within the process save and restore floating-point registers during context switches by default. Disabling this flag allows the system to omit these potentially expensive operations for threads that do not utilize floating-point arithmetic.
 
@@ -5204,7 +5204,9 @@ This field points to the first element of a doubly linked list of threads runnin
 
 \subsubsection{Live Threads and Threads to Clean}
 
-These counters are core systems, as discussed later in this document.
+These counters track the numbers of live threads and threads awaiting cleanup which are used during process termination to determine when the process can be fully deallocated.
+
+\subsubsection{Status}
 
 The exit status of the process, which is passed to any thread waiting for the process to complete.
 
@@ -5214,7 +5216,7 @@ The \textbf{Wait Queue} stores threads that are waiting for this process to fini
 
 \subsection{Kernel Address Space}
 
-The entire operating system shares a single Kernel Address Space. Every kernel process operates within this space. Additionally, the kernel address space is mapped into every user-space process's address space. This design choice enhances performance and simplifies architecture, as user threads frequently invoke system calls. Switching address spaces on every system call would incur significant performance overhead and complicate the logic required for handling syscalls.
+The entire operating system shares a single Kernel Address Space. Every kernel process operates within this space. Additionally, the kernel address space is mapped into every user space process's address space. This design choice enhances performance and simplifies architecture, as user threads frequently invoke system calls. Switching address spaces on every system call would incur significant performance overhead and complicate the logic required for handling syscalls.
 
 \clearpage
 
@@ -5351,7 +5353,7 @@ Before initializing the scheduling module, the operating system creates three es
 
 \textbf{Trace Dumper} --- responsible for dumping kernel traces to the terminal or storage files, ensuring debuggability and stability. This task cannot be performed directly by the kernel code during critical execution paths, as writing to devices or files is too slow for system calls or interrupt handlers. The buffers are dumped periodically every 20ms.
 
-\textbf{Thread Ripper} --- responsible for the deallocation of thread resources, including descriptors and stacks.
+\textbf{Thread Ripper} --- responsible for the deallocation of thread resources, including stacks.
 
 \textbf{Process Ripper} --- responsible for the deallocation of process resources, including the address space.
 
@@ -5445,9 +5447,9 @@ Each policy is designated for a specific group of tasks:
 
 \textbf{Drivers} --- Driver tasks that require immediate execution to prevent device blocking and ensure smooth system operation (e.g., audio drivers or network interfaces).
 
-\textbf{Urgent Tasks} --- Tasks that are less critical than drivers but more important than standard user tasks. These may include privileged user-space tasks that consume data from drivers.
+\textbf{Urgent Tasks} --- Tasks that are less critical than drivers but more important than standard user tasks. These may include privileged user space tasks that consume data from drivers.
 
-\textbf{Normal Tasks} --- The most common group of tasks, comprising standard user-space programs such as graphical interfaces and data processing applications. Basic kernel workers, including those listed in the kernel workers section~\ref{subsubsec:kworkers}, also belong to this category.
+\textbf{Normal Tasks} --- The most common group of tasks, comprising standard user space programs such as graphical interfaces and data processing applications. Basic kernel workers, including those listed in the kernel workers section~\ref{subsubsec:kworkers}, also belong to this category.
 
 \textbf{Background Tasks} --- Tasks that are not time-critical and should only be executed when the system is otherwise idle. Examples include update checks or non-urgent cleanup operations.
 
