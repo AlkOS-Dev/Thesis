@@ -45,7 +45,7 @@
 
 \renewcommand{\chaptermark}[1]{\markboth{\thechapter.\ #1}{}}
 
-\renewcommand{\headrulewidth}{0 pt}
+\renewcommand{\headrulewidth}{0pt}
 
 
 \fancypagestyle{plain}{
@@ -224,7 +224,7 @@
 
 
 
-% -------- TABLES AD FIGURES NUMBERING --------
+% -------- TABLES AND FIGURES NUMBERING --------
 
 \renewcommand*{\thetable}{\arabic{chapter}.\arabic{table}}
 \renewcommand*{\thefigure}{\arabic{chapter}.\arabic{figure}}
@@ -326,31 +326,13 @@ Od strony technicznej, AlkOS posiada własny dwuetapowy program rozruchowy (boot
 \end{abstract}
 }
 
-%% --------- DECLARATIONS ------------
-%
-%%
-%%	IT IS NECESSARY OT ATTACH FILLED-OUT AUTORSHIP DEECLRATION. SCAN (IN PDF FORMAT) NEEDS TO BE PLACED IN scans FOLDER AND IT SHOULD BE CALLED, FOR EXAMPLE, DECLARATION_OF_AUTORSHIP.PDF. IF THE FILENAME OR FILEPATH IS DIFFERENT, THE FILEPATH IN THE NEXT COMMAND HAS TO BE ADJUSTED ACCORDINGLY.
-%%
-%%	command attacging the declarations of autorship
-%%
-%\includepdf[pages=-]{scans/declaration-of-autorship}
-%\null\thispagestyle{empty}\newpage
-%
-%% optional declaration
-%%
-%%	command attaching the declaataration on granting a license
-%%
-%\includepdf[pages=-]{scans/declaration-on-granting-a-license}
-%%
-%%	.tex corresponding to the above PDF files are present in the 3. declarations folder 
-%
 \null\thispagestyle{empty}\newpage
 % ------- TABLE OF CONTENTS -------
 \selectlanguage{english}
 \pagenumbering{gobble}
 \tableofcontents
 \thispagestyle{empty}
-\newpage % IF YOU HAVE EVEN QUANTITY OD PAGES OF TOC, THEN REMOVE IT OR ADD \null\newpage FOR DOUBLE BLANK PAGE BEFORE INTRODUCTION
+\newpage % IF YOU HAVE EVEN QUANTITY OF PAGES OF TOC, THEN REMOVE IT OR ADD \null\newpage FOR DOUBLE BLANK PAGE BEFORE INTRODUCTION
 
 
 % -------- THE BODY OF THE THESIS ------------
@@ -361,8 +343,6 @@ Od strony technicznej, AlkOS posiada własny dwuetapowy program rozruchowy (boot
 \setcounter{page}{11}
 \chapter{Introduction}
 \label{chap:introduction}
-% \markboth{}{Introduction}
-% \addcontentsline{toc}{chapter}{Introduction}
 
 \section{Background and Context}
 
@@ -695,7 +675,7 @@ Alternatively, the standard library may be developed specifically for the operat
 
 \subsubsection{User Space vs. Kernel Space Variants}
 
-Standard library functionality is required in both user space and kernel space. However, these environments impose fundamentally different constraints. User space code executes without privileges and relies on system call interface, whereas kernel code executes in a privileged context, invokes kernel services directly rather than through system calls, and must comply with constraints imposed by the kernel execution environment, such as interrupt safety. As a result, a single, uniform library implementation is insufficient.
+Standard library functionality is required in both user space and kernel space. However, these environments impose fundamentally different constraints. User space code executes without privileges and relies on the system call interface, whereas kernel code executes in a privileged context, invokes kernel services directly rather than through system calls, and must comply with constraints imposed by the kernel execution environment, such as interrupt safety. As a result, a single, uniform library implementation is insufficient.
 
 To address this, the library is split into a user space variant (\texttt{libc}) and a kernel variant (\texttt{libk}), each compiled with different configuration flags and assumptions. This separation enforces correct usage and prevents kernel code from accidentally relying on functionality that is unavailable or unsafe in kernel context.
 
@@ -1121,7 +1101,7 @@ On the x86 architecture, this discovery is performed via the \texttt{CPUID} inst
 
 While x86 relies on this dynamic instruction-based discovery, other architectures employ different strategies:
 \begin{itemize}
-    \item \textbf{ARM64 (AArch64)} utilizes special system registers (e.g., \texttt{ID\_AA64PFR0\_EL1}) that the kernel reads to determine support for floating-point units or cryptographic extensions \cite{ARM-Arch-Ref,}.
+    \item \textbf{ARM64 (AArch64)} utilizes special system registers (e.g., \texttt{ID\_AA64PFR0\_EL1}) that the kernel reads to determine support for floating-point units or cryptographic extensions \cite{ARM-Arch-Ref}.
     \item \textbf{RISC-V} typically employs the Device Tree Blob (DTB) or the \texttt{misa} (Machine ISA) Control and Status Register to inform the kernel about supported standard extensions (e.g., Atomics, Floats) \cite{RISCV-Priv-Spec}.
 \end{itemize}
 
@@ -1156,7 +1136,7 @@ One of the primary objectives when initializing code on a target architecture is
 \section{Enabling Interrupts and Exceptions}
 \label{subsec:os-tutorial-interrupts}
 
-Prior to the implementation of memory management (Section \ref{subsubsec:physical_memory_management}), it is essential to establish a basic interrupt handling mechanism. On most platforms, the exception system relies entirely on interrupt mappings. Consequently, without a functional interrupts, the kernel is unable to display debug information on the designated communication device when an error occurs.
+Prior to the implementation of memory management (Section \ref{subsubsec:physical_memory_management}), it is essential to establish a basic interrupt handling mechanism. On most platforms, the exception system relies entirely on interrupt mappings. Consequently, without functional interrupts, the kernel is unable to display debug information on the designated communication device when an error occurs.
 
 Exception handlers should output a descriptive message detailing the failure. This message must include the CPU state, the source of the exception, the instruction pointer where the error occurred, and, if applicable, an error code explaining the cause. An example of an x86-64 kernel dump following an exception is presented below:
 
@@ -1270,8 +1250,7 @@ The policy is the specific decision logic used to select a free block for a give
 \begin{itemize}
     \item \textbf{First Fit:} Scan the free memory from the beginning and return the first block that is large enough. This is fast but can accumulate small "splinters" of free memory at the start of the list.
     \item \textbf{Best Fit:} Search the entire list to find the smallest block that satisfies the request. This minimizes the wasted remainder (unused space after the split) but requires a comprehensive search, which can be slow.
-    \item \textbf{Next Fit}: Resume searching from where the last allocation stopped. Scatters allocations and often
-performs poorly
+    \item \textbf{Next Fit}: Resume searching from where the last allocation stopped. Scatters allocations and often performs poorly
 \end{itemize}
 
 \subsubsection{3. Mechanism}
@@ -1548,7 +1527,7 @@ A common solution is to partition the physical address space into disjoint \text
 
 While the Physical Memory Manager (discussed in Section \ref{subsubsec:physical_memory_management}) is responsible for the accounting of raw storage resources, it provides no mechanisms for isolation, safety, or convenient addressing. In a system lacking a Memory Management Unit (MMU), software operates in a physical addressing mode often referred to as Identity Mapping. In such an environment, the address utilized by a machine instruction corresponds directly to the electrical signals asserted on the memory bus. While this model minimizes hardware complexity and is prevalent in embedded microcontrollers, it presents insurmountable challenges for a general-purpose operating system.
 
-In a physical addressing model, every application must share a single global address space. This tight coupling implies that a programming error in one task --- such as a buffer overflow or a wild pointer dereference --- can corrupt the data structures of another task or even the kernel itself, leading to immediate system instability. Furthermore, compiling software becomes arduous, as every program requires a unique load address to avoid collision, rendering the execution of multiple instances of the same program nearly impossible without complex, position-independent code generation.
+In a physical addressing model, every application must share a single global address space. This tight coupling implies that a programming error in one task --- such as a buffer overflow or a wild pointer dereference --- can corrupt the data structures of another task or even the kernel itself, leading to immediate system instability. Furthermore, compiling software becomes arduous, as every program requires a unique load address to avoid collisions, rendering the execution of multiple instances of the same program nearly impossible without complex, position-independent code generation.
 
 To resolve these architectural limitations, modern general-purpose operating systems implement Virtual Memory (VM). Fundamentally, Virtual Memory is an abstraction layer that decouples the \textit{logical view} of memory from the \textit{physical reality} of the hardware. 
 
@@ -3036,9 +3015,9 @@ To enhance extensibility and avoid the need for recompilation when adding driver
 \subsection{Timing}
 \label{subsec:linux-timing}
 
-Historically, Linux utilized a strictly periodic tick (defined by hardware), configuring hardware timers to generate interrupts at a fixed frequency (e.g., 100 Hz or 1000 Hz). While this design was straightforward, it imposed limitations on sleep granularity and power efficiency. To address these issues, Linux introduced High Resolution Timers (\texttt{hrtimers}), which allow the kernel to schedule interrupts with nanosecond precision based on immediate needs rather than a fixed cadence. Despite the capabilities of high-resolution timers, the concept of a periodic tick is maintained within the kernel for performance reasons and architectural legacy, by simulating the tick with high precision framework.
+Historically, Linux utilized a strictly periodic tick (defined by hardware), configuring hardware timers to generate interrupts at a fixed frequency (e.g., 100 Hz or 1000 Hz). While this design was straightforward, it imposed limitations on sleep granularity and power efficiency. To address these issues, Linux introduced High Resolution Timers (\texttt{hrtimers}), which allow the kernel to schedule interrupts with nanosecond precision based on immediate needs rather than a fixed cadence. Despite the capabilities of high-resolution timers, the concept of a periodic tick is maintained within the kernel for performance reasons and architectural legacy, by simulating the tick with a high precision framework.
 
-This hight-precision framework has one major drawback - it can get slow for a large number of events, as it is based on a priority queue with $O(\log n)$complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers $O(1)$ complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
+This high-precision framework has one major drawback - it can get slow for a large number of events, as it is based on a priority queue with $O(\log n)$complexities. Relying exclusively on high-precision mechanisms for every timing event would introduce unacceptable overhead in scenarios involving a massive number of active timers. To mitigate this, Linux maintains the \texttt{jiffies} counter, which increments at the frequency of the system tick. This counter drives the Timer Wheel mechanism \cite{linux_timer_wheel}, a highly efficient algorithm designed for managing low-precision timeouts. The timer wheel offers $O(1)$ complexity for insertion and expiration, making it ideal for subsystems that require the management of thousands or even hundreds of thousands of concurrent events where nanosecond precision is unnecessary. A prime example is the networking stack, which must track timeouts for tens of thousands of open TCP connections. Utilizing high-resolution timers for such a volume would be computationally impossible. The \texttt{jiffies}-based timer wheel allows the system to handle these massive quantities of events with minimal CPU overhead. Consequently, standard API calls such as \texttt{msleep} continue to rely on this coarse-grained, high-performance infrastructure.
 
 \subsection{The Process and Thread Model}
 \label{subsec:linux-task}
@@ -3331,7 +3310,7 @@ The separation into Loader32 and Loader64 is not arbitrary, it stems from fundam
 \begin{enumerate}
     \item \textbf{Loader32 contains 32-bit instructions}: The transition from Protected Mode to Long Mode requires executing 32-bit code. Instructions such as setting control register bits, loading the GDT, and performing the mode switch \textit{cannot} be encoded in 64-bit instruction format. Thus, Loader32 is compiled as a 32-bit ELF binary (\texttt{elf32-i386}).
     
-    \item \textbf{Loader64 is Position-Independent Code (PIC)}: The kernel is linked at a fixed higher-half virtual address (\texttt{0xFFFFFFFE00000000}). However, Loader64 must execute \textit{before} virtual memory is fully configured. GRUB loads Loader64 elf as a Multiboot2 module. This elf must still be loaded in the first place in memory that is big enough to hold it, meaning at an \textit{unknown physical address}. To function correctly regardless of where it is loaded, Loader64 is compiled as a Position-Independent Executable (PIE) using \texttt{-fPIE -pie} flags, employing RIP-relative addressing for all memory accesses.
+    \item \textbf{Loader64 is Position-Independent Code (PIC)}: The kernel is linked at a fixed higher-half virtual address (\texttt{0xFFFFFFFE00000000}). However, Loader64 must execute \textit{before} virtual memory is fully configured. GRUB loads Loader64 ELF as a Multiboot2 module. This ELF must still be loaded in the first place in memory that is big enough to hold it, meaning at an \textit{unknown physical address}. To function correctly regardless of where it is loaded, Loader64 is compiled as a Position-Independent Executable (PIE) using \texttt{-fPIE -pie} flags, employing RIP-relative addressing for all memory accesses.
     
     \item \textbf{The kernel ignores its physical location}: Once virtual memory is established with the higher-half mapping, the kernel code executes using virtual addresses. It is unaware of, and unaffected by, its underlying physical memory location.
 \end{enumerate}
@@ -4783,7 +4762,7 @@ This chapter describes the high-level subsystems of AlkOS that build upon the lo
 \section{File System}
 \label{section:fs}
 
-The file system is a fundamental part of any operating sContextSwitchystem, providing mechanisms to store, access, and manage data on storage devices. We have designed a unified abstraction layer known as the Virtual File System (VFS). The VFS abstracts the underlying implementation details of specific file systems, providing the kernel and user space with an API for operations such as reading, writing, creating, moving, and deleting files and directories.
+The file system is a fundamental part of any operating system, providing mechanisms to store, access, and manage data on storage devices. We have designed a unified abstraction layer known as the Virtual File System (VFS). The VFS abstracts the underlying implementation details of specific file systems, providing the kernel and user space with an API for operations such as reading, writing, creating, moving, and deleting files and directories.
 
 \subsection{VFS}
 
@@ -5244,7 +5223,7 @@ This field points to the first element of a doubly linked list of threads runnin
 
 \subsubsection{Live Threads and Threads to Clean}
 
-These counters are ucore systems, as discussed later in this document.
+These counters are core systems, as discussed later in this document.
 
 The exit status of the process, which is passed to any thread waiting for the process to complete.
 
@@ -5985,7 +5964,7 @@ We implemented an automatic mode selection algorithm in \texttt{doomgeneric.c}. 
 \begin{itemize}
     \item \textbf{Stretch Mode}: Used when the vertical resolution allows for aspect ratio correction by stretching the height.
     \item \textbf{Squash Mode}: Used when horizontal compression is required to fit the aspect ratio.
-    \item \textbf{Special Case}: Resolution $800 \times 600$ trigger optimized path ($3\times$ squash with $50\%$ pixel blending) to reduce visual artifacts.
+    \item \textbf{Special Case}: Resolution $800 \times 600$ triggers optimized path ($3\times$ squash with $50\%$ pixel blending) to reduce visual artifacts.
 \end{itemize}
 
 \paragraph{Pixel Format}
@@ -6015,7 +5994,8 @@ The Doom engine, particularly the WAD management system, relies on case-insensit
 \paragraph{Standard I/O}
 To support loading data from the file system, we expanded the \texttt{stdio} implementation to include \texttt{fopen}, \texttt{fread}, \texttt{fseek}, and \texttt{ftell}, backed by the underlying syscalls (\texttt{open}, \texttt{read}, \texttt{seek}). This allowed the Doom engine to seamlessly load WAD files from the root file system using standard I/O semantics. Also, \texttt{create\_directory} needed to be implemented to create the \texttt{saves/} directory for saving game progress. \\
 
-By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library implementations.
+\enlargethispage{\baselineskip}
+By addressing these requirements, the Doom port served not only as a graphical demo but as a comprehensive validation test for the kernel's memory management, file system, and standard library~implementations.
 
 \chapter{Results}
 \label{sec:results}
@@ -6257,7 +6237,3 @@ YAML & YAML Ain't Markup Language \\
 \thispagestyle{empty}
 
 \end{document}
-
-% ==================================================================
-% TODOS:
-% - wytlumaczyc na starcie co zakladamy etc i dlaczego np segmenty
